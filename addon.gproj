@@ -1,0 +1,8 @@
+GameProject {
+ ID "29thInfantryDivisionLoadouts"
+ GUID "69730206FA071FE2"
+ TITLE "29thInfantryDivision_Loadouts"
+ Dependencies {
+  "1337C0DE5DABBEEF" "BADC0DEDABBEDA5E" "595F2BF2F44836FB" "58D0FB3206B6F859"
+ }
+}
