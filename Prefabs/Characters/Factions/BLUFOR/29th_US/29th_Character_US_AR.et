@@ -31,12 +31,19 @@ SCR_ChimeraCharacter : "{26A9756790131354}Prefabs/Characters/Factions/BLUFOR/29t
      }
     }
     ItemsInitConfigurationItem "{54A49B42D138207E}" {
+     Enabled 0
+     TargetStorage ""
+     PrefabsToSpawn {
+     }
     }
     ItemsInitConfigurationItem "{5538C040738A83D1}" {
-     TargetStorage ""
+     TargetStorage "Vest/Vest_ALICE_AR.et"
      PrefabsToSpawn {
       "{E8F00BF730225B00}Prefabs/Weapons/Grenades/Grenade_M67.et"
      }
+    }
+    ItemsInitConfigurationItem "{5538C040737C0BE0}" {
+     TargetStorage "Vest/Vest_ALICE_AR.et/Suspenders/Vest_ALICE_suspenders_2.et"
     }
     ItemsInitConfigurationItem "{69B20E29E243D396}" {
      TargetStorage "Jacket/Jacket_US_BDU.et"
