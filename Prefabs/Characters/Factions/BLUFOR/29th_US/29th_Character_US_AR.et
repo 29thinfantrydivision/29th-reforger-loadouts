@@ -2,7 +2,7 @@ SCR_ChimeraCharacter : "{26A9756790131354}Prefabs/Characters/Factions/BLUFOR/29t
  ID "52092032B0E62200"
  components {
   SCR_CharacterRankComponent "{528E6D4286AA2D8F}" {
-   m_iRank GENERAL
+   m_iRank RENEGADE
   }
   CharacterWeaponSlotComponent "{520EA1D2F659CFAB}" {
    WeaponTemplate "{599A1E833BEF3A43}Prefabs/Weapons/MachineGuns/M249/MG_M249_base.et"

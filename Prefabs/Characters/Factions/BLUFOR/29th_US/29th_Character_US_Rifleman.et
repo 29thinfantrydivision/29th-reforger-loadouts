@@ -2,7 +2,7 @@ SCR_ChimeraCharacter : "{284E735C6C70DAD2}Prefabs/Characters/Factions/BLUFOR/US_
  ID "52092032B0E62200"
  components {
   SCR_CharacterRankComponent "{528E6D4286AA2D8F}" {
-   m_iRank GENERAL
+   m_iRank RENEGADE
   }
   CharacterWeaponSlotComponent "{520EA1D2F659CFAB}" {
    WeaponTemplate "{F97A4AC994231900}Prefabs/Weapons/Rifles/M16/Rifle_M16A2_carbine.et"
