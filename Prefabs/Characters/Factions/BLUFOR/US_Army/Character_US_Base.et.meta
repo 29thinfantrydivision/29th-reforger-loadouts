@@ -1,5 +1,5 @@
 MetaFileClass {
- Name "{5B1996C05B1E51A4}Prefabs/Characters/Factions/BLUFOR/US_Army/Character_US_AR.et"
+ Name "{24DE9928E7720F08}Prefabs/Characters/Factions/BLUFOR/US_Army/Character_US_Base.et"
  Configurations {
   EntityTemplateResourceClass PC {
   }
