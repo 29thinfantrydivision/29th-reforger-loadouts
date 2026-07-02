@@ -1,0 +1,34 @@
+SCR_ChimeraCharacter : "{CBF7A398FE060335}Prefabs/Characters/Factions/OPFOR/USSR_Army/Character_USSR_Sapper.et" {
+ ID "200D264F0EEA1A28"
+ components {
+  SCR_EditableCharacterComponent "{520EA1D2F659C85C}" {
+   m_UIInfo SCR_EditableEntityUIInfo "{5298E609432D192D}" {
+    m_Image "{C63363ADAE1C1009}UI/Textures/EditorPreviews/Characters/Factions/OPFOR/USSR_Army/KLMK/Character_USSR_Sapper_KLMK.edds"
+    m_aAutoLabels +{
+    }
+   }
+  }
+  BaseLoadoutManagerComponent "{520EA1D2DB11821E}" {
+   Slots {
+    LoadoutSlotInfo Hat {
+     Prefab "{DD35D5EBA6364E77}Prefabs/Characters/HeadGear/Helmet_SSh68_01/Helmet_SSh68_01_cover_KLMK.et"
+    }
+    LoadoutSlotInfo Jacket {
+     Prefab "{CF221A167DE87E57}Prefabs/Characters/Uniforms/Suit_KLMK/Suit_KLMK.et"
+    }
+    LoadoutSlotInfo Pants {
+     Prefab ""
+    }
+   }
+  }
+  SCR_InventoryStorageManagerComponent "{520EA1D2DB118DE5}" {
+   InitialInventoryItems {
+    ItemsInitConfigurationItem "{5D7CC173E6675BF7}" {
+     TargetStorage "Jacket/Suit_KLMK.et"
+    }
+    ItemsInitConfigurationItem "{5D7CC173E6675BF5}" {
+    }
+   }
+  }
+ }
+}
