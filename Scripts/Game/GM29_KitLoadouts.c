@@ -59,14 +59,14 @@ modded class SCR_LoadoutManager
 		Resource res = Resource.Load(m_sGM29KitHolder);
 		if (!res.IsValid())
 		{
-			Print("[GM29] kit holder not found - check m_sGM29KitHolder GUID (VERIFY #1)", LogLevel.WARNING);
+			Print("[GM29Kits] kit holder not found - check m_sGM29KitHolder GUID (VERIFY #1)", LogLevel.WARNING);
 			return;
 		}
 
 		GM29_KitLoadoutHolder holder = GM29_KitLoadoutHolder.Cast(BaseContainerTools.CreateInstanceFromContainer(res.GetResource().ToBaseContainer()));
 		if (!holder || !holder.m_aLoadouts)
 		{
-			Print("[GM29] kit holder empty or wrong root class", LogLevel.WARNING);
+			Print("[GM29Kits] kit holder empty or wrong root class", LogLevel.WARNING);
 			return;
 		}
 
@@ -87,7 +87,7 @@ modded class SCR_LoadoutManager
 		}
 
 		// Plain concatenation - no ternary inside Print(), per your guardrails.
-		Print("[GM29] injected " + added.ToString() + " kit loadouts into the loadout manager", LogLevel.NORMAL);
+		Print("[GM29Kits] injected " + added.ToString() + " kit loadouts into the loadout manager", LogLevel.NORMAL);
 	}
 
 	//--------------------------------------------------------------------------------------------
