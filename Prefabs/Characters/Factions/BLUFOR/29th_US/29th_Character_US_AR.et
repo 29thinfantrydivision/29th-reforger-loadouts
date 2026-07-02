@@ -20,7 +20,7 @@ SCR_ChimeraCharacter : "{284E735C6C70DAD2}Prefabs/Characters/Factions/BLUFOR/US_
    WeaponTemplate "{9DB69176CEF0EE97}Prefabs/Weapons/Grenades/Smoke_ANM8HC.et"
   }
   CharacterWeaponSlotComponent "{520EA1D2F659CFAB}" {
-   WeaponTemplate "{D182DCDD72BF7E34}Prefabs/Weapons/MachineGuns/M60/MG_M60.et"
+   WeaponTemplate "{D2B48DEBEF38D7D7}Prefabs/Weapons/MachineGuns/M249/MG_M249.et"
   }
   CharacterWeaponSlotComponent "{520EA1D2F659CFB7}" {
    WeaponTemplate "{1353C6EAD1DCFE43}Prefabs/Weapons/Handguns/M9/Handgun_M9.et"
@@ -38,34 +38,34 @@ SCR_ChimeraCharacter : "{284E735C6C70DAD2}Prefabs/Characters/Factions/BLUFOR/US_
      Prefab "{725C5E1C75CADAF4}Prefabs/Characters/Vests/Vest_M69/Vest_M69_M81woodland.et"
     }
     LoadoutSlotInfo Back {
-     Prefab "{4805E67E2AE30F8D}Prefabs/Items/Equipment/Backpacks/Backpack_Medical_M5.et"
+     Prefab ""
     }
     LoadoutSlotInfo Vest {
-     Prefab "{477A190AF2A17B8A}Prefabs/Characters/Vests/Vest_ALICE/Variants/Vest_ALICE_MG.et"
+     Prefab "{156DC7109CEE6F69}Prefabs/Characters/Vests/Vest_ALICE/Variants/Vest_ALICE_AR.et"
     }
    }
   }
   SCR_InventoryStorageManagerComponent "{520EA1D2DB118DE5}" {
    InitialInventoryItems {
     ItemsInitConfigurationItem "{5D7CAAFB9235E903}" {
-     TargetStorage "Vest/Vest_ALICE_MG.et/Suspenders/Vest_ALICE_suspenders_2.et"
+     TargetStorage "Vest/Vest_ALICE_AR.et/Suspenders/Vest_ALICE_suspenders_2.et"
     }
     ItemsInitConfigurationItem "{69C4111DFDE65A5F}" {
-     TargetStorage "Vest/Vest_ALICE_MG.et/MagPouch/Pouch_ALICE_200rnd_M249.et"
+     TargetStorage "Vest/Vest_ALICE_AR.et/MagPouch/Pouch_ALICE_200rnd_M249.et"
      PrefabsToSpawn {
-      "{4D2C1E8F3A81F894}Prefabs/Weapons/Magazines/Box_762x51_M60_100rnd_4Ball_1Tracer.et" "{9DB69176CEF0EE97}Prefabs/Weapons/Grenades/Smoke_ANM8HC.et" "{9DB69176CEF0EE97}Prefabs/Weapons/Grenades/Smoke_ANM8HC.et"
+      "{06D722FC2666EB83}Prefabs/Weapons/Magazines/Box_556x45_M249_200rnd_4Ball_1Tracer.et"
+     }
+    }
+    ItemsInitConfigurationItem "{69C4111DFDE65A94}" {
+     TargetStorage "Vest/Vest_ALICE_AR.et/MagPouch2/Pouch_ALICE_200rnd_M249.et"
+     PrefabsToSpawn {
+      "{06D722FC2666EB83}Prefabs/Weapons/Magazines/Box_556x45_M249_200rnd_4Ball_1Tracer.et"
      }
     }
     ItemsInitConfigurationItem "{69C4111DFDE65A91}" {
-     TargetStorage "Vest/Vest_ALICE_MG.et/Buttpack/Vest_ALICE_buttpack.et"
+     TargetStorage "Vest/Vest_ALICE_AR.et/Buttpack/Vest_ALICE_buttpack.et"
      PrefabsToSpawn {
-      "{4D2C1E8F3A81F894}Prefabs/Weapons/Magazines/Box_762x51_M60_100rnd_4Ball_1Tracer.et" "{E8F00BF730225B00}Prefabs/Weapons/Grenades/Grenade_M67.et"
-     }
-    }
-    ItemsInitConfigurationItem "{69C4111DFDE65BA1}" {
-     TargetStorage "Back/Backpack_Medical_M5.et"
-     PrefabsToSpawn {
-      "{4D2C1E8F3A81F894}Prefabs/Weapons/Magazines/Box_762x51_M60_100rnd_4Ball_1Tracer.et" "{4D2C1E8F3A81F894}Prefabs/Weapons/Magazines/Box_762x51_M60_100rnd_4Ball_1Tracer.et"
+      "{06D722FC2666EB83}Prefabs/Weapons/Magazines/Box_556x45_M249_200rnd_4Ball_1Tracer.et" "{E8F00BF730225B00}Prefabs/Weapons/Grenades/Grenade_M67.et" "{E8F00BF730225B00}Prefabs/Weapons/Grenades/Grenade_M67.et"
      }
     }
    }
