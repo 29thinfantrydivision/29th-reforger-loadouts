@@ -29,7 +29,6 @@ SCR_ChimeraCharacter : "{284E735C6C70DAD2}Prefabs/Characters/Factions/BLUFOR/US_
    WeaponSlotIndex 0
   }
   CharacterWeaponSlotComponent "{520EA1D2F659CFB7}" {
-   WeaponTemplate "{1353C6EAD1DCFE43}Prefabs/Weapons/Handguns/M9/Handgun_M9.et"
    WeaponSlotIndex 1
   }
   BaseLoadoutManagerComponent "{520EA1D2DB11821E}" {
