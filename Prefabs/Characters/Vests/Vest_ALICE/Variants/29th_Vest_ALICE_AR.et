@@ -1,0 +1,12 @@
+GenericEntity : "{FD0890CE5C6D26CB}Prefabs/Characters/Vests/Vest_ALICE/Vest_ALICE_assembled_base.et" {
+ ID "526492DCB8322C65"
+ components {
+  BaseLoadoutClothComponent "{5312D798A71DFBB1}" {
+   Slots {
+    LoadoutSlotInfo Cateen {
+     Enabled 0
+    }
+   }
+  }
+ }
+}
