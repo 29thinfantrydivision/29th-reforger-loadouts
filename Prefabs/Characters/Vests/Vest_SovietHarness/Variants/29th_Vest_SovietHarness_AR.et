@@ -1,0 +1,12 @@
+GenericEntity : "{08155E701A94961F}Prefabs/Characters/Vests/Vest_SovietHarness/Vest_SovietHarness_assembled_base.et" {
+ ID "50D8C49B3558F152"
+ components {
+  BaseLoadoutClothComponent "{5312D798A71DFBB1}" {
+   Slots {
+    LoadoutSlotInfo Canteen {
+     Enabled 0
+    }
+   }
+  }
+ }
+}

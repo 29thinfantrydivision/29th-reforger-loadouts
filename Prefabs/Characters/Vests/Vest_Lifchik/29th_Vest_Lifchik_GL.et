@@ -1,0 +1,11 @@
+GenericEntity : "{9713FE6DDCC9510D}Prefabs/Characters/Vests/Vest_Lifchik/29th_Vest_Lifchik.et" {
+ ID "50E0B40D7407B664"
+ components {
+  BaseLoadoutClothComponent "{5312D798A71DFBB1}" {
+   Slots {
+    LoadoutSlotInfo Canteen {
+    }
+   }
+  }
+ }
+}
