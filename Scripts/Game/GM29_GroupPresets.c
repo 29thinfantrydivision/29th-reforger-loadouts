@@ -34,13 +34,9 @@ class GM29_GroupPresetHolder
 //------------------------------------------------------------------------------------------------
 modded class SCR_Faction
 {
-	// ===========================================================================================
-	// VERIFY - config GUID
-	// After you create Configs/Groups/GM29_Groups.conf in Workbench, copy the GUID Workbench
-	// assigns to it and paste it between the braces below (keep the path). Until then the loader
-	// no-ops cleanly and logs a warning - it will not break anything.
-	// ===========================================================================================
-	[Attribute("{0000000000000000}Configs/Groups/GM29_Groups.conf", desc: "29th predefined squad holder config")]
+	// Real GUID of Configs/Groups/GM29_Groups.conf (from its .conf.meta). If you ever move or
+	// recreate that config, update this to the new GUID shown in the .meta / Workbench.
+	[Attribute("{4F499D4957373C95}Configs/Groups/GM29_Groups.conf", desc: "29th predefined squad holder config")]
 	protected ResourceName m_sGM29GroupHolder;
 
 	//--------------------------------------------------------------------------------------------
