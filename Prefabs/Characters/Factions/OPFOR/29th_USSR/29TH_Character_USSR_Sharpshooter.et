@@ -28,6 +28,12 @@ SCR_ChimeraCharacter : "{976AC400219898FA}Prefabs/Characters/Factions/OPFOR/USSR
       "{0D9A5DCF89AE7AA9}Prefabs/Items/Medicine/MorphineInjection_01/MorphineInjection_01.et" "{0D9A5DCF89AE7AA9}Prefabs/Items/Medicine/MorphineInjection_01/MorphineInjection_01.et" "{80E75A71C29190DB}Prefabs/Items/Medicine/Tourniquet_01/Tourniquet_USSR_01.et" "{80E75A71C29190DB}Prefabs/Items/Medicine/Tourniquet_01/Tourniquet_USSR_01.et" "{C3F1FA1E2EC2B345}Prefabs/Items/Medicine/FieldDressing_01/FieldDressing_USSR_01.et" "{C3F1FA1E2EC2B345}Prefabs/Items/Medicine/FieldDressing_01/FieldDressing_USSR_01.et" "{C3F1FA1E2EC2B345}Prefabs/Items/Medicine/FieldDressing_01/FieldDressing_USSR_01.et" "{C3F1FA1E2EC2B345}Prefabs/Items/Medicine/FieldDressing_01/FieldDressing_USSR_01.et"
      }
     }
+    ItemsInitConfigurationItem "{5D7CC173E6675BF5}" {
+     TargetStorage "Vest/29th_Vest_SovietHarness_sharpshooter.et/Suspenders/Vest_SovietHarness_Suspenders.et"
+    }
+    ItemsInitConfigurationItem "{54A68D63B8F6F8C2}" {
+     TargetStorage "Vest/29th_Vest_SovietHarness_sharpshooter.et/MagPouch_6Sh46/Pouch_Soviet_10rnd_SVD.et"
+    }
     ItemsInitConfigurationItem "{559277239D4CF40C}" {
      TargetStorage "Back/Backpack_Veshmeshok.et"
      PrefabsToSpawn {
@@ -35,7 +41,7 @@ SCR_ChimeraCharacter : "{976AC400219898FA}Prefabs/Characters/Factions/OPFOR/USSR
      }
     }
     ItemsInitConfigurationItem "{5D2678DEF0F5E565}" {
-     TargetStorage "Vest/Vest_SovietHarness_sharpshooter.et"
+     TargetStorage "Vest/29th_Vest_SovietHarness_sharpshooter.et/GrenadePouch/Vest_SovietHarness_GrenadePouch.et"
      PrefabsToSpawn + {
       "{645C73791ECA1698}Prefabs/Weapons/Grenades/Grenade_RGD5.et"
      }

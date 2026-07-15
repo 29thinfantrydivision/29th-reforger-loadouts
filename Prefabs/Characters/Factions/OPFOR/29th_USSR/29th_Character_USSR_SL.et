@@ -22,17 +22,26 @@ SCR_ChimeraCharacter : "{5436629450D8387A}Prefabs/Characters/Factions/OPFOR/USSR
      Prefab "{54C68E438DD34265}Prefabs/Items/Equipment/Radios/Radio_R107M.et"
     }
     LoadoutSlotInfo Vest {
-     Prefab "{9713FE6DDCC9510D}Prefabs/Characters/Vests/Vest_Lifchik/Vest_Lifchik.et"
+     Prefab "{9713FE6DDCC9510D}Prefabs/Characters/Vests/Vest_Lifchik/29th_Vest_Lifchik.et"
     }
    }
   }
   SCR_InventoryStorageManagerComponent "{520EA1D2DB118DE5}" {
    InitialInventoryItems {
+    ItemsInitConfigurationItem "{5D7CC173E6675BF7}" {
+     TargetStorage "Pants/Pants_M88_TTsKO.et"
+    }
+    ItemsInitConfigurationItem "{5D7CC173E6675BF5}" {
+     TargetStorage "Vest/29th_Vest_Lifchik.et"
+    }
     ItemsInitConfigurationItem "{54A68D6220405B43}" {
-     TargetStorage "Vest/Vest_Lifchik.et"
+     TargetStorage "Vest/29th_Vest_Lifchik.et"
      PrefabsToSpawn {
       "{0A84AA5A3884176F}Prefabs/Weapons/Magazines/Magazine_545x39_AK_30rnd_Last_5Tracer.et" "{0A84AA5A3884176F}Prefabs/Weapons/Magazines/Magazine_545x39_AK_30rnd_Last_5Tracer.et" "{0A84AA5A3884176F}Prefabs/Weapons/Magazines/Magazine_545x39_AK_30rnd_Last_5Tracer.et" "{0A84AA5A3884176F}Prefabs/Weapons/Magazines/Magazine_545x39_AK_30rnd_Last_5Tracer.et" "{327103CB218E7CA1}Prefabs/Weapons/Flares/Flare_RSP30_white.et" "{327103CB218E7CA1}Prefabs/Weapons/Flares/Flare_RSP30_white.et" "{77EAE5E07DC4678A}Prefabs/Weapons/Grenades/Smoke_RDG2.et" "{77EAE5E07DC4678A}Prefabs/Weapons/Grenades/Smoke_RDG2.et" "{77EAE5E07DC4678A}Prefabs/Weapons/Grenades/Smoke_RDG2.et" "{645C73791ECA1698}Prefabs/Weapons/Grenades/Grenade_RGD5.et" "{645C73791ECA1698}Prefabs/Weapons/Grenades/Grenade_RGD5.et" "{645C73791ECA1698}Prefabs/Weapons/Grenades/Grenade_RGD5.et"
      }
+    }
+    ItemsInitConfigurationItem "{5A24CC173897B74F}" {
+     Enabled 0
     }
     ItemsInitConfigurationItem "{54A68D6220405B44}" {
      TargetStorage "Jacket/Jacket_M88_TTsKO.et"
