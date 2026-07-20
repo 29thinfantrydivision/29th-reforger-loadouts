@@ -74,13 +74,13 @@ SCR_ChimeraCharacter : "{284E735C6C70DAD2}Prefabs/Characters/Factions/BLUFOR/US_
      }
     }
     ItemsInitConfigurationItem "{69C4111D62490E65}" {
-     TargetStorage "Vest/29th_Vest_ALICE_rifleman.et"
+     TargetStorage "Vest/29th_Vest_ALICE_rifleman.et/Buttpack/Vest_ALICE_buttpack.et"
      PrefabsToSpawn {
       "{E8F00BF730225B00}Prefabs/Weapons/Grenades/Grenade_M67.et" "{E8F00BF730225B00}Prefabs/Weapons/Grenades/Grenade_M67.et" "{E8F00BF730225B00}Prefabs/Weapons/Grenades/Grenade_M67.et" "{E8F00BF730225B00}Prefabs/Weapons/Grenades/Grenade_M67.et" "{9DB69176CEF0EE97}Prefabs/Weapons/Grenades/Smoke_ANM8HC.et" "{9DB69176CEF0EE97}Prefabs/Weapons/Grenades/Smoke_ANM8HC.et" "{EC9BDA3D9DDD8795}Prefabs/Weapons/Flares/FlareStarParachute_M127A1_white.et" "{EC9BDA3D9DDD8795}Prefabs/Weapons/Flares/FlareStarParachute_M127A1_white.et"
      }
     }
     ItemsInitConfigurationItem "{69C4111D62490E8B}" {
-     TargetStorage "Vest/29th_Vest_ALICE_rifleman.et/Buttpack/Vest_ALICE_buttpack.et"
+     TargetStorage "Vest/29th_Vest_ALICE_rifleman.et"
      PrefabsToSpawn {
       "{E8F00BF730225B00}Prefabs/Weapons/Grenades/Grenade_M67.et"
      }
