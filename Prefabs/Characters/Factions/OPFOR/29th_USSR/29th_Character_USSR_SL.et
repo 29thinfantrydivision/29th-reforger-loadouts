@@ -30,6 +30,9 @@ SCR_ChimeraCharacter : "{5436629450D8387A}Prefabs/Characters/Factions/OPFOR/USSR
    InitialInventoryItems {
     ItemsInitConfigurationItem "{5D7CC173E6675BF7}" {
      TargetStorage "Pants/Pants_M88_TTsKO.et"
+     PrefabsToSpawn {
+      "{E1A5D4B878AA8980}Prefabs/Items/Equipment/Radios/Radio_R148.et" "{7CEF68E2BC68CE71}Prefabs/Items/Equipment/Compass/Compass_Adrianov.et" "{F849217AB3BA88BE}Prefabs/Items/Equipment/Maps/Map_Paper_01/PaperMap_01_folded_USSR.et" "{C3F1FA1E2EC2B345}Prefabs/Items/Medicine/FieldDressing_01/FieldDressing_USSR_01.et" "{C3F1FA1E2EC2B345}Prefabs/Items/Medicine/FieldDressing_01/FieldDressing_USSR_01.et" "{A55A815F28739FEC}Prefabs/Items/Equipment/Navigation/Orion/Orion.et"
+     }
     }
     ItemsInitConfigurationItem "{5D7CC173E6675BF5}" {
      TargetStorage "Vest/29th_Vest_Lifchik.et"
@@ -50,10 +53,7 @@ SCR_ChimeraCharacter : "{5436629450D8387A}Prefabs/Characters/Factions/OPFOR/USSR
      }
     }
     ItemsInitConfigurationItem "{54A68D6220405B45}" {
-     TargetStorage "Pants/Pants_M88_TTsKO.et"
-     PrefabsToSpawn {
-      "{8B853CDD11BA916E}Prefabs/Weapons/Magazines/Magazine_9x18_PM_8rnd_Ball.et" "{8B853CDD11BA916E}Prefabs/Weapons/Magazines/Magazine_9x18_PM_8rnd_Ball.et" "{E1A5D4B878AA8980}Prefabs/Items/Equipment/Radios/Radio_R148.et" "{7CEF68E2BC68CE71}Prefabs/Items/Equipment/Compass/Compass_Adrianov.et" "{F849217AB3BA88BE}Prefabs/Items/Equipment/Maps/Map_Paper_01/PaperMap_01_folded_USSR.et" "{062E2F1D7F6739D6}Prefabs/Items/Equipment/Accessories/ETool_MPL50/ETool_MPL50_FreeRoamBuilding_Gadget.et" "{98C79F5FAE12F9B6}Prefabs/Weapons/Attachments/Bayonets/Bayonet_6Kh4.et" "{A55A815F28739FEC}Prefabs/Items/Equipment/Navigation/Orion/Orion.et"
-     }
+     Enabled 0
     }
    }
   }

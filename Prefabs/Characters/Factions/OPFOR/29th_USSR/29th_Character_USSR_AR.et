@@ -38,10 +38,10 @@ SCR_ChimeraCharacter : "{23ADBBC31B6A3DC6}Prefabs/Characters/Factions/OPFOR/USSR
      TargetStorage "Vest/29th_Vest_SovietHarness_AR.et/Suspenders/Vest_SovietHarness_Suspenders.et"
     }
     ItemsInitConfigurationItem "{54A68D63FA941151}" {
-     TargetStorage "Vest/29th_Vest_SovietHarness_AR.et"
+     TargetStorage "Vest/29th_Vest_SovietHarness_AR.et/MagPouch_6Sh46/Pouch_Soviet_45rnd_RPK74.et"
     }
     ItemsInitConfigurationItem "{5D2678DEE6D6DB76}" {
-     TargetStorage "Vest/29th_Vest_SovietHarness_AR.et"
+     TargetStorage "Vest/29th_Vest_SovietHarness_AR.et/GrenadePouch/Pouch_Soviet_45rnd_RPK74.et"
      PrefabsToSpawn {
       "{645C73791ECA1698}Prefabs/Weapons/Grenades/Grenade_RGD5.et" "{645C73791ECA1698}Prefabs/Weapons/Grenades/Grenade_RGD5.et" "{645C73791ECA1698}Prefabs/Weapons/Grenades/Grenade_RGD5.et" "{D78C667F59829717}Prefabs/Weapons/Magazines/Magazine_545x39_RPK_45rnd_4Ball_1Tracer.et" "{D78C667F59829717}Prefabs/Weapons/Magazines/Magazine_545x39_RPK_45rnd_4Ball_1Tracer.et" "{D78C667F59829717}Prefabs/Weapons/Magazines/Magazine_545x39_RPK_45rnd_4Ball_1Tracer.et"
      }
