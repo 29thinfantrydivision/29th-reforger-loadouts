@@ -2,7 +2,7 @@ SCR_ChimeraCharacter : "{5436629450D8387A}Prefabs/Characters/Factions/OPFOR/USSR
  ID "200D264F0EEA1A28"
  components {
   CharacterWeaponSlotComponent "{520EA1D2F659CFAB}" {
-   WeaponTemplate "{BFEA719491610A45}Prefabs/Weapons/Rifles/AKS74U/Rifle_AKS74U.et"
+   WeaponTemplate "{96DFD2E7E63B3386}Prefabs/Weapons/Rifles/AK74/Rifle_AK74N.et"
   }
   BaseLoadoutManagerComponent "{520EA1D2DB11821E}" {
    Slots {

@@ -1,6 +1,9 @@
 SCR_ChimeraCharacter : "{8E0FE664CE7D1CA9}Prefabs/Characters/Factions/OPFOR/USSR_Army/Character_USSR_GL.et" {
  ID "51C707EFDE2A1213"
  components {
+  CharacterWeaponSlotComponent "{520EA1D2F659CFAB}" {
+   WeaponTemplate "{BC6C9476FB3219A7}Prefabs/Weapons/Rifles/AK74/Rifle_AK74N_GP25.et"
+  }
   CharacterWeaponSlotComponent "{520EA1D2F659CFDC}" {
    WeaponTemplate "{C0F7DD85A86B2900}Prefabs/Weapons/Handguns/PM/Handgun_PM.et"
   }
