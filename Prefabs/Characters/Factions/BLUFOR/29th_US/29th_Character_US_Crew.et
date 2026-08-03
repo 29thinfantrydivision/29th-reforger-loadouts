@@ -82,4 +82,6 @@ SCR_ChimeraCharacter : "{284E735C6C70DAD2}Prefabs/Characters/Factions/BLUFOR/US_
    }
   }
  }
+ coords 0 0 0
+ angles 0 37.719 0
 }
