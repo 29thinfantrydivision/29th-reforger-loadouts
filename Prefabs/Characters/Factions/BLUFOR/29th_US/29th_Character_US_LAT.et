@@ -15,13 +15,6 @@ SCR_ChimeraCharacter : "{26A9756790131354}Prefabs/Characters/Factions/BLUFOR/US_
      SIZE_M ROLE_ANTITANK
     }
    }
-   m_VariantData SCR_EditableEntityVariantData "{60F6B2B4BAE04806}" {
-    m_aVariants {
-     SCR_EditableEntityVariant "{60F6B2B4B9D3CC9B}" {
-      m_bEnabled 0
-     }
-    }
-   }
   }
   CharacterWeaponSlotComponent "{520EA1D2F659CFAB}" {
    WeaponTemplate "{F97A4AC994231900}Prefabs/Weapons/Rifles/M16/Rifle_M16A2_carbine.et"

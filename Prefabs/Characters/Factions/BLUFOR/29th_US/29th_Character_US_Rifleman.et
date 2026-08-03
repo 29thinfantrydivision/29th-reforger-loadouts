@@ -13,13 +13,6 @@ SCR_ChimeraCharacter : "{284E735C6C70DAD2}Prefabs/Characters/Factions/BLUFOR/US_
      SIZE_M ROLE_RIFLEMAN
     }
    }
-   m_VariantData SCR_EditableEntityVariantData "{69C4111D62490E0C}" {
-    m_aVariants {
-     SCR_EditableEntityVariant "{69C4111D62490E76}" {
-      m_sVariantPrefab "{EA158B6EB6A24B4B}Prefabs/Characters/Factions/BLUFOR/US_Army/Character_US_Rifleman_Variant_1.et"
-     }
-    }
-   }
   }
   CharacterGrenadeSlotComponent "{520EA1D2F659CE6E}" {
    WeaponTemplate "{E8F00BF730225B00}Prefabs/Weapons/Grenades/Grenade_M67.et"
