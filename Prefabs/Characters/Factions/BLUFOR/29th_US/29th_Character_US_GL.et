@@ -36,7 +36,7 @@ SCR_ChimeraCharacter : "{284E735C6C70DAD2}Prefabs/Characters/Factions/BLUFOR/US_
      Prefab "{C7861F11D5334C0E}Prefabs/Characters/Uniforms/Jacket_US_BDU.et"
     }
     LoadoutSlotInfo ArmoredVest {
-     Prefab "{07B1F856943B7075}Prefabs/Characters/Vests/Vest_M69/Vest_M69_base.et"
+     Prefab "{725C5E1C75CADAF4}Prefabs/Characters/Vests/Vest_M69/Vest_M69_M81woodland.et"
     }
     LoadoutSlotInfo Back {
      Prefab ""
