@@ -33,7 +33,7 @@ class GM29_KitLoadoutHolder
 modded class SCR_LoadoutManager
 {
 	//! Log the full loadout list after injection. Turn off for deployment.
-	protected static const bool GM29_DUMP_LOADOUTS = false;
+	protected static const bool GM29_DUMP_LOADOUTS = true;
 
 	//! Remove faction loadouts the 29th did not author.
 	//! NOTE: this removes the '#AR-Loadout_Editor_NewArsenalLoadout_Name' entries, which are
