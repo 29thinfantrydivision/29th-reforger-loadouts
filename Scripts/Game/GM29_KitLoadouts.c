@@ -105,6 +105,8 @@ modded class SCR_LoadoutManager
 
 		if (GM29_DUMP_LOADOUTS)
 			DumpLoadoutTable();
+		
+		RK29_KitApplySpike.Boot();
 	}
 
 	//--------------------------------------------------------------------------------------------
