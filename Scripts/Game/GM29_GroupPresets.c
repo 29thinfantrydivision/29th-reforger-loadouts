@@ -43,6 +43,13 @@ modded class SCR_Faction
 	override void Init(IEntity owner)
 	{
 		super.Init(owner);
+
+		// Vanilla SCR_Faction.Init() early-returns in edit mode before it touches catalogs.
+		// Match that: injecting presets while the World Editor is open mutates
+		// m_aGroupRolePresetConfigs on the in-editor faction instances and spams warnings.
+		if (SCR_Global.IsEditMode())
+			return;
+
 		InjectGM29Groups();
 	}
 

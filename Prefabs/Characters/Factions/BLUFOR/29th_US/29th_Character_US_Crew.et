@@ -37,7 +37,7 @@ SCR_ChimeraCharacter : "{284E735C6C70DAD2}Prefabs/Characters/Factions/BLUFOR/US_
     LoadoutSlotInfo Pants {
      Prefab "{86BB79B9A2233780}Prefabs/Characters/Uniforms/Pants_US_M65.et"
     }
-    LoadoutSlotInfo Boots {
+    SCR_FeetLoadoutSlotInfo Boots {
      Prefab "{F05A35BCC44BE9FC}Prefabs/Characters/Footwear/TankerBoots_US_01/TankerBoots_US_01.et"
     }
     LoadoutSlotInfo Back {
