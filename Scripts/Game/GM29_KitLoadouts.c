@@ -105,6 +105,30 @@ modded class SCR_LoadoutManager
 
 		if (GM29_DUMP_LOADOUTS)
 			DumpLoadoutTable();
+
+		// kit system boots here - the loadout list is final at this point
+		RK29_KitManager.Boot(m_aPlayerLoadouts);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	SCR_BasePlayerLoadout RK29_FindLoadoutByName(string loadoutName)
+	{
+		if (!m_aPlayerLoadouts)
+			return null;
+		foreach (SCR_BasePlayerLoadout entry : m_aPlayerLoadouts)
+		{
+			if (entry && entry.GetLoadoutName() == loadoutName)
+				return entry;
+		}
+		return null;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	int RK29_IndexOfLoadout(SCR_BasePlayerLoadout loadout)
+	{
+		if (!loadout || !m_aPlayerLoadouts)
+			return -1;
+		return m_aPlayerLoadouts.Find(loadout);
 	}
 
 	//--------------------------------------------------------------------------------------------
