@@ -7,6 +7,10 @@ class RK29_KitItemBatch
 	//! TargetStorage path from the prefab - placement hint only.
 	string m_sTargetHint;
 
+	//! Authored placement preference, best first. Resolved at compose time from the item
+	//! entry, then the alias. Empty means the apply pass decides.
+	ref array<string> m_aPreferred;
+
 	ref array<ResourceName> m_aPrefabs = {};
 }
 
@@ -22,6 +26,9 @@ class RK29_KitStruct
 
 	//! loadout slot name -> prefab (names for logs only; slots are type-gated at apply)
 	ref map<string, ResourceName> m_mClothing = new map<string, ResourceName>();
+
+	//! equipment storage slot name -> prefab (WristwatchSlot, BinocularSlot, ...)
+	ref map<string, ResourceName> m_mEquipment = new map<string, ResourceName>();
 
 	//! weapon slot index -> prefab; grenade slot stored as 100
 	ref map<int, ResourceName> m_mWeapons = new map<int, ResourceName>();
@@ -49,6 +56,9 @@ class RK29_KitStruct
 
 		foreach (string slot, ResourceName res : m_mClothing)
 			c.m_mClothing.Set(slot, res);
+
+		foreach (string eqSlot, ResourceName eqRes : m_mEquipment)
+			c.m_mEquipment.Set(eqSlot, eqRes);
 
 		foreach (int idx, ResourceName res : m_mWeapons)
 		{

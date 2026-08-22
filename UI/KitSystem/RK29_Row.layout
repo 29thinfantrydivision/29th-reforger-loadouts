@@ -47,6 +47,21 @@ SizeLayoutWidgetClass {
         Padding 8 0 8 0
        }
        {
+        ItemPreviewWidgetClass "{AB29C0FFEE291017}" {
+         Name "RowPreview"
+         Slot LayoutSlot "{AB29C0FFEE291018}" {
+          HorizontalAlign 0
+          VerticalAlign 1
+          Padding 0 0 8 0
+         }
+         "Is Visible" 0
+         "Use Engine Scale" 0
+         Filter Bilinear
+         Format LDR
+         "Clear Color" 0 0 0 0
+         "Blend mode" Blend
+         Size 52 32
+        }
         ImageWidgetClass "{AB29C0FFEE291007}" {
          Name "RowIcon"
          Slot LayoutSlot "{AB29C0FFEE291008}" {
@@ -55,7 +70,7 @@ SizeLayoutWidgetClass {
           Padding 0 0 8 0
          }
          "Inherit Color" 1
-         Size 24 24
+         Size 34 34
         }
         RichTextWidgetClass "{AB29C0FFEE291009}" {
          Name "RowName"
@@ -72,21 +87,100 @@ SizeLayoutWidgetClass {
          }
          "Vertical Alignment" Center
         }
-        RichTextWidgetClass "{AB29C0FFEE29100B}" {
-         Name "RowValue"
-         Slot LayoutSlot "{AB29C0FFEE29100C}" {
-          HorizontalAlign 2
-          VerticalAlign 1
+        SizeLayoutWidgetClass "{AB29C0FFEE29101C}" {
+         Name "RowMagCol"
+         Slot LayoutSlot "{AB29C0FFEE29101D}" {
+          VerticalAlign 3
+          Padding 0 0 10 0
          }
-         Color 0.741 0.741 0.737 1
-         Text ""
-         "Font Size" 16
-         "Min Font Size" 14
-         FontProperties FontProperties "{AB29C0FFEE29101B}" {
-          Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+         AllowWidthOverride 1
+         WidthOverride 34
+         {
+          OverlayWidgetClass "{AB29C0FFEE29101E}" {
+           Name "RowMagOverlay"
+           Slot AlignableSlot "{AB29C0FFEE29101F}" {
+            HorizontalAlign 3
+            VerticalAlign 3
+           }
+           {
+            ImageWidgetClass "{AB29C0FFEE291014}" {
+             Name "RowMagIcon"
+             Slot OverlayWidgetSlot "{AB29C0FFEE291015}" {
+              HorizontalAlign 1
+              VerticalAlign 1
+             }
+             "Is Visible" 0
+             Color 0.741 0.741 0.737 1
+             Texture "{856CAFDF3DBC4D64}UI/Textures/Editor/ContentBrowser/ContentBrowser_Trait_Optics.edds"
+             Size 24 24
+            }
+            RichTextWidgetClass "{AB29C0FFEE291012}" {
+             Name "RowMagValue"
+             Slot OverlayWidgetSlot "{AB29C0FFEE291013}" {
+              HorizontalAlign 1
+              VerticalAlign 1
+             }
+             "Is Visible" 0
+             Color 0.741 0.741 0.737 1
+             Text ""
+             "Font Size" 16
+             "Min Font Size" 14
+             FontProperties FontProperties "{AB29C0FFEE291016}" {
+              Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+             }
+             "Horizontal Alignment" Center
+             "Vertical Alignment" Center
+            }
+           }
+          }
          }
-         "Horizontal Alignment" Right
-         "Vertical Alignment" Center
+        }
+        SizeLayoutWidgetClass "{AB29C0FFEE291020}" {
+         Name "RowValueCol"
+         Slot LayoutSlot "{AB29C0FFEE291021}" {
+          VerticalAlign 3
+         }
+         AllowWidthOverride 1
+         WidthOverride 34
+         {
+          OverlayWidgetClass "{AB29C0FFEE291022}" {
+           Name "RowValueOverlay"
+           Slot AlignableSlot "{AB29C0FFEE291023}" {
+            HorizontalAlign 3
+            VerticalAlign 3
+           }
+           {
+            ImageWidgetClass "{AB29C0FFEE291024}" {
+             Name "RowAliveIcon"
+             Slot OverlayWidgetSlot "{AB29C0FFEE291025}" {
+              HorizontalAlign 1
+              VerticalAlign 1
+             }
+             "Is Visible" 0
+             Color 0.741 0.741 0.737 1
+             Texture "{2EFEA2AF1F38E7F0}UI/Textures/Icons/icons_wrapperUI-64.imageset"
+             Image "players"
+             Size 24 24
+            }
+            RichTextWidgetClass "{AB29C0FFEE29100B}" {
+             Name "RowValue"
+             Slot OverlayWidgetSlot "{AB29C0FFEE29100C}" {
+              HorizontalAlign 1
+              VerticalAlign 1
+             }
+             Color 0.741 0.741 0.737 1
+             Text ""
+             "Font Size" 16
+             "Min Font Size" 14
+             FontProperties FontProperties "{AB29C0FFEE29101B}" {
+              Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+             }
+             "Horizontal Alignment" Center
+             "Vertical Alignment" Center
+            }
+           }
+          }
+         }
         }
        }
       }

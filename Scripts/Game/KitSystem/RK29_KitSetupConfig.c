@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------------------------
-//! Customization config (Configs/KitSystem/RK29_KitSetup.conf + Sides/ + Helpers/).
+//! Customization config (Configs/KitSystem/RK29_KitSetup.conf + Rosters/ + Catalogs/).
 //! m_sKitName must match m_sLoadoutName in GM29_Kits.conf. No entry = kit not customizable.
 //------------------------------------------------------------------------------------------------
 
@@ -71,12 +71,21 @@ class RK29_ClassSetup
 	[Attribute(desc: "Optic prefab the picker pre-selects (opt-OUT for scoped classes). Empty = None/irons. Must be inside an allowed category", params: "et", category: "29th")]
 	ResourceName m_sDefaultOptic;
 
+	[Attribute(desc: "Specific optics removed from the referenced categories for this class", params: "et", category: "29th")]
+	ref array<ResourceName> m_aOpticExclude;
+
+	[Attribute(desc: "Specific optics allowed on top of the categories. Must be defined in some library category (badge/mounts come from there)", params: "et", category: "29th")]
+	ref array<ResourceName> m_aOpticInclude;
+
 	[Attribute("0", desc: "Legacy kit: deploy-menu selectable, hidden in the picker, HUD-counted under its display name", category: "29th")]
 	bool m_bLegacyHidden;
+
+	[Attribute(desc: "This kit's composition. Empty = capture the kit prefab", params: "conf class=RK29_KitComposition", category: "29th")]
+	ResourceName m_sComposition;
 }
 
 //------------------------------------------------------------------------------------------------
-//! One faction's classes - Configs/KitSystem/Sides/*.conf
+//! One faction's classes - Configs/KitSystem/Rosters/RK29_Roster_*.conf
 [BaseContainerProps(configRoot: true)]
 class RK29_SideSetup
 {
@@ -87,7 +96,28 @@ class RK29_SideSetup
 	ref array<ref RK29_ClassSetup> m_aClasses;
 }
 
-//! Optic category definitions - Configs/KitSystem/Helpers/*.conf
+//------------------------------------------------------------------------------------------------
+//! Kits offered to one squad, keyed by the squad's group name ("29th Squad" etc.).
+[BaseContainerProps(), BaseContainerCustomTitleField("m_sGroupName")]
+class RK29_SquadKits
+{
+	[Attribute(desc: "Squad group name from the group presets, e.g. '29th Squad'. '*' = default for squads without an entry", category: "29th")]
+	string m_sGroupName;
+
+	[Attribute(desc: "Kit names offered to this squad. Empty = all faction kits", category: "29th")]
+	ref array<string> m_aKitNames;
+}
+
+//! Squad kit catalog - Configs/KitSystem/Catalogs/RK29_Squads.conf
+[BaseContainerProps(configRoot: true)]
+class RK29_SquadKitCatalog
+{
+	[Attribute(desc: "Per-squad kit lists", category: "29th")]
+	ref array<ref RK29_SquadKits> m_aSquads;
+}
+
+//------------------------------------------------------------------------------------------------
+//! Optic category definitions - Configs/KitSystem/Catalogs/*.conf
 [BaseContainerProps(configRoot: true)]
 class RK29_OpticLibrary
 {
@@ -101,11 +131,33 @@ class RK29_KitSetup
 	[Attribute("0", desc: "Behavior when the 29th Round Timer is NOT loaded: 1 = open (HUD + live re-kit always), 0 = closed (deploy-only kit choice)", category: "29th")]
 	bool m_bNoTimerOpen;
 
+	[Attribute("0", desc: "1 = print the per-item apply trace (every strip, container weighing and placement). Debugging aid - leave off on a live server, a briefing would print thousands of lines", category: "29th")]
+	bool m_bVerboseLogging;
+
 	[Attribute(desc: "Per-side class configs (Sides folder)", params: "conf", category: "29th")]
 	ref array<ResourceName> m_aSideConfigs;
 
 	[Attribute(desc: "Optic library configs (Helpers folder)", params: "conf", category: "29th")]
 	ref array<ResourceName> m_aOpticConfigs;
+
+	[Attribute(desc: "Item alias catalogs (Helpers folder)", params: "conf class=RK29_ItemAliasCatalog", category: "29th")]
+	ref array<ResourceName> m_aAliasConfigs;
+
+	[Attribute(desc: "Magazine set catalogs (Helpers folder)", params: "conf class=RK29_MagazineSetCatalog", category: "29th")]
+	ref array<ResourceName> m_aMagSetConfigs;
+
+	[Attribute(desc: "Squad kit catalogs (Helpers folder)", params: "conf class=RK29_SquadKitCatalog", category: "29th")]
+	ref array<ResourceName> m_aSquadConfigs;
+
+	[Attribute(desc: "Squad kit lists - usually loaded from Helpers configs", category: "29th")]
+	ref array<ref RK29_SquadKits> m_aSquads;
+
+	//! Merged at load from the referenced catalogs.
+	[Attribute(desc: "Item aliases - usually loaded from Helpers configs", category: "29th")]
+	ref array<ref RK29_ItemAlias> m_aAliases;
+
+	[Attribute(desc: "Magazine variant sets - usually loaded from Helpers configs", category: "29th")]
+	ref array<ref RK29_MagazineSet> m_aMagazineSets;
 
 	//! Merged at load from the referenced configs (inline entries here also allowed).
 	[Attribute(desc: "Optic categories - usually loaded from Helpers configs", category: "29th")]
@@ -128,6 +180,84 @@ class RK29_KitSetup
 	}
 
 	//--------------------------------------------------------------------------------------------
+	//! Squad entry by group name; falls back to the "*" default entry, else null.
+	RK29_SquadKits FindSquadKits(string groupName)
+	{
+		if (!m_aSquads)
+			return null;
+		RK29_SquadKits fallback;
+		foreach (RK29_SquadKits sq : m_aSquads)
+		{
+			if (!sq)
+				continue;
+			if (sq.m_sGroupName == groupName)
+				return sq;
+			if (sq.m_sGroupName == "*")
+				fallback = sq;
+		}
+		return fallback;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Variant prefab for any of the given wells, empty when absent.
+	ResourceName FindMagVariant(notnull array<string> wells, string variantName)
+	{
+		if (!m_aMagazineSets)
+			return ResourceName.Empty;
+		foreach (RK29_MagazineSet magSet : m_aMagazineSets)
+		{
+			if (!magSet || !magSet.m_aVariants || !wells.Contains(magSet.m_sMagazineWell))
+				continue;
+			foreach (RK29_MagVariant v : magSet.m_aVariants)
+			{
+				if (v && v.m_sName == variantName)
+					return v.m_sPrefab;
+			}
+		}
+		return ResourceName.Empty;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Alias -> prefab for a faction. Empty result = unresolved (caller logs).
+	//! Placement preference authored on an alias for this faction, or null.
+	array<string> ResolveAliasPreference(string alias, string factionKey)
+	{
+		if (!m_aAliases)
+			return null;
+		foreach (RK29_ItemAlias a : m_aAliases)
+		{
+			if (!a || a.m_sAlias != alias || !a.m_aPerFaction)
+				continue;
+			foreach (RK29_ItemAliasEntry e : a.m_aPerFaction)
+			{
+				if (e && e.m_sFactionKey == factionKey)
+					return e.m_aPreferredContainers;
+			}
+			return null;
+		}
+		return null;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	ResourceName ResolveAlias(string alias, string factionKey)
+	{
+		if (!m_aAliases)
+			return ResourceName.Empty;
+		foreach (RK29_ItemAlias a : m_aAliases)
+		{
+			if (!a || a.m_sAlias != alias || !a.m_aPerFaction)
+				continue;
+			foreach (RK29_ItemAliasEntry e : a.m_aPerFaction)
+			{
+				if (e && e.m_sFactionKey == factionKey)
+					return e.m_sPrefab;
+			}
+			return ResourceName.Empty;
+		}
+		return ResourceName.Empty;
+	}
+
+	//--------------------------------------------------------------------------------------------
 	RK29_OpticCategory FindCategory(string name)
 	{
 		if (!m_aOpticCategories)
@@ -141,12 +271,21 @@ class RK29_KitSetup
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! Option for this optic prefab within the class's allowed categories, null if not allowed.
+	//! Option for this optic prefab within the class's allowed set, null if not allowed.
+	//! Allowed = (referenced categories minus m_aOpticExclude) plus m_aOpticInclude.
 	RK29_OpticOption FindOpticOption(RK29_ClassSetup cls, ResourceName optic)
 	{
-		if (optic == ResourceName.Empty || !cls || !cls.m_aOpticCategories)
+		if (optic == ResourceName.Empty || !cls)
 			return null;
 
+		if (cls.m_aOpticInclude && cls.m_aOpticInclude.Contains(optic))
+			return FindOpticOptionAnywhere(optic);
+
+		if (cls.m_aOpticExclude && cls.m_aOpticExclude.Contains(optic))
+			return null;
+
+		if (!cls.m_aOpticCategories)
+			return null;
 		foreach (string catName : cls.m_aOpticCategories)
 		{
 			RK29_OpticCategory cat = FindCategory(catName);
@@ -156,6 +295,44 @@ class RK29_KitSetup
 			{
 				if (opt && opt.m_sOpticPrefab == optic)
 					return opt;
+			}
+		}
+		return null;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Option definition from any library category (metadata source for class includes).
+	RK29_OpticOption FindOpticOptionAnywhere(ResourceName optic)
+	{
+		if (optic == ResourceName.Empty || !m_aOpticCategories)
+			return null;
+		foreach (RK29_OpticCategory cat : m_aOpticCategories)
+		{
+			if (!cat || !cat.m_aOptics)
+				continue;
+			foreach (RK29_OpticOption opt : cat.m_aOptics)
+			{
+				if (opt && opt.m_sOpticPrefab == optic)
+					return opt;
+			}
+		}
+		return null;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Category holding this optic (badge source), null when unknown.
+	RK29_OpticCategory CategoryOf(ResourceName optic)
+	{
+		if (optic == ResourceName.Empty || !m_aOpticCategories)
+			return null;
+		foreach (RK29_OpticCategory cat : m_aOpticCategories)
+		{
+			if (!cat || !cat.m_aOptics)
+				continue;
+			foreach (RK29_OpticOption opt : cat.m_aOptics)
+			{
+				if (opt && opt.m_sOpticPrefab == optic)
+					return cat;
 			}
 		}
 		return null;

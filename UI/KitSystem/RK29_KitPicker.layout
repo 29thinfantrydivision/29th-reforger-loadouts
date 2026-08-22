@@ -148,8 +148,8 @@ SizeLayoutWidgetClass {
      Color 0 0 0 1
      style rounded_4px
     }
-    VerticalLayoutWidgetClass "{AB29C0FFEE29300F}" {
-     Name "ColClasses"
+    ScrollLayoutWidgetClass "{AB29C0FFEE293020}" {
+     Name "ColClassesScroll"
      Slot FrameWidgetSlot "{AB29C0FFEE293010}" {
       Anchor 0.028 0.072 0.317 0.975
       PositionX 0
@@ -161,9 +161,19 @@ SizeLayoutWidgetClass {
       SizeY 0
       OffsetBottom 0
      }
+     style Small
+     {
+      VerticalLayoutWidgetClass "{AB29C0FFEE29300F}" {
+       Name "ColClasses"
+       Slot AlignableSlot "{AB29C0FFEE293021}" {
+        HorizontalAlign 3
+        VerticalAlign 0
+       }
+      }
+     }
     }
-    VerticalLayoutWidgetClass "{AB29C0FFEE293011}" {
-     Name "ColWeapons"
+    ScrollLayoutWidgetClass "{AB29C0FFEE293022}" {
+     Name "ColWeaponsScroll"
      Slot FrameWidgetSlot "{AB29C0FFEE293012}" {
       Anchor 0.353 0.072 0.642 0.975
       PositionX 0
@@ -175,9 +185,19 @@ SizeLayoutWidgetClass {
       SizeY 0
       OffsetBottom 0
      }
+     style Small
+     {
+      VerticalLayoutWidgetClass "{AB29C0FFEE293011}" {
+       Name "ColWeapons"
+       Slot AlignableSlot "{AB29C0FFEE293023}" {
+        HorizontalAlign 3
+        VerticalAlign 0
+       }
+      }
+     }
     }
-    VerticalLayoutWidgetClass "{AB29C0FFEE293013}" {
-     Name "ColOptics"
+    ScrollLayoutWidgetClass "{AB29C0FFEE293024}" {
+     Name "ColOpticsScroll"
      Slot FrameWidgetSlot "{AB29C0FFEE293014}" {
       Anchor 0.678 0.072 0.967 0.975
       PositionX 0
@@ -188,6 +208,16 @@ SizeLayoutWidgetClass {
       OffsetRight 0
       SizeY 0
       OffsetBottom 0
+     }
+     style Small
+     {
+      VerticalLayoutWidgetClass "{AB29C0FFEE293013}" {
+       Name "ColOptics"
+       Slot AlignableSlot "{AB29C0FFEE293025}" {
+        HorizontalAlign 3
+        VerticalAlign 0
+       }
+      }
      }
     }
    }

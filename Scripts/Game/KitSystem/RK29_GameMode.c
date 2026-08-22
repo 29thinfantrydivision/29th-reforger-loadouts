@@ -85,6 +85,26 @@ modded class SCR_GameModeEditor
 	}
 
 	//--------------------------------------------------------------------------------------------
+	override protected void OnPlayerDisconnected(int playerId, KickCauseCode cause, int timeout)
+	{
+		super.OnPlayerDisconnected(playerId, cause, timeout);
+
+		RK29_KitManager mgr = RK29_KitManager.GetInstance();
+		if (mgr)
+			mgr.OnPlayerDisconnected_S(playerId);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	override void OnPlayerAuditSuccess(int iPlayerID)
+	{
+		super.OnPlayerAuditSuccess(iPlayerID);
+
+		RK29_KitManager mgr = RK29_KitManager.GetInstance();
+		if (mgr)
+			mgr.OnPlayerAuditSuccess_S(iPlayerID);
+	}
+
+	//--------------------------------------------------------------------------------------------
 	//! "/kitmenu" chat fallback for the picker.
 	override void OnGameStart()
 	{
@@ -97,11 +117,82 @@ modded class SCR_GameModeEditor
 		ChatCommandInvoker inv = chatMgr.GetCommandInvoker("kitmenu");
 		if (inv)
 			inv.Insert(RK29_OnChatKitMenu);
+
+		inv = chatMgr.GetCommandInvoker("kitdigest");
+		if (inv)
+			inv.Insert(RK29_OnChatKitDigest);
+
+		inv = chatMgr.GetCommandInvoker("kitdump");
+		if (inv)
+			inv.Insert(RK29_OnChatKitDump);
+
+		inv = chatMgr.GetCommandInvoker("kitcompare");
+		if (inv)
+			inv.Insert(RK29_OnChatKitCompare);
+
+		inv = chatMgr.GetCommandInvoker("kitvalidate");
+		if (inv)
+			inv.Insert(RK29_OnChatKitValidate);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Chat commands are dispatched entirely on the typing client - vanilla creates an invoker
+	//! for any name asked for and applies no permission model of its own. The kit diagnostics
+	//! are authoring tools (they spawn bodies, write files, flood the log), so they run on the
+	//! session's own machine only: Workbench or a listen host. /kitmenu is deliberately NOT
+	//! gated - it is the player-facing fallback for the picker key.
+	protected bool RK29_DiagAllowed()
+	{
+		if (Replication.IsServer())
+			return true;
+
+		SCR_ChatPanelManager chatMgr = SCR_ChatPanelManager.GetInstance();
+		if (chatMgr)
+			chatMgr.ShowHelpMessage("Kit diagnostics run on the server only.");
+		return false;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	protected void RK29_OnChatKitValidate(SCR_ChatPanel panel, string data)
+	{
+		if (!RK29_DiagAllowed())
+			return;
+		RK29_KitValidate.Run();
 	}
 
 	//--------------------------------------------------------------------------------------------
 	protected void RK29_OnChatKitMenu(SCR_ChatPanel panel, string data)
 	{
 		RK29_KitPicker.ToggleFromChat();
+	}
+
+	//--------------------------------------------------------------------------------------------
+	protected void RK29_OnChatKitDigest(SCR_ChatPanel panel, string data)
+	{
+		if (!RK29_DiagAllowed())
+			return;
+
+		data.TrimInPlace();
+		RK29_KitCompose.Digest(data);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	protected void RK29_OnChatKitDump(SCR_ChatPanel panel, string data)
+	{
+		if (!RK29_DiagAllowed())
+			return;
+
+		RK29_KitCompose.Dump();
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! No argument sweeps every configured kit; a kit name compares just that one.
+	protected void RK29_OnChatKitCompare(SCR_ChatPanel panel, string data)
+	{
+		if (!RK29_DiagAllowed())
+			return;
+
+		data.TrimInPlace();
+		RK29_KitCompose.Compare(data);
 	}
 }

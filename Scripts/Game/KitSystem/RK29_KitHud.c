@@ -6,13 +6,15 @@ class RK29_KitHud
 	protected static const ResourceName HUD_LAYOUT = "{AB29C0FFEE292000}UI/KitSystem/RK29_KitHud.layout";
 	protected static const ResourceName ROW_LAYOUT = "{AB29C0FFEE291000}UI/KitSystem/RK29_Row.layout";
 	protected static const int TICK_MS = 1000;
+	protected static const int HEADER_ROW_HEIGHT = 24;
 
 	protected static ref RK29_KitHud s_Instance;
 
 	protected Widget m_wRoot;
 	protected Widget m_wRows;
 	protected TextWidget m_wTitle;
-	protected TextWidget m_wFooter;
+	protected Widget m_wFooterRow;
+	protected Widget m_wHeaderRow;
 	protected bool m_bSubscribed;
 	protected static bool s_bHiddenReported;
 	protected static bool s_bShownReported;
@@ -78,7 +80,55 @@ class RK29_KitHud
 		}
 		m_wRows   = m_wRoot.FindAnyWidget("HudRows");
 		m_wTitle  = TextWidget.Cast(m_wRoot.FindAnyWidget("HudTitle"));
-		m_wFooter = TextWidget.Cast(m_wRoot.FindAnyWidget("HudFooter"));
+		m_wFooterRow = m_wRoot.FindAnyWidget("HudFooterRow");
+		m_wHeaderRow = m_wRoot.FindAnyWidget("HudHeaderRow");
+		BuildHeaderRow();
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Column headings, built once: a glyph per numeric column, sitting in that column's own
+	//! fixed-width cell so it lands dead over the numbers below it. Built from the row layout
+	//! precisely so the columns cannot drift apart.
+	protected void BuildHeaderRow()
+	{
+		if (!m_wHeaderRow)
+			return;
+
+		WorkspaceWidget ws = GetGame().GetWorkspace();
+		Widget header = ws.CreateWidgets(ROW_LAYOUT, m_wHeaderRow);
+		if (!header)
+			return;
+
+		// a header is a label strip, not a row - shrink it so it sits on top of the table
+		// instead of eating a row's worth of height and crowding the first entry
+		SizeLayoutWidget headerSize = SizeLayoutWidget.Cast(header);
+		if (headerSize)
+			headerSize.SetHeightOverride(HEADER_ROW_HEIGHT);
+
+		Widget headerIcon = header.FindAnyWidget("RowIcon");
+		if (headerIcon)
+			headerIcon.SetVisible(false);
+		Widget headerBase = header.FindAnyWidget("RowBase");
+		if (headerBase)
+			headerBase.SetVisible(false);
+
+		TextWidget headerName = TextWidget.Cast(header.FindAnyWidget("RowName"));
+		if (headerName)
+			headerName.SetText("");
+
+		Widget magIcon = header.FindAnyWidget("RowMagIcon");
+		if (magIcon)
+			magIcon.SetVisible(true);
+
+		// the count column is headed by the same players glyph the server browser uses,
+		// which reads faster than a word and keeps both headings the same shape
+		Widget aliveIcon = header.FindAnyWidget("RowAliveIcon");
+		if (aliveIcon)
+			aliveIcon.SetVisible(true);
+
+		Widget aliveText = header.FindAnyWidget("RowValue");
+		if (aliveText)
+			aliveText.SetVisible(false);
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -139,6 +189,14 @@ class RK29_KitHud
 			totalMag   += gm.RK29_GetMagnifiedCount(idx);
 		}
 
+		// with every number in the column hidden, the heading would be labelling nothing
+		if (m_wHeaderRow)
+		{
+			Widget headMagIcon = m_wHeaderRow.FindAnyWidget("RowMagIcon");
+			if (headMagIcon)
+				headMagIcon.SetVisible(totalMag > 0);
+		}
+
 		// row order follows the side config's class order, leftovers append in loadout order;
 		// kits sharing a display label (AR + legacy MG under "Machine Gunner") sum into one row
 		array<string> labels = {};
@@ -192,11 +250,14 @@ class RK29_KitHud
 
 			TextWidget value = TextWidget.Cast(row.FindAnyWidget("RowValue"));
 			if (value)
+				value.SetText(alive.ToString());
+
+			// a zero in the optics column is noise - the absence of a number says it
+			TextWidget magValue = TextWidget.Cast(row.FindAnyWidget("RowMagValue"));
+			if (magValue)
 			{
-				string txt = alive.ToString();
-				if (mag > 0)
-					txt = txt + " (" + mag.ToString() + " mag)";
-				value.SetText(txt);
+				magValue.SetText(mag.ToString());
+				magValue.SetVisible(mag > 0);
 			}
 
 			ImageWidget icon = ImageWidget.Cast(row.FindAnyWidget("RowIcon"));
@@ -204,8 +265,49 @@ class RK29_KitHud
 				RK29_KitHud.SetKitIcon(labelKits.Get(label), icon);
 		}
 
-		if (m_wFooter)
-			m_wFooter.SetText(totalAlive.ToString() + " alive | " + totalMag.ToString() + " mag");
+		// the totals are the table's last row, not a caption - same layout, same columns,
+		// so the eye keeps scanning straight down instead of re-parsing a sentence
+		if (m_wFooterRow)
+		{
+			Widget old = m_wFooterRow.GetChildren();
+			while (old)
+			{
+				Widget next = old.GetSibling();
+				m_wFooterRow.RemoveChild(old);
+				old = next;
+			}
+
+			Widget totals = ws.CreateWidgets(ROW_LAYOUT, m_wFooterRow);
+			if (totals)
+			{
+				TextWidget totalName = TextWidget.Cast(totals.FindAnyWidget("RowName"));
+				if (totalName)
+					totalName.SetText("Total");
+
+				TextWidget totalValue = TextWidget.Cast(totals.FindAnyWidget("RowValue"));
+				if (totalValue)
+					totalValue.SetText(totalAlive.ToString());
+
+				TextWidget totalMagValue = TextWidget.Cast(totals.FindAnyWidget("RowMagValue"));
+				if (totalMagValue)
+				{
+					totalMagValue.SetText(totalMag.ToString());
+					totalMagValue.SetVisible(totalMag > 0);
+				}
+
+				// the totals line carries no class icon, but it keeps the icon's SPACE so "Total"
+				// starts on the same x as the class names above it. Opacity, not visibility: a
+				// hidden widget leaves the layout entirely, and an untextured ImageWidget left
+				// visible draws as a white square.
+				Widget totalIcon = totals.FindAnyWidget("RowIcon");
+				if (totalIcon)
+					totalIcon.SetOpacity(0);
+
+				Widget totalBase = totals.FindAnyWidget("RowBase");
+				if (totalBase)
+					totalBase.SetVisible(false); // the footer band already provides the backing
+			}
+		}
 	}
 
 	// ============================================================================== helpers
@@ -283,7 +385,6 @@ class RK29_KitHud
 			icon.SetVisible(false);
 			return;
 		}
-		if (!kit.m_UIInfo.SetIconTo(icon))
-			icon.SetVisible(false);
+		icon.SetVisible(kit.m_UIInfo.SetIconTo(icon));
 	}
 }

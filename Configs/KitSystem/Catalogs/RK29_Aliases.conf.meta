@@ -1,5 +1,5 @@
 MetaFileClass {
- Name "{AB29C0FFEE297003}Configs/KitSystem/Helpers/RK29_Optics.conf"
+ Name "{AB29C0FFEE297004}Configs/KitSystem/Catalogs/RK29_Aliases.conf"
  Configurations {
   CONFResourceClass PC {
   }

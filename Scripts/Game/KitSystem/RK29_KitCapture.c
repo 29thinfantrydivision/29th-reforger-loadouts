@@ -1,8 +1,7 @@
 //------------------------------------------------------------------------------------------------
 //! Reads a kit's authored gear straight off its prefab container.
-//! Component enumeration only sees what each prefab layer declares, so the capture walks the
-//! ancestry: child layers win per key (weapon slot index / clothing slot name / item entry id),
-//! parents fill what the child never declared.
+//! Entity sources present the fully merged view: inherited components enumerate and
+//! their values resolve, so one pass over the kit prefab layer sees everything.
 //------------------------------------------------------------------------------------------------
 class RK29_KitCapture
 {
@@ -28,39 +27,32 @@ class RK29_KitCapture
 		kit.m_sFactionKey   = factionKey;
 		kit.m_sSourcePrefab = kitPrefab;
 
-		array<int> seenWeaponSlots = {};
-		array<string> seenClothingSlots = {};
-		array<string> seenItemEntries = {};
-		bool grenadeSeen = false;
-
-		while (src)
+		int nComp = src.GetComponentCount();
+		for (int i = 0; i < nComp; i++)
 		{
-			int nComp = src.GetComponentCount();
-			for (int i = 0; i < nComp; i++)
+			IEntityComponentSource comp = src.GetComponent(i);
+			if (!comp)
+				continue;
+
+			string cls = comp.GetClassName();
+
+			if (cls == "CharacterWeaponSlotComponent")
+				ReadWeaponSlot(comp, kit);
+			else if (cls == "CharacterGrenadeSlotComponent")
+				ReadGrenadeSlot(comp, kit);
+			else if (cls == "BaseLoadoutManagerComponent")
+				ReadClothing(comp, kit);
+			else if (cls == "SCR_InventoryStorageManagerComponent")
+				ReadInitialItems(comp, kit);
+			else if (cls == "SCR_CharacterInventoryStorageComponent")
+				ReadEquipmentSlots(comp, kit);
+			else if (cls == "SCR_EditableCharacterComponent")
 			{
-				IEntityComponentSource comp = src.GetComponent(i);
-				if (!comp)
-					continue;
-
-				string cls = comp.GetClassName();
-
-				if (cls == "CharacterWeaponSlotComponent")
-					ReadWeaponSlot(comp, kit, seenWeaponSlots);
-				else if (cls == "CharacterGrenadeSlotComponent")
-					grenadeSeen = ReadGrenadeSlot(comp, kit, grenadeSeen);
-				else if (cls == "BaseLoadoutManagerComponent")
-					ReadClothing(comp, kit, seenClothingSlots);
-				else if (cls == "SCR_InventoryStorageManagerComponent")
-					ReadInitialItems(comp, kit, seenItemEntries);
-				else if (cls == "SCR_EditableCharacterComponent" && !kit.m_UIInfo)
-				{
-					// instance now, while res is alive - containers die with the resource
-					BaseContainer infoSrc = comp.GetObject("m_UIInfo");
-					if (infoSrc)
-						kit.m_UIInfo = SCR_UIInfo.Cast(BaseContainerTools.CreateInstanceFromContainer(infoSrc));
-				}
+				// instance now, while res is alive - containers die with the resource
+				BaseContainer infoSrc = comp.GetObject("m_UIInfo");
+				if (infoSrc)
+					kit.m_UIInfo = SCR_UIInfo.Cast(BaseContainerTools.CreateInstanceFromContainer(infoSrc));
 			}
-			src = src.GetAncestor();
 		}
 
 		Print(string.Format("[RK29] captured '%1': %2 clothing, %3 weapons, %4 items%5",
@@ -71,18 +63,15 @@ class RK29_KitCapture
 	}
 
 	//--------------------------------------------------------------------------------------------
-	protected static void ReadWeaponSlot(IEntityComponentSource comp, RK29_KitStruct kit, notnull array<int> seenSlots)
+	protected static void ReadWeaponSlot(IEntityComponentSource comp, RK29_KitStruct kit)
 	{
-		int slotIdx = 0;
-		comp.Get("WeaponSlotIndex", slotIdx);
-		if (seenSlots.Contains(slotIdx))
-			return;
-		seenSlots.Insert(slotIdx);
-
 		ResourceName weapon;
 		comp.Get("WeaponTemplate", weapon);
 		if (weapon == ResourceName.Empty)
 			return;
+
+		int slotIdx = 0;
+		comp.Get("WeaponSlotIndex", slotIdx);
 
 		kit.m_mWeapons.Set(slotIdx, weapon);
 		if (slotIdx == 0)
@@ -90,20 +79,16 @@ class RK29_KitCapture
 	}
 
 	//--------------------------------------------------------------------------------------------
-	protected static bool ReadGrenadeSlot(IEntityComponentSource comp, RK29_KitStruct kit, bool seen)
+	protected static void ReadGrenadeSlot(IEntityComponentSource comp, RK29_KitStruct kit)
 	{
-		if (seen)
-			return true;
-
 		ResourceName grenade;
 		comp.Get("WeaponTemplate", grenade);
 		if (grenade != ResourceName.Empty)
 			kit.m_mWeapons.Set(RK29_KitStruct.GRENADE_SLOT, grenade);
-		return true;
 	}
 
 	//--------------------------------------------------------------------------------------------
-	protected static void ReadClothing(IEntityComponentSource comp, RK29_KitStruct kit, notnull array<string> seenSlots)
+	protected static void ReadClothing(IEntityComponentSource comp, RK29_KitStruct kit)
 	{
 		BaseContainerList slots = comp.GetObjectArray("Slots");
 		if (!slots)
@@ -115,22 +100,50 @@ class RK29_KitCapture
 			if (!slot)
 				continue;
 
-			string slotName = slot.GetName();
-			if (seenSlots.Contains(slotName))
-				continue;
-			seenSlots.Insert(slotName);
-
 			ResourceName prefab;
 			slot.Get("Prefab", prefab);
 			if (prefab == ResourceName.Empty)
 				continue;
 
-			kit.m_mClothing.Set(slotName, prefab);
+			kit.m_mClothing.Set(slot.GetName(), prefab);
 		}
 	}
 
 	//--------------------------------------------------------------------------------------------
-	protected static void ReadInitialItems(IEntityComponentSource comp, RK29_KitStruct kit, notnull array<string> seenEntries)
+	//! Equipment lives on a nested SCR_EquipmentStorageComponent (watch, binoculars) -
+	//! a third authoring channel beside dress slots and the item-init list.
+	protected static void ReadEquipmentSlots(IEntityComponentSource comp, RK29_KitStruct kit)
+	{
+		BaseContainerList comps = comp.GetObjectArray("components");
+		if (!comps)
+			return;
+
+		for (int i = 0, n = comps.Count(); i < n; i++)
+		{
+			BaseContainer sub = comps.Get(i);
+			if (!sub || sub.GetClassName() != "SCR_EquipmentStorageComponent")
+				continue;
+
+			BaseContainerList slots = sub.GetObjectArray("InitialStorageSlots");
+			if (!slots)
+				continue;
+
+			for (int s = 0, sn = slots.Count(); s < sn; s++)
+			{
+				BaseContainer slot = slots.Get(s);
+				if (!slot)
+					continue;
+
+				ResourceName prefab;
+				slot.Get("Prefab", prefab);
+				if (prefab != ResourceName.Empty)
+					kit.m_mEquipment.Set(slot.GetName(), prefab);
+			}
+		}
+	}
+
+	//--------------------------------------------------------------------------------------------
+	protected static void ReadInitialItems(IEntityComponentSource comp, RK29_KitStruct kit)
 	{
 		BaseContainerList items = comp.GetObjectArray("InitialInventoryItems");
 		if (!items)
@@ -141,11 +154,6 @@ class RK29_KitCapture
 			BaseContainer entry = items.Get(i);
 			if (!entry)
 				continue;
-
-			string entryName = entry.GetName();
-			if (seenEntries.Contains(entryName))
-				continue;
-			seenEntries.Insert(entryName);
 
 			bool enabled = true;
 			entry.Get("Enabled", enabled);

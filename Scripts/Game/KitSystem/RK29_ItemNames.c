@@ -45,6 +45,8 @@ class RK29_ItemNames
 	}
 
 	//--------------------------------------------------------------------------------------------
+	//! Items carry the name on InventoryItemComponent, weapons on their attachments
+	//! storage - any component with item Attributes counts.
 	protected static string ReadNameFrom(IEntitySource src)
 	{
 		for (int i = 0, n = src.GetComponentCount(); i < n; i++)
@@ -52,21 +54,20 @@ class RK29_ItemNames
 			IEntityComponentSource comp = src.GetComponent(i);
 			if (!comp)
 				continue;
-			string cls = comp.GetClassName();
-			if (!cls.Contains("InventoryItemComponent"))
-				continue;
 
 			BaseContainer attributes = comp.GetObject("Attributes");
 			if (!attributes)
-				return "";
+				continue;
 			BaseContainer uiInfo = attributes.GetObject("ItemDisplayName");
 			if (!uiInfo)
 				uiInfo = attributes.GetObject("UIInfo");
 			if (!uiInfo)
-				return "";
+				continue;
 
 			string name;
 			uiInfo.Get("Name", name);
+			if (name == "")
+				continue;
 			if (name.StartsWith("#"))
 				name = WidgetManager.Translate(name);
 			return name;

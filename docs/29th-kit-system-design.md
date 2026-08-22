@@ -1,7 +1,41 @@
 # 29th Kit System — design
 
-**Status:** design agreed, pre-implementation · **Branch:** GUI-Kits · **Date:** 2026-08-19
+**Status:** implemented (in-game verification ongoing) · **Branch:** GUI-Kits-Bae · **Updated:** 2026-08-20
 **Scope owner:** 29th ID Reforger dev team
+
+> **Implemented deltas vs the sections below (2026-08-20):**
+> - **Keybind is F4** (rebindable, "Kits - 29th ID" keybind category). Picker runs in the
+>   vanilla `ConfigurableDialog_Big` shell: title "SELECT KIT - <FACTION>", no internal
+>   header, **Apply Kit is a dialog footer button** next to Close.
+> - **Optic column:** "None" (not "None — iron sights"); locked classes show the same
+>   plain "None" row, not a "locked" label. Badges are `1X` / `MAG`. Per-class
+>   fine-grained restriction exists: `m_aOpticExclude` / `m_aOpticInclude` on top of
+>   categories. Failed optic swaps restore the previous optic instead of leaving irons.
+> - **HUD:** left side, **briefing phase only** (picker stays open for any non-LIVE
+>   phase), height sizes to content, **zero-count rows are hidden**, row order follows
+>   the side-config class order. Display names standard: Rifleman / Machine Gunner
+>   (AR + legacy MG merged) / Combat Engineer (LAT) / Grenadier / Sniper (incl.
+>   Sharpshooter) / Squad Leader / Crewman.
+> - **Weapon choice = kit choice:** M60/PKM route to the Machine Gunner kits via
+>   `m_sSourceKitName` (rig, backpack, sidearm, ammo all correct; truthful identity,
+>   respawn, spectator icon).
+> - **"Current Kit" deploy entry:** applying in the picker assigns a per-player
+>   pseudo-loadout shown selected in the respawn menu; respawn re-dresses from the
+>   stash. Counting resolves it to the stashed kit's row.
+> - **Item placement:** constraint solver over every container on the body, special
+>   equipment slots preferred (visible one first), per-item preferred containers from
+>   config, stacks kept together; drops log server-side and notify the player by name.
+>   Backend design §7 is authoritative.
+> - **Labels** come from in-game display names (ItemDisplayName + translate), config
+>   `m_sDisplayName` overrides on weapons and optics.
+> - **Config backend implemented** — blocks/aliases/magazine-sets compose all 17 kits
+>   from `Configs/KitSystem/Blocks/**` and `Kits/**`, dress and equipment slots
+>   included, so a kit's content no longer depends on its prefab. Tooling:
+>   `/kitdigest`, `/kitdump`, `/kitcompare` (no argument = sweep every kit),
+>   `/kitvalidate` (dry-run every kit, report what would not fit) — all server-side
+>   only. See `29th-kit-config-backend-design.md` for the authoritative backend design.
+> - **Attachment fitment** is derived, not declared: mount types on the weapon and the
+>   attachment are intersected, gating both bayonets and the picker's optic column.
 
 ---
 

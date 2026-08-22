@@ -4,11 +4,12 @@ FrameWidgetClass {
   SizeLayoutWidgetClass "{AB29C0FFEE292001}" {
    Name "HudBand"
    Slot FrameWidgetSlot "{AB29C0FFEE292002}" {
-    Anchor 0.015 0.14 0.015 0.14
+    Anchor 0.015 0.5 0.015 0.5
     PositionX 0
     OffsetLeft 0
     PositionY 0
     OffsetTop 0
+    Alignment 0 0.5
     SizeToContent 1
    }
    AllowWidthOverride 1
@@ -83,6 +84,23 @@ FrameWidgetClass {
         }
        }
       }
+      SizeLayoutWidgetClass "{AB29C0FFEE292026}" {
+       Name "HudHeaderBand"
+       Slot LayoutSlot "{AB29C0FFEE292027}" {
+       }
+       AllowHeightOverride 1
+       HeightOverride 28
+       {
+        VerticalLayoutWidgetClass "{AB29C0FFEE292028}" {
+         Name "HudHeaderRow"
+         Slot AlignableSlot "{AB29C0FFEE292029}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+          Padding 4 0 4 0
+         }
+        }
+       }
+      }
       OverlayWidgetClass "{AB29C0FFEE29201C}" {
        Name "HudRowsOverlay"
        Slot LayoutSlot "{AB29C0FFEE29201D}" {
@@ -112,7 +130,7 @@ FrameWidgetClass {
        Slot LayoutSlot "{AB29C0FFEE29201F}" {
        }
        AllowHeightOverride 1
-       HeightOverride 26
+       HeightOverride 46
        {
         OverlayWidgetClass "{AB29C0FFEE292020}" {
          Name "HudFooterOverlay"
@@ -130,22 +148,13 @@ FrameWidgetClass {
            Opacity 0.55
            Color 0.007 0.012 0.014 1
           }
-          RichTextWidgetClass "{AB29C0FFEE29200D}" {
-           Name "HudFooter"
+          VerticalLayoutWidgetClass "{AB29C0FFEE292022}" {
+           Name "HudFooterRow"
            Slot OverlayWidgetSlot "{AB29C0FFEE29200E}" {
             HorizontalAlign 3
             VerticalAlign 3
-            Padding 8 0 8 0
+            Padding 4 0 4 0
            }
-           Color 0.741 0.741 0.737 1
-           Text ""
-           "Font Size" 14
-           "Min Font Size" 12
-           FontProperties FontProperties "{AB29C0FFEE292013}" {
-            Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
-           }
-           "Horizontal Alignment" Left
-           "Vertical Alignment" Center
           }
          }
         }
