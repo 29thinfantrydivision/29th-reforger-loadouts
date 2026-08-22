@@ -37,8 +37,8 @@ this one covers where kit *content* comes from.
 3. **Shipped configs are ADDITIVE-ONLY — model deviation with smaller blocks plus
    inline additions, never with overrides.** The set-count override mechanism exists
    (use-site, SET semantics, literal identity match) but is a last resort, not
-   practice: a kit that carries less references a leaner tier
-   (medical_core vs medical_core+medical_plus); a kit that carries more adds inline
+   practice: a kit that carries less references a leaner block rather than
+   subtracting from a fuller one; a kit that carries more adds inline
    ("smoke x1" on top of the smokes block). Reading any kit file top to bottom is
    pure addition — nothing you read gets taken away later.
    Note: "minus hat plus helmet" needs no override either — clothing is later-wins
@@ -195,7 +195,7 @@ Blocks/<FAC>/dress.conf           // ONE per faction: the lines every kit repeat
                                   //   Vest and Back are class identity - the kit states
                                   //   those inline, so they are visible where they are
                                   //   tuned. Crewman shares nothing and is fully inline.
-Kits/Common/infantry.conf         // standalone: [medical_full, utility_full, smokes].
+Kits/Common/infantry.conf         // standalone: [grenades, medical, utility].
                                   //   No weapons live in Common.
 Kits/Roles/<role>.conf            // : infantry when both factions run the standard
                                   //   bundle, else parentless (deviants declare blocks
