@@ -1,5 +1,5 @@
 MetaFileClass {
- Name "{AB29C0FFEE29B112}Configs/KitSystem/Blocks/Common/grenades_mg.conf"
+ Name "{AB29C0FFEE29B111}Configs/KitSystem/Blocks/Common/grenades.conf"
  Configurations {
   CONFResourceClass PC {
   }
