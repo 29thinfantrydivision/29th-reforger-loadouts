@@ -7,10 +7,7 @@
 enum RK29_EItemSource
 {
 	PREFAB,
-	ALIAS,
-	MAG_PRIMARY,
-	MAG_LAUNCHER,
-	MAG_SIDEARM
+	ALIAS
 }
 
 //------------------------------------------------------------------------------------------------
@@ -81,46 +78,7 @@ class RK29_BlockItemEntry
 	ref array<string> m_aPreferredContainers;
 }
 
-//------------------------------------------------------------------------------------------------
-class RK29_BlockWeaponTitle : BaseContainerCustomTitle
-{
-	override bool _WB_GetCustomTitle(BaseContainer source, out string title)
-	{
-		int slot;
-		source.Get("m_iSlotIndex", slot);
 
-		string label;
-		source.Get("m_sAlias", label);
-		if (label == "")
-		{
-			ResourceName prefab;
-			source.Get("m_sPrefab", prefab);
-			label = "" + prefab;
-			int slash = label.LastIndexOf("/");
-			if (slash >= 0)
-				label = label.Substring(slash + 1, label.Length() - slash - 1);
-			if (label == "")
-				label = "(clear slot)";
-		}
-
-		title = "slot " + slot.ToString() + ": " + label;
-		return true;
-	}
-}
-
-//------------------------------------------------------------------------------------------------
-[BaseContainerProps(), RK29_BlockWeaponTitle()]
-class RK29_BlockWeaponEntry
-{
-	[Attribute("0", desc: "Weapon slot: 0 primary, 1 launcher, 2 sidearm; 100 = grenade slot", category: "29th")]
-	int m_iSlotIndex;
-
-	[Attribute(desc: "Weapon prefab. Both empty = clear the slot", params: "et", category: "29th")]
-	ResourceName m_sPrefab;
-
-	[Attribute(desc: "Catalog alias resolved per faction (e.g. handgun, frag, smoke). Empty = use prefab", category: "29th")]
-	string m_sAlias;
-}
 
 //------------------------------------------------------------------------------------------------
 class RK29_BlockClothingTitle : BaseContainerCustomTitle
@@ -166,9 +124,6 @@ class RK29_KitBlock
 	[Attribute(desc: "Equipment storage slots (WristwatchSlot, BinocularSlot, ...), later-wins", category: "29th")]
 	ref array<ref RK29_BlockClothingEntry> m_aEquipment;
 
-	[Attribute(desc: "Weapon slots", category: "29th")]
-	ref array<ref RK29_BlockWeaponEntry> m_aWeapons;
-
 	[Attribute(desc: "Items", category: "29th")]
 	ref array<ref RK29_BlockItemEntry> m_aItems;
 }
@@ -197,8 +152,8 @@ class RK29_KitComposition
 	[Attribute(desc: "Shared blocks, applied in order, with optional use-site overrides", category: "29th")]
 	ref array<ref RK29_BlockRef> m_aBlocks;
 
-	[Attribute(desc: "This kit's weapon slots (applied after blocks, later-wins)", category: "29th")]
-	ref array<ref RK29_BlockWeaponEntry> m_aWeapons;
+	[Attribute(desc: "Every weapon slot this kit fills. Slot-keyed later-wins: declaring a slot again replaces that group, leaving other slots inherited", category: "29th")]
+	ref array<ref RK29_WeaponSlot> m_aWeaponSlots;
 
 	[Attribute(desc: "This kit's own items (added after block items)", category: "29th")]
 	ref array<ref RK29_BlockItemEntry> m_aItems;
@@ -230,7 +185,10 @@ class RK29_ItemAlias
 	[Attribute(desc: "Name blocks refer to, e.g. bandage", category: "29th")]
 	string m_sAlias;
 
-	[Attribute(desc: "Per-faction prefabs", category: "29th")]
+	[Attribute(desc: "Resolve through another alias when this one has nothing for the faction - lets a role name (backpack_ce) track a general one (backpack_medium) instead of repeating its prefab", category: "29th")]
+	string m_sSameAs;
+
+	[Attribute(desc: "Per-faction prefabs. Anything stated here wins over m_sSameAs", category: "29th")]
 	ref array<ref RK29_ItemAliasEntry> m_aPerFaction;
 }
 

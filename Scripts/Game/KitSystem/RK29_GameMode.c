@@ -122,10 +122,6 @@ modded class SCR_GameModeEditor
 		if (inv)
 			inv.Insert(RK29_OnChatKitDump);
 
-		inv = chatMgr.GetCommandInvoker("kitcompare");
-		if (inv)
-			inv.Insert(RK29_OnChatKitCompare);
-
 		inv = chatMgr.GetCommandInvoker("kitvalidate");
 		if (inv)
 			inv.Insert(RK29_OnChatKitValidate);
@@ -175,14 +171,4 @@ modded class SCR_GameModeEditor
 		RK29_KitCompose.Dump();
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! No argument sweeps every configured kit; a kit name compares just that one.
-	protected void RK29_OnChatKitCompare(SCR_ChatPanel panel, string data)
-	{
-		if (!RK29_DiagAllowed())
-			return;
-
-		data.TrimInPlace();
-		RK29_KitCompose.Compare(data);
-	}
 }

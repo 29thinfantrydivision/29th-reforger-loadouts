@@ -12,6 +12,11 @@ class RK29_KitItemBatch
 	ref array<string> m_aPreferred;
 
 	ref array<ResourceName> m_aPrefabs = {};
+
+	//! "only if the primary can take it" - a bayonet. Decided AFTER the weapon is chosen,
+	//! not at compose time: the base kit still carries the prefab's weapon, and a class can
+	//! offer one weapon with a lug and another without.
+	bool m_bPrimaryAttachment;
 }
 
 //------------------------------------------------------------------------------------------------
@@ -78,6 +83,8 @@ class RK29_KitStruct
 		{
 			RK29_KitItemBatch nb = new RK29_KitItemBatch();
 			nb.m_sTargetHint = batch.m_sTargetHint;
+			nb.m_aPreferred  = batch.m_aPreferred;          // placement prefs survive a swap
+			nb.m_bPrimaryAttachment = batch.m_bPrimaryAttachment;
 			foreach (ResourceName item : batch.m_aPrefabs)
 			{
 				if (swapMags && classMags.Contains(item))

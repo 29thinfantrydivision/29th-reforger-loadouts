@@ -33,22 +33,162 @@ class RK29_OpticCategory
 }
 
 //------------------------------------------------------------------------------------------------
-[BaseContainerProps()]
+//! One ammo type a weapon can field. The alias is the name blocks use ("belt", "mag",
+//! "rocket"); how it resolves is the weapon's business - a magazine variant through its own
+//! magazine well, or a literal prefab for loads that are not magazines (a spare M72 tube).
+[BaseContainerProps(), BaseContainerCustomTitleField("m_sAlias")]
+class RK29_WeaponAmmoDef
+{
+	[Attribute(desc: "Name blocks refer to this ammo by, within this weapon", category: "29th")]
+	string m_sAlias;
+
+	[Attribute(desc: "Magazine variant from RK29_Magazines.conf, resolved through this weapon's magazine well. Empty and no prefab = the weapon's default magazine", category: "29th")]
+	string m_sVariant;
+
+	[Attribute(desc: "Literal prefab. Wins over the variant - use for ammo that is not a magazine", params: "et", category: "29th")]
+	ResourceName m_sPrefab;
+}
+
+//! One faction's prefab for a weapon id shared across factions - the sidearm is an M9 for
+//! the US and a Makarov for the Soviets, so a shared role can name it once.
+[BaseContainerProps(), BaseContainerCustomTitleField("m_sFactionKey")]
+class RK29_WeaponFactionPrefab
+{
+	[Attribute(desc: "Faction key, e.g. US", category: "29th")]
+	string m_sFactionKey;
+
+	[Attribute(desc: "Prefab for that faction", params: "et", category: "29th")]
+	ResourceName m_sPrefab;
+}
+
+//------------------------------------------------------------------------------------------------
+//! A weapon, defined once and referenced by id. Holds only what is true of the weapon
+//! everywhere - gear belongs to the class fielding it, since rifles are shared and would
+//! otherwise fight over dress.
+[BaseContainerProps(), BaseContainerCustomTitleField("m_sId")]
+class RK29_WeaponDef
+{
+	[Attribute(desc: "Id options refer to, e.g. \"m249\"", category: "29th")]
+	string m_sId;
+
+	[Attribute(desc: "Weapon prefab. Leave empty and use m_aPerFaction when each faction fields a different weapon under this id", params: "et", category: "29th")]
+	ResourceName m_sPrefab;
+
+	[Attribute(desc: "Per-faction prefabs, for an id both sides field differently (sidearm)", category: "29th")]
+	ref array<ref RK29_WeaponFactionPrefab> m_aPerFaction;
+
+	[Attribute(desc: "OVERRIDE only. Leave empty and the picker uses the weapon's own in-game name, which is localised. Set this solely to say something the game does not, e.g. distinguishing two variants of one rifle", category: "29th")]
+	string m_sName;
+
+	[Attribute(desc: "Ammo types this weapon can field", category: "29th")]
+	ref array<ref RK29_WeaponAmmoDef> m_aAmmo;
+}
+
+//------------------------------------------------------------------------------------------------
+//! Weapon catalog - Configs/KitSystem/Catalogs/RK29_Weapons.conf
+[BaseContainerProps(configRoot: true)]
+class RK29_WeaponCatalog
+{
+	[Attribute(desc: "Weapon definitions", category: "29th")]
+	ref array<ref RK29_WeaponDef> m_aWeapons;
+}
+
+//------------------------------------------------------------------------------------------------
+//! Workbench shows array rows by title only, and an unset int has nothing to show - so a
+//! slot-0 group would render blank. Name the slot instead of numbering it.
+class RK29_WeaponSlotTitle : BaseContainerCustomTitle
+{
+	override bool _WB_GetCustomTitle(BaseContainer source, out string title)
+	{
+		int slot = 0;
+		source.Get("m_iSlot", slot);
+
+		string name;
+		if (slot == 0)
+			name = "primary";
+		else if (slot == 1)
+			name = "launcher";
+		else if (slot == 2)
+			name = "sidearm";
+		else
+			name = "slot " + slot.ToString();
+
+		int count = 0;
+		BaseContainerList options = source.GetObjectArray("m_aOptions");
+		if (options)
+			count = options.Count();
+
+		if (count > 1)
+			title = name + " - " + count.ToString() + " choices";
+		else
+			title = name;
+		return true;
+	}
+}
+
+//------------------------------------------------------------------------------------------------
+//! Rows in a weapon slot read as the weapon they field.
+class RK29_WeaponOptionTitle : BaseContainerCustomTitle
+{
+	override bool _WB_GetCustomTitle(BaseContainer source, out string title)
+	{
+		source.Get("m_sWeapon", title);
+		if (title == "")
+			title = "(no weapon)";
+		return true;
+	}
+}
+
+//------------------------------------------------------------------------------------------------
+//! One weapon slot and everything that may fill it. Slot-keyed like clothing: a later
+//! declaration REPLACES the whole group, so a kit can change its sidearm without restating
+//! its rifle, and two groups can never fight over one slot.
+[BaseContainerProps(), RK29_WeaponSlotTitle()]
+class RK29_WeaponSlot
+{
+	[Attribute("0", desc: "0 primary, 1 launcher, 2 sidearm", category: "29th")]
+	int m_iSlot;
+
+	[Attribute(desc: "What may fill this slot. One entry = a fixed weapon; several = a picker column, first is the default", category: "29th")]
+	ref array<ref RK29_WeaponOption> m_aOptions;
+}
+
+//------------------------------------------------------------------------------------------------
+//! A weapon a class may field. The option is where a class says what IT does with a weapon:
+//! which blocks come along (gear, ammo counts, grenade set) and which slot it fills. One
+//! option for a slot = a fixed weapon; several = a picker column.
+//! How much of one ammo type this class carries with this weapon. The alias is resolved by
+//! the weapon definition, so "belt" means one magazine on an M249 and another on a PKM.
+[BaseContainerProps(), BaseContainerCustomTitleField("m_sAlias")]
+class RK29_WeaponAmmo
+{
+	[Attribute(desc: "Ammo alias declared by the weapon definition. For a weapon named directly rather than through the catalog, leave empty and use the variant", category: "29th")]
+	string m_sAlias;
+
+	[Attribute(desc: "Magazine variant from RK29_Magazines.conf, resolved through the weapon's own magazine well. Empty and no alias = the weapon's default magazine", category: "29th")]
+	string m_sVariant;
+
+	[Attribute(desc: "Literal prefab, for ammo that is not a magazine of this weapon (spare disposable launchers, a parade kit's exact magazine). Wins over everything else", params: "et", category: "29th")]
+	ResourceName m_sPrefab;
+
+	[Attribute("1", desc: "How many are carried", category: "29th")]
+	int m_iCount;
+}
+
+//------------------------------------------------------------------------------------------------
+[BaseContainerProps(), RK29_WeaponOptionTitle()]
 class RK29_WeaponOption
 {
-	[Attribute(desc: "Weapon prefab", params: "et", category: "29th")]
-	ResourceName m_sWeaponPrefab;
+	[Attribute(desc: "Weapon id from RK29_Weapons.conf", category: "29th")]
+	string m_sWeapon;
 
-	[Attribute(desc: "This weapon's magazine prefab - the mag auto-swap target", params: "et", category: "29th")]
-	ResourceName m_sMagazinePrefab;
+	[Attribute(desc: "Ammo carried with this weapon, for this class", category: "29th")]
+	ref array<ref RK29_WeaponAmmo> m_aAmmo;
 
-	[Attribute("0", desc: "Magazines carried with this weapon. 0 = one-for-one swap of the kit's captured mags", category: "29th")]
-	int m_iMagazineCount;
+	[Attribute(desc: "Blocks this weapon brings for this class - gear deltas, extra items, grenade set. Only needed when the weapon changes more than its ammo", category: "29th")]
+	ref array<ref RK29_BlockRef> m_aBlocks;
 
-	[Attribute(desc: "Apply this kit (body, rig, items) instead of the class's own when this weapon is chosen. Empty = class kit", category: "29th")]
-	string m_sSourceKitName;
-
-	[Attribute(desc: "Short display name for the picker", category: "29th")]
+	[Attribute(desc: "Overrides the catalog's display name", category: "29th")]
 	string m_sDisplayName;
 }
 
@@ -146,6 +286,12 @@ class RK29_KitSetup
 	[Attribute(desc: "Magazine set catalogs (Helpers folder)", params: "conf class=RK29_MagazineSetCatalog", category: "29th")]
 	ref array<ResourceName> m_aMagSetConfigs;
 
+	[Attribute(desc: "Weapon catalogs (Catalogs folder)", params: "conf class=RK29_WeaponCatalog", category: "29th")]
+	ref array<ResourceName> m_aWeaponConfigs;
+
+	[Attribute(desc: "Weapon definitions - usually loaded from Catalogs configs", category: "29th")]
+	ref array<ref RK29_WeaponDef> m_aWeaponDefs;
+
 	[Attribute(desc: "Squad kit catalogs (Helpers folder)", params: "conf class=RK29_SquadKitCatalog", category: "29th")]
 	ref array<ResourceName> m_aSquadConfigs;
 
@@ -220,39 +366,82 @@ class RK29_KitSetup
 	//--------------------------------------------------------------------------------------------
 	//! Alias -> prefab for a faction. Empty result = unresolved (caller logs).
 	//! Placement preference authored on an alias for this faction, or null.
+	//! Placement preference down the same chain: an item entry's own list beats the alias it
+	//! names, which beats whatever that alias defers to.
 	array<string> ResolveAliasPreference(string alias, string factionKey)
 	{
-		if (!m_aAliases)
-			return null;
-		foreach (RK29_ItemAlias a : m_aAliases)
+		array<string> chain = {};
+		AliasChain(alias, chain);
+		foreach (string link : chain)
 		{
-			if (!a || a.m_sAlias != alias || !a.m_aPerFaction)
+			RK29_ItemAlias a = FindAlias(link);
+			if (!a || !a.m_aPerFaction)
 				continue;
 			foreach (RK29_ItemAliasEntry e : a.m_aPerFaction)
 			{
-				if (e && e.m_sFactionKey == factionKey)
+				if (e && e.m_sFactionKey == factionKey && e.m_aPreferredContainers
+					&& !e.m_aPreferredContainers.IsEmpty())
 					return e.m_aPreferredContainers;
 			}
-			return null;
 		}
 		return null;
 	}
 
 	//--------------------------------------------------------------------------------------------
-	ResourceName ResolveAlias(string alias, string factionKey)
+	//! An alias may defer to another (backpack_ce -> backpack_medium). Whatever the nearer
+	//! alias states wins; it falls through only where it is silent. Same precedence as
+	//! everywhere else in the config: the statement closest to the use site.
+	protected static const int ALIAS_MAX_HOPS = 8;
+
+	//--------------------------------------------------------------------------------------------
+	RK29_ItemAlias FindAlias(string alias)
 	{
 		if (!m_aAliases)
-			return ResourceName.Empty;
+			return null;
 		foreach (RK29_ItemAlias a : m_aAliases)
 		{
-			if (!a || a.m_sAlias != alias || !a.m_aPerFaction)
+			if (a && a.m_sAlias == alias)
+				return a;
+		}
+		return null;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! The alias chain, nearest first. Stops on a cycle rather than hanging the boot.
+	void AliasChain(string alias, notnull array<string> outChain)
+	{
+		string current = alias;
+		for (int hop = 0; hop < ALIAS_MAX_HOPS && current != ""; hop++)
+		{
+			if (outChain.Contains(current))
+			{
+				Print("[RK29] config ERROR - alias cycle at '" + current + "'", LogLevel.ERROR);
+				return;
+			}
+			outChain.Insert(current);
+
+			RK29_ItemAlias a = FindAlias(current);
+			if (!a)
+				return;
+			current = a.m_sSameAs;
+		}
+	}
+
+	//--------------------------------------------------------------------------------------------
+	ResourceName ResolveAlias(string alias, string factionKey)
+	{
+		array<string> chain = {};
+		AliasChain(alias, chain);
+		foreach (string link : chain)
+		{
+			RK29_ItemAlias a = FindAlias(link);
+			if (!a || !a.m_aPerFaction)
 				continue;
 			foreach (RK29_ItemAliasEntry e : a.m_aPerFaction)
 			{
-				if (e && e.m_sFactionKey == factionKey)
+				if (e && e.m_sFactionKey == factionKey && e.m_sPrefab != ResourceName.Empty)
 					return e.m_sPrefab;
 			}
-			return ResourceName.Empty;
 		}
 		return ResourceName.Empty;
 	}
@@ -365,28 +554,109 @@ class RK29_KitSetup
 	}
 
 	//--------------------------------------------------------------------------------------------
-	RK29_WeaponOption FindWeapon(RK29_ClassSetup cls, ResourceName weapon)
+	//--------------------------------------------------------------------------------------------
+	//! Catalog id for a prefab, so tooling can emit config in the shape kits actually take.
+	string WeaponIdOf(ResourceName prefab, string factionKey)
 	{
-		if (!cls || !cls.m_aWeapons)
-			return null;
-		foreach (RK29_WeaponOption w : cls.m_aWeapons)
+		if (!m_aWeaponDefs)
+			return "";
+		foreach (RK29_WeaponDef def : m_aWeaponDefs)
 		{
-			if (w && w.m_sWeaponPrefab == weapon)
-				return w;
+			if (!def)
+				continue;
+			if (def.m_sPrefab == prefab)
+				return def.m_sId;
+			if (!def.m_aPerFaction)
+				continue;
+			foreach (RK29_WeaponFactionPrefab entry : def.m_aPerFaction)
+			{
+				if (entry && entry.m_sFactionKey == factionKey && entry.m_sPrefab == prefab)
+					return def.m_sId;
+			}
+		}
+		return "";
+	}
+
+	//--------------------------------------------------------------------------------------------
+	RK29_WeaponDef FindWeaponDef(string id)
+	{
+		if (id == "" || !m_aWeaponDefs)
+			return null;
+		foreach (RK29_WeaponDef def : m_aWeaponDefs)
+		{
+			if (def && def.m_sId == id)
+				return def;
 		}
 		return null;
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! All magazine prefabs of this class's weapons - the mag auto-swap strip set.
-	void GetClassMagazines(RK29_ClassSetup cls, notnull array<ResourceName> outMags)
+	//! The prefab an option fields: its catalog entry, else its literal.
+	ResourceName WeaponPrefabOf(RK29_WeaponOption option, string factionKey = "")
 	{
-		if (!cls || !cls.m_aWeapons)
-			return;
-		foreach (RK29_WeaponOption w : cls.m_aWeapons)
+		if (!option)
+			return ResourceName.Empty;
+
+		RK29_WeaponDef def = FindWeaponDef(option.m_sWeapon);
+		if (!def)
 		{
-			if (w && w.m_sMagazinePrefab != ResourceName.Empty && !outMags.Contains(w.m_sMagazinePrefab))
-				outMags.Insert(w.m_sMagazinePrefab);
+			Print("[RK29] config ERROR - weapon id '" + option.m_sWeapon + "' is not in the weapon catalog", LogLevel.ERROR);
+			return ResourceName.Empty;
 		}
+
+		// an id both factions field differently resolves per faction; everything else has
+		// a single prefab
+		if (def.m_aPerFaction)
+		{
+			foreach (RK29_WeaponFactionPrefab entry : def.m_aPerFaction)
+			{
+				if (entry && entry.m_sFactionKey == factionKey)
+					return entry.m_sPrefab;
+			}
+		}
+		return def.m_sPrefab;
 	}
+
+	//--------------------------------------------------------------------------------------------
+	//! The group that owns a slot. Last declaration wins, so an inherited slot can be
+	//! replaced outright by a kit that declares it again.
+	RK29_WeaponSlot FindSlot(array<ref RK29_WeaponSlot> slots, int slot)
+	{
+		RK29_WeaponSlot found;
+		if (!slots)
+			return null;
+		foreach (RK29_WeaponSlot group : slots)
+		{
+			if (group && group.m_iSlot == slot)
+				found = group;
+		}
+		return found;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! First option in a slot - its default, and what boot composes.
+	RK29_WeaponOption DefaultWeapon(array<ref RK29_WeaponSlot> slots, int slot = 0)
+	{
+		RK29_WeaponSlot group = FindSlot(slots, slot);
+		if (!group || !group.m_aOptions || group.m_aOptions.IsEmpty())
+			return null;
+		return group.m_aOptions[0];
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Slot-scoped on purpose: a selection's "weapon" always means the primary, so naming a
+	//! fixed launcher or the sidearm must not pass as a valid choice.
+	RK29_WeaponOption FindWeapon(array<ref RK29_WeaponSlot> slots, ResourceName weapon, string factionKey, int slot = 0)
+	{
+		RK29_WeaponSlot group = FindSlot(slots, slot);
+		if (!group || !group.m_aOptions)
+			return null;
+		foreach (RK29_WeaponOption w : group.m_aOptions)
+		{
+			if (w && WeaponPrefabOf(w, factionKey) == weapon)
+				return w;
+		}
+		return null;
+	}
+
 }

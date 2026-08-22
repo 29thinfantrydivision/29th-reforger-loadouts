@@ -325,24 +325,35 @@ class RK29_KitPicker
 
 		// a class with options owns the whole list: config order, first entry = default;
 		// the prefab's authored primary only shows for optionless classes
-		if (cls && cls.m_aWeapons && !cls.m_aWeapons.IsEmpty())
+		// only the primary is a player choice; other slots are fixed by the kit
+		RK29_WeaponSlot primary = mgr.m_Setup.FindSlot(mgr.m_mKitOptions.Get(m_sSelectedKit), 0);
+		if (primary && primary.m_aOptions && !primary.m_aOptions.IsEmpty())
 		{
-			foreach (RK29_WeaponOption w : cls.m_aWeapons)
+			foreach (RK29_WeaponOption w : primary.m_aOptions)
 			{
-				if (!w || w.m_sWeaponPrefab == ResourceName.Empty)
+				if (!w)
 					continue;
+				ResourceName prefab = mgr.m_Setup.WeaponPrefabOf(w, kit.m_sFactionKey);
+				if (prefab == ResourceName.Empty)
+					continue;
+
 				int rowIdx = m_aWeaponChoices.Count();
-				m_aWeaponChoices.Insert(w.m_sWeaponPrefab);
+				m_aWeaponChoices.Insert(prefab);
 
 				string label = w.m_sDisplayName;
 				if (label == string.Empty)
-					label = RK29_ItemNames.Get(w.m_sWeaponPrefab);
+				{
+					RK29_WeaponDef def = mgr.m_Setup.FindWeaponDef(w.m_sWeapon);
+					if (def)
+						label = def.m_sName;
+				}
+				if (label == string.Empty)
+					label = RK29_ItemNames.Get(prefab);
 
-				// server normalizes "option == authored primary" to an empty delta
-				bool selected = sel.m_sWeapon == w.m_sWeaponPrefab
-					|| (sel.m_sWeapon == ResourceName.Empty && w.m_sWeaponPrefab == kit.m_sPrimaryWeapon);
+				bool selected = sel.m_sWeapon == prefab
+					|| (sel.m_sWeapon == ResourceName.Empty && prefab == kit.m_sPrimaryWeapon);
 				Widget wrow = MakeRow(m_wColWeapons, label, "", selected, 1, rowIdx);
-				SetRowPreview(wrow, w.m_sWeaponPrefab);
+				SetRowPreview(wrow, prefab);
 			}
 			return;
 		}
@@ -645,13 +656,13 @@ class RK29_KitPicker
 	//! First config option is the default; optionless classes ride the authored primary.
 	protected ResourceName SeedWeapon(RK29_ClassSetup cls)
 	{
-		if (cls && cls.m_aWeapons)
+		RK29_KitManager mgr = RK29_KitManager.GetInstance();
+		if (cls && mgr && mgr.m_Setup)
 		{
-			foreach (RK29_WeaponOption w : cls.m_aWeapons)
-			{
-				if (w && w.m_sWeaponPrefab != ResourceName.Empty)
-					return w.m_sWeaponPrefab;
-			}
+			RK29_KitStruct kit = mgr.m_mKits.Get(cls.m_sKitName);
+			RK29_WeaponOption first = mgr.m_Setup.DefaultWeapon(mgr.m_mKitOptions.Get(cls.m_sKitName), 0);
+			if (first && kit)
+				return mgr.m_Setup.WeaponPrefabOf(first, kit.m_sFactionKey);
 		}
 		return ResourceName.Empty;
 	}

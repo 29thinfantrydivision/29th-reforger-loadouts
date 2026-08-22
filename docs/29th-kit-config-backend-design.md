@@ -486,3 +486,49 @@ AR and MG (RPK/PKM have no lug); USSR Grenadier primary mags 7 -> 8; USSR Crewma
 2 -> 1; and the two sniper rifles, where config carries the bare rifle and the scope
 arrives from `m_sDefaultOptic` (`Rifle_M21` vs captured `Rifle_M21_ARTII`, `Rifle_SVD` vs
 `Rifle_SVD_PSO`).
+
+---
+
+## 15. Weapons and ammo (settled 2026-08-21, supersedes the MAG_* model above)
+
+Sections 4-10 describe ammo as an item source (`MAG_PRIMARY` / `MAG_LAUNCHER` /
+`MAG_SIDEARM`) resolved off whatever weapon holds the slot. That model is gone. It put a
+count in a file that could not know which weapon it fed - the shared AR role said
+`MAG_PRIMARY 3`, correct for a US M249, and the Soviet kit appended 14 more to reach the
+RPK's 17. Two files, neither able to state the truth alone.
+
+**Ammo is now declared beside the weapon it feeds, wherever that weapon is declared.**
+
+```
+Catalogs/RK29_Weapons.conf     a weapon: prefab, display name, its ammo ALIAS table
+                               ("belt" is one magazine on an M249, another on a PKM)
+
+roster class option            m_sWeapon "m60" · m_iSlotIndex 0
+                               m_aAmmo   { belt x4 }
+                               m_aBlocks { gear_m60 · grenades_mg }
+
+composition weapon entry       m_iSlotIndex 2 · m_sAlias "handgun"
+                               m_aAmmo   { x2 }
+```
+
+Both paths emit through one function (`EmitAmmo`), so there is a single way to say "this
+is what feeds that". An ammo entry names a catalog alias, a magazine variant from
+`RK29_Magazines.conf`, or neither (the weapon's authored default). Re-declaring a slot
+replaces its ammo along with its weapon - they cannot drift apart.
+
+**Weapon options** live on the class (`RK29_ClassSetup.m_aWeapons`) and carry what THIS
+class does with that weapon: its ammo, and blocks for any gear or items the choice brings.
+Gear stays on the option rather than the weapon definition because rifles are shared
+between classes and would otherwise fight over dress. One option for a slot is a fixed
+weapon; several make a picker column. This replaced `m_sSourceKitName` routing, which
+needed a whole duplicate kit to express "the M60 also wants a different vest".
+
+**Boot applies each class's default option** (the first for each slot) so `m_mKits` still
+holds a fieldable kit; the un-optioned composition is kept beside it in `m_mKitsBase`, and
+every choice is laid over that base - never over an already-optioned kit, or a weapon's
+blocks would stack a second time.
+
+`/kitcompare` was deleted with this change. Diffing config against prefabs stopped being
+meaningful once weapons, ammo and dress became config-owned: a non-default weapon has no
+prefab to be judged against. `/kitvalidate` now queues one job per weapon option and is
+the release gate.

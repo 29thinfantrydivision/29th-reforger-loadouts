@@ -13,9 +13,21 @@ class RK29_CurrentKitLoadout : SCR_FactionPlayerLoadout
 	}
 
 	//--------------------------------------------------------------------------------------------
+	//! Faction-scoped, like the server's own gate: a stash is for the faction it was applied
+	//! on, so the OTHER faction's Current Kit entry must not offer it. Without this the entry
+	//! appears for a side the player has never kitted on, previewing a placeholder body.
 	override bool IsLoadoutAvailableClient()
 	{
-		return RK29_KitPicker.HasLocalStash();
+		string kitName = RK29_KitPicker.LocalStashKit();
+		if (kitName == "")
+			return false;
+
+		RK29_KitManager mgr = RK29_KitManager.GetInstance();
+		if (!mgr)
+			return false;
+
+		RK29_KitStruct kit = mgr.m_mKits.Get(kitName);
+		return kit && kit.m_sFactionKey == GetFactionKey();
 	}
 
 	//--------------------------------------------------------------------------------------------

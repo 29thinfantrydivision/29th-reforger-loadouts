@@ -1,23 +1,27 @@
 //------------------------------------------------------------------------------------------------
 //! Builds RK29_KitStruct from config blocks. Dress and identity come from the captured
 //! prefab kit; weapons overlay it slot-wise; items come from blocks only.
-//! Also home of the /kitdigest /kitdump /kitcompare tooling.
+//! Also home of the /kitdigest and /kitdump tooling.
 //------------------------------------------------------------------------------------------------
 class RK29_KitCompose
 {
 	protected static const int LAUNCHER_SLOT = 1;
 	protected static const int SIDEARM_SLOT = 2;
-	protected static const string COMPARE_REPORT = "$profile:RK29_KitCompare.txt";
 
 	protected static ref map<ResourceName, ResourceName> s_mDefaultMagCache = new map<ResourceName, ResourceName>();
 	protected static ref map<ResourceName, ref array<string>> s_mWellsCache = new map<ResourceName, ref array<string>>();
 
 	//--------------------------------------------------------------------------------------------
-	static RK29_KitStruct Compose(notnull RK29_ClassSetup cls, notnull RK29_KitStruct captured, notnull RK29_KitSetup setup)
+	static RK29_KitStruct Compose(notnull RK29_ClassSetup cls, notnull RK29_KitStruct captured, notnull RK29_KitSetup setup,
+		out array<ref RK29_WeaponSlot> outSlots)
 	{
 		RK29_KitComposition comp = LoadComposition(cls.m_sComposition);
 		if (!comp)
 			return null;
+
+		// weapons are declared per slot - one option is a fixed weapon, several make a picker
+		// column - so the composition hands the groups back rather than applying them here
+		outSlots = comp.m_aWeaponSlots;
 
 		RK29_KitStruct kit = new RK29_KitStruct();
 		kit.m_sKitName      = captured.m_sKitName;
@@ -39,8 +43,7 @@ class RK29_KitCompose
 			kit.m_mWeapons.Set(idx, weapon);
 		}
 
-		// pass 1: weapons + clothing (blocks, then the composition's own, later-wins),
-		// so PRIMARY_MAG can resolve off the final primary
+		// pass 1: clothing, blocks then the composition's own (later-wins)
 		if (comp.m_aBlocks)
 		{
 			foreach (RK29_BlockRef bref : comp.m_aBlocks)
@@ -48,12 +51,6 @@ class RK29_KitCompose
 				RK29_KitBlock block = LoadBlock(bref);
 				if (!block)
 					continue;
-
-				if (block.m_aWeapons)
-				{
-					foreach (RK29_BlockWeaponEntry w : block.m_aWeapons)
-						ApplyWeaponEntry(w, kit, setup);
-				}
 
 				if (block.m_aClothing)
 				{
@@ -67,11 +64,6 @@ class RK29_KitCompose
 						ApplyEquipmentEntry(be, kit);
 				}
 			}
-		}
-		if (comp.m_aWeapons)
-		{
-			foreach (RK29_BlockWeaponEntry cw : comp.m_aWeapons)
-				ApplyWeaponEntry(cw, kit, setup);
 		}
 		if (comp.m_aClothing)
 		{
@@ -89,14 +81,6 @@ class RK29_KitCompose
 			primary = ResourceName.Empty;
 		kit.m_sPrimaryWeapon = primary;
 
-		// explicit weapon-option mag wins for the plain primary token; weapons' own
-		// authored defaults otherwise
-		ResourceName primaryMag;
-		RK29_WeaponOption wo = setup.FindWeapon(cls, primary);
-		if (wo)
-			primaryMag = wo.m_sMagazinePrefab;
-		if (primaryMag == ResourceName.Empty)
-			primaryMag = DefaultMagOf(primary);
 
 		// pass 2: items - block items (with their ref's overrides), then the
 		// composition's own inline items
@@ -125,18 +109,13 @@ class RK29_KitCompose
 				if (count <= 0)
 					continue;
 
-				ResourceName prefab = ResolveEntry(entry, kit, primaryMag, setup);
+				ResourceName prefab = ResolveEntry(entry, kit, setup);
 				if (prefab == ResourceName.Empty)
 					continue;
-				if (entry.m_bOnlyIfPrimaryTakesIt && !PrimaryTakesAttachment(kit.m_sPrimaryWeapon, prefab))
-				{
-					Print("[RK29] " + kit.m_sKitName + ": " + FileOf(prefab) + " gated off - primary has no matching attachment slot", LogLevel.NORMAL);
-					continue;
-				}
-
 				RK29_KitItemBatch batch = new RK29_KitItemBatch();
 				batch.m_sTargetHint = entry.m_sTargetHint;
 				batch.m_aPreferred = PreferenceFor(entry, kit, setup);
+				batch.m_bPrimaryAttachment = entry.m_bOnlyIfPrimaryTakesIt;
 				for (int i = 0; i < count; i++)
 					batch.m_aPrefabs.Insert(prefab);
 				kit.m_aItems.Insert(batch);
@@ -153,17 +132,13 @@ class RK29_KitCompose
 				int ownCount = own.m_iCount;
 				if (ownCount < 1)
 					ownCount = 1;
-				ResourceName ownPrefab = ResolveEntry(own, kit, primaryMag, setup);
+				ResourceName ownPrefab = ResolveEntry(own, kit, setup);
 				if (ownPrefab == ResourceName.Empty)
 					continue;
-				if (own.m_bOnlyIfPrimaryTakesIt && !PrimaryTakesAttachment(kit.m_sPrimaryWeapon, ownPrefab))
-				{
-					Print("[RK29] " + kit.m_sKitName + ": " + FileOf(ownPrefab) + " gated off - primary has no matching attachment slot", LogLevel.NORMAL);
-					continue;
-				}
 				RK29_KitItemBatch ownBatch = new RK29_KitItemBatch();
 				ownBatch.m_sTargetHint = own.m_sTargetHint;
 				ownBatch.m_aPreferred = PreferenceFor(own, kit, setup);
+				ownBatch.m_bPrimaryAttachment = own.m_bOnlyIfPrimaryTakesIt;
 				for (int i = 0; i < ownCount; i++)
 					ownBatch.m_aPrefabs.Insert(ownPrefab);
 				kit.m_aItems.Insert(ownBatch);
@@ -171,6 +146,247 @@ class RK29_KitCompose
 		}
 
 		return kit;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Lays a weapon option over a BASE kit (the composition without any weapon applied).
+	//! The option seats its weapon and brings its blocks: gear deltas, ammo counts, whatever
+	//! grenade set goes with that weapon. Always applied to the base, never to an already
+	//! optioned kit, so re-picking a weapon cannot stack a second copy of its blocks.
+	static RK29_KitStruct ApplyWeaponOption(notnull RK29_KitStruct base,
+		notnull RK29_WeaponOption option, int slot, notnull RK29_KitSetup setup)
+	{
+		RK29_KitStruct kit = base.CloneWithChoices(ResourceName.Empty, ResourceName.Empty, null, 0);
+
+		ResourceName weapon = setup.WeaponPrefabOf(option, base.m_sFactionKey);
+		if (weapon == ResourceName.Empty)
+		{
+			Print("[RK29] config ERROR - weapon option '" + option.m_sWeapon + "' resolves to no prefab ("
+				+ kit.m_sKitName + ")", LogLevel.ERROR);
+			return kit;
+		}
+
+		kit.m_mWeapons.Set(slot, weapon);
+		if (slot == 0)
+			kit.m_sPrimaryWeapon = weapon;
+
+		// ammo first: it is the one thing every weapon brings, so it lives on the option
+		// rather than in a block that would otherwise hold nothing else
+		RK29_WeaponDef def = setup.FindWeaponDef(option.m_sWeapon);
+		EmitAmmo(kit, weapon, def, option.m_aAmmo, setup);
+
+		if (!option.m_aBlocks)
+			return kit;
+
+		foreach (RK29_BlockRef bref : option.m_aBlocks)
+		{
+			RK29_KitBlock block = LoadBlock(bref);
+			if (!block)
+				continue;
+
+			if (block.m_aClothing)
+			{
+				foreach (RK29_BlockClothingEntry bc : block.m_aClothing)
+					ApplyClothingEntry(bc, kit);
+			}
+			if (block.m_aEquipment)
+			{
+				foreach (RK29_BlockClothingEntry be : block.m_aEquipment)
+					ApplyEquipmentEntry(be, kit);
+			}
+			if (!block.m_aItems)
+				continue;
+
+			foreach (RK29_BlockItemEntry entry : block.m_aItems)
+			{
+				if (!entry)
+					continue;
+
+				int count = entry.m_iCount;
+				if (count < 1)
+					count = 1;
+				int overrideCount = OverrideCountFor(bref, entry);
+				if (overrideCount >= 0)
+					count = overrideCount;
+				if (count <= 0)
+					continue;
+
+				ResourceName prefab = ResolveEntry(entry, kit, setup);
+				if (prefab == ResourceName.Empty)
+					continue;
+				RK29_KitItemBatch batch = new RK29_KitItemBatch();
+				batch.m_sTargetHint = entry.m_sTargetHint;
+				batch.m_aPreferred  = PreferenceFor(entry, kit, setup);
+				batch.m_bPrimaryAttachment = entry.m_bOnlyIfPrimaryTakesIt;
+				for (int i = 0; i < count; i++)
+					batch.m_aPrefabs.Insert(prefab);
+				kit.m_aItems.Insert(batch);
+			}
+		}
+
+		return kit;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Every weapon slot a class offers, applied to the base kit in slot order. The player
+	//! picks the primary; every other slot takes its class default. A stashed weapon that is
+	//! no longer offered falls back to the default rather than composing a weaponless kit.
+	static RK29_KitStruct ApplyWeaponChoices(notnull RK29_KitStruct base,
+		array<ref RK29_WeaponSlot> slots, ResourceName chosenPrimary, notnull RK29_KitSetup setup)
+	{
+		RK29_KitStruct kit = base;
+		bool applied = false;
+
+		for (int slot = 0; slot <= 2; slot++)
+		{
+			RK29_WeaponOption option;
+			if (slot == 0 && chosenPrimary != ResourceName.Empty)
+			{
+				option = setup.FindWeapon(slots, chosenPrimary, base.m_sFactionKey);
+			}
+			if (!option)
+				option = setup.DefaultWeapon(slots, slot);
+			if (!option)
+				continue;
+
+			kit = ApplyWeaponOption(kit, option, slot, setup);
+			applied = true;
+		}
+
+		// classes without options keep their composition's own weapons untouched
+		if (!applied)
+			kit = base.CloneWithChoices(ResourceName.Empty, ResourceName.Empty, null, 0);
+
+		ResolveAttachmentGates(kit);
+		return kit;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Drops attachments the FINAL primary cannot take, once every slot is settled. Deciding
+	//! this at compose time was wrong for option classes: the base kit still carries the
+	//! prefab's weapon, so a class offering one rifle with a lug and one without would answer
+	//! for the wrong gun. Obstruction counts too - a mounted M203 rules out the bayonet.
+	protected static void ResolveAttachmentGates(notnull RK29_KitStruct kit)
+	{
+		for (int i = kit.m_aItems.Count() - 1; i >= 0; i--)
+		{
+			RK29_KitItemBatch batch = kit.m_aItems[i];
+			if (!batch || !batch.m_bPrimaryAttachment || batch.m_aPrefabs.IsEmpty())
+				continue;
+
+			ResourceName item = batch.m_aPrefabs[0];
+			if (PrimaryTakesAttachment(kit.m_sPrimaryWeapon, item)
+				&& !AttachmentObstructed(kit.m_sPrimaryWeapon, item))
+				continue;
+
+			Print("[RK29] " + kit.m_sKitName + ": " + FileOf(item) + " gated off - "
+				+ FileOf(kit.m_sPrimaryWeapon) + " cannot mount it", LogLevel.NORMAL);
+			kit.m_aItems.Remove(i);
+		}
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Turns an ammo list into item batches for a weapon. Shared by both places a weapon can
+	//! be declared - a composition's weapon entry and a class's weapon option - so there is
+	//! one way to say "this is what feeds that".
+	protected static void EmitAmmo(notnull RK29_KitStruct kit, ResourceName weapon, RK29_WeaponDef def,
+		array<ref RK29_WeaponAmmo> ammoList, notnull RK29_KitSetup setup)
+	{
+		if (!ammoList)
+			return;
+
+		foreach (RK29_WeaponAmmo ammo : ammoList)
+		{
+			if (!ammo)
+				continue;
+
+			// literal, then the weapon's own ammo table, then the faction item catalog
+			// (a shared role naming "gl_shell" gets M406 for the US and VOG-25 for the
+			// Soviets), then a magazine variant, then the weapon's authored default
+			ResourceName round;
+			if (ammo.m_sPrefab != ResourceName.Empty)
+				round = ammo.m_sPrefab;
+			else if (ammo.m_sAlias != "" && def && DeclaresAmmo(def, ammo.m_sAlias))
+				round = ResolveAmmo(def, weapon, ammo.m_sAlias, kit, setup);
+			else if (ammo.m_sAlias != "")
+			{
+				round = setup.ResolveAlias(ammo.m_sAlias, kit.m_sFactionKey);
+				if (round == ResourceName.Empty)
+					Print("[RK29] config ERROR - ammo '" + ammo.m_sAlias + "' is neither declared by "
+						+ FileOf(weapon) + " nor an item alias (" + kit.m_sKitName + ")", LogLevel.ERROR);
+			}
+			else if (ammo.m_sVariant != "")
+			{
+				round = setup.FindMagVariant(WellsOf(weapon), ammo.m_sVariant);
+				if (round == ResourceName.Empty)
+					Print("[RK29] config ERROR - ammo variant '" + ammo.m_sVariant + "' not defined for "
+						+ FileOf(weapon) + " (" + kit.m_sKitName + ")", LogLevel.ERROR);
+			}
+			else
+				round = DefaultMagOf(weapon);
+
+			if (round == ResourceName.Empty)
+				continue;
+
+			int rounds = ammo.m_iCount;
+			if (rounds < 1)
+				rounds = 1;
+
+			RK29_KitItemBatch batch = new RK29_KitItemBatch();
+			for (int i = 0; i < rounds; i++)
+				batch.m_aPrefabs.Insert(round);
+			kit.m_aItems.Insert(batch);
+		}
+	}
+
+	//--------------------------------------------------------------------------------------------
+	protected static bool DeclaresAmmo(RK29_WeaponDef def, string alias)
+	{
+		if (!def || !def.m_aAmmo)
+			return false;
+		foreach (RK29_WeaponAmmoDef ammo : def.m_aAmmo)
+		{
+			if (ammo && ammo.m_sAlias == alias)
+				return true;
+		}
+		return false;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! An AMMO alias means whatever the WEAPON says it means: a magazine variant through the
+	//! weapon's own magazine well, a literal prefab for ammo that is not a magazine, or the
+	//! weapon's default magazine when the definition names neither.
+	protected static ResourceName ResolveAmmo(RK29_WeaponDef def, ResourceName weapon, string alias,
+		RK29_KitStruct kit, notnull RK29_KitSetup setup)
+	{
+		if (!def || !def.m_aAmmo)
+		{
+			Print("[RK29] config ERROR - AMMO \"" + alias + "\" but the weapon has no catalog entry ("
+				+ kit.m_sKitName + ")", LogLevel.ERROR);
+			return ResourceName.Empty;
+		}
+
+		foreach (RK29_WeaponAmmoDef ammo : def.m_aAmmo)
+		{
+			if (!ammo || ammo.m_sAlias != alias)
+				continue;
+
+			if (ammo.m_sPrefab != ResourceName.Empty)
+				return ammo.m_sPrefab;
+			if (ammo.m_sVariant != "")
+			{
+				ResourceName variant = setup.FindMagVariant(WellsOf(weapon), ammo.m_sVariant);
+				if (variant == ResourceName.Empty)
+					Print("[RK29] config ERROR - ammo variant '" + ammo.m_sVariant + "' not defined for "
+						+ FileOf(weapon) + " (" + kit.m_sKitName + ")", LogLevel.ERROR);
+				return variant;
+			}
+			return DefaultMagOf(weapon);
+		}
+
+		Print("[RK29] config ERROR - AMMO \"" + alias + "\" is not declared by " + def.m_sId
+			+ " (" + kit.m_sKitName + ")", LogLevel.ERROR);
+		return ResourceName.Empty;
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -185,31 +401,6 @@ class RK29_KitCompose
 		return null;
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Prefab or faction alias; both empty clears the slot (kits without a sidearm etc.)
-	protected static void ApplyWeaponEntry(RK29_BlockWeaponEntry w, RK29_KitStruct kit, RK29_KitSetup setup)
-	{
-		if (!w)
-			return;
-
-		ResourceName prefab = w.m_sPrefab;
-		if (prefab == ResourceName.Empty && w.m_sAlias != "")
-		{
-			prefab = setup.ResolveAlias(w.m_sAlias, kit.m_sFactionKey);
-			if (prefab == ResourceName.Empty)
-			{
-				Print("[RK29] config ERROR - weapon alias '" + w.m_sAlias + "' unresolved for " + kit.m_sFactionKey + " (" + kit.m_sKitName + ")", LogLevel.ERROR);
-				return;
-			}
-		}
-
-		if (prefab == ResourceName.Empty)
-		{
-			kit.m_mWeapons.Remove(w.m_iSlotIndex);
-			return;
-		}
-		kit.m_mWeapons.Set(w.m_iSlotIndex, prefab);
-	}
 
 	//--------------------------------------------------------------------------------------------
 	//! Slot-keyed later-wins over the prefab-captured dress; empty prefab clears the slot.
@@ -515,7 +706,7 @@ class RK29_KitCompose
 	}
 
 	//--------------------------------------------------------------------------------------------
-	protected static ResourceName ResolveEntry(RK29_BlockItemEntry entry, RK29_KitStruct kit, ResourceName primaryMag, RK29_KitSetup setup)
+	protected static ResourceName ResolveEntry(RK29_BlockItemEntry entry, RK29_KitStruct kit, RK29_KitSetup setup)
 	{
 		if (entry.m_eSource == RK29_EItemSource.PREFAB)
 		{
@@ -532,45 +723,10 @@ class RK29_KitCompose
 			return resolved;
 		}
 
-		return ResolveMag(entry.m_eSource, entry.m_sVariant, kit, primaryMag, setup);
+		Print("[RK29] config ERROR - item entry with no prefab or alias (" + kit.m_sKitName + ")", LogLevel.ERROR);
+		return ResourceName.Empty;
 	}
 
-	//--------------------------------------------------------------------------------------------
-	protected static ResourceName ResolveMag(RK29_EItemSource source, string variant, RK29_KitStruct kit, ResourceName primaryMag, RK29_KitSetup setup)
-	{
-		int slot = 0;
-		if (source == RK29_EItemSource.MAG_LAUNCHER)
-			slot = LAUNCHER_SLOT;
-		else if (source == RK29_EItemSource.MAG_SIDEARM)
-			slot = SIDEARM_SLOT;
-
-		string tokenName = typename.EnumToString(RK29_EItemSource, source);
-
-		ResourceName weapon;
-		kit.m_mWeapons.Find(slot, weapon);
-		if (weapon == ResourceName.Empty)
-		{
-			Print("[RK29] config ERROR - " + tokenName + " but no weapon in slot " + slot.ToString() + " (" + kit.m_sKitName + ")", LogLevel.ERROR);
-			return ResourceName.Empty;
-		}
-
-		if (variant == "")
-		{
-			ResourceName mag;
-			if (slot == 0)
-				mag = primaryMag;
-			if (mag == ResourceName.Empty)
-				mag = DefaultMagOf(weapon);
-			if (mag == ResourceName.Empty)
-				Print("[RK29] config ERROR - " + tokenName + " but no magazine resolvable (" + kit.m_sKitName + ")", LogLevel.ERROR);
-			return mag;
-		}
-
-		ResourceName v = setup.FindMagVariant(WellsOf(weapon), variant);
-		if (v == ResourceName.Empty)
-			Print("[RK29] config ERROR - mag variant '" + variant + "' not defined for " + FileOf(weapon) + " (" + kit.m_sKitName + ")", LogLevel.ERROR);
-		return v;
-	}
 
 	//--------------------------------------------------------------------------------------------
 	//! Literal-identity override: same source plus same alias/variant/prefab. -1 = none.
@@ -728,6 +884,35 @@ class RK29_KitCompose
 		CountItems(kit, totals);
 		foreach (string file, int n : totals)
 			Print(string.Format("[RK29]  %1x %2", n, file), LogLevel.NORMAL);
+
+		// which alias produced what, chain and all - an item that arrived through
+		// backpack_ce -> backpack_medium is otherwise indistinguishable from a literal
+		if (mgr.m_Setup && mgr.m_Setup.m_aAliases)
+		{
+			foreach (RK29_ItemAlias alias : mgr.m_Setup.m_aAliases)
+			{
+				if (!alias)
+					continue;
+				ResourceName resolved = mgr.m_Setup.ResolveAlias(alias.m_sAlias, kit.m_sFactionKey);
+				if (resolved == ResourceName.Empty)
+					continue;
+				int have;
+				if (!totals.Find(FileOf(resolved), have))
+					continue;
+
+				array<string> chain = {};
+				mgr.m_Setup.AliasChain(alias.m_sAlias, chain);
+				string path;
+				foreach (string link : chain)
+				{
+					if (path != string.Empty)
+						path += " -> ";
+					path += link;
+				}
+				Print(string.Format("[RK29]  alias %1 = %2", path, FileOf(resolved)), LogLevel.NORMAL);
+			}
+		}
+
 		Print("[RK29] === " + kit.CountItems().ToString() + " item(s) total ===", LogLevel.NORMAL);
 	}
 
@@ -792,12 +977,24 @@ class RK29_KitCompose
 				fh.WriteLine("  }");
 			}
 			fh.WriteLine(" }");
-			fh.WriteLine(" m_aWeapons {");
+			// dumped in the shape a kit conf actually takes, so it can be pasted
+			fh.WriteLine(" m_aWeaponSlots {");
 			foreach (int idx, ResourceName weapon : kit.m_mWeapons)
 			{
-				fh.WriteLine("  RK29_BlockWeaponEntry {");
-				fh.WriteLine("   m_iSlotIndex " + idx.ToString());
-				fh.WriteLine("   m_sPrefab \"" + weapon + "\"");
+				if (idx == RK29_KitStruct.GRENADE_SLOT)
+					continue;                       // throwables are items, not a weapon slot
+				fh.WriteLine("  RK29_WeaponSlot {");
+				if (idx != 0)
+					fh.WriteLine("   m_iSlot " + idx.ToString());
+				fh.WriteLine("   m_aOptions {");
+				fh.WriteLine("    RK29_WeaponOption {");
+				string weaponId = mgr.m_Setup.WeaponIdOf(weapon, kit.m_sFactionKey);
+				if (weaponId != "")
+					fh.WriteLine("     m_sWeapon \"" + weaponId + "\"");
+				else
+					fh.WriteLine("     // NOT IN THE WEAPON CATALOG: " + weapon);
+				fh.WriteLine("    }");
+				fh.WriteLine("   }");
 				fh.WriteLine("  }");
 			}
 			fh.WriteLine(" }");
@@ -843,227 +1040,5 @@ class RK29_KitCompose
 		Print("[RK29] kit dump - " + written.ToString() + " file(s) in $profile:RK29_KitDump/", LogLevel.NORMAL);
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Shallow copy: maps and the batch list are rebuilt, the batches themselves are shared.
-	//! Enough for the compare path, which only ever moves entries between the two.
-	protected static RK29_KitStruct CopyForCompare(notnull RK29_KitStruct src)
-	{
-		RK29_KitStruct copy = new RK29_KitStruct();
-		copy.m_sKitName      = src.m_sKitName;
-		copy.m_sFactionKey   = src.m_sFactionKey;
-		copy.m_sSourcePrefab = src.m_sSourcePrefab;
-		copy.m_sPrimaryWeapon = src.m_sPrimaryWeapon;
-		copy.m_UIInfo        = src.m_UIInfo;
 
-		foreach (string slot, ResourceName garment : src.m_mClothing)
-			copy.m_mClothing.Set(slot, garment);
-		foreach (string eqSlot, ResourceName eqItem : src.m_mEquipment)
-			copy.m_mEquipment.Set(eqSlot, eqItem);
-		foreach (int idx, ResourceName weapon : src.m_mWeapons)
-			copy.m_mWeapons.Set(idx, weapon);
-		foreach (RK29_KitItemBatch batch : src.m_aItems)
-			copy.m_aItems.Insert(batch);
-
-		return copy;
-	}
-
-	//--------------------------------------------------------------------------------------------
-	protected static void NormalizeGrenadeSlot(RK29_KitStruct kit)
-	{
-		ResourceName grenade;
-		if (!kit.m_mWeapons.Find(RK29_KitStruct.GRENADE_SLOT, grenade))
-			return;
-		kit.m_mWeapons.Remove(RK29_KitStruct.GRENADE_SLOT);
-		RK29_KitItemBatch batch = new RK29_KitItemBatch();
-		batch.m_aPrefabs.Insert(grenade);
-		kit.m_aItems.Insert(batch);
-	}
-
-	//--------------------------------------------------------------------------------------------
-	//! /kitcompare with no argument. Sweeping every configured kit is the useful default: a kit
-	//! author edits one block and wants to know that nothing ELSE moved.
-	static void Compare(string kitName)
-	{
-		kitName.TrimInPlace();
-		if (kitName != string.Empty)
-		{
-			CompareOne(kitName);
-			return;
-		}
-
-		RK29_KitManager mgr = RK29_KitManager.GetInstance();
-		if (!mgr || !mgr.m_Setup || !mgr.m_Setup.m_aClasses)
-			return;
-
-		array<string> report = {};
-		int examined = 0;
-		int differing = 0;
-
-		foreach (RK29_ClassSetup cls : mgr.m_Setup.m_aClasses)
-		{
-			if (!cls || cls.m_sComposition == ResourceName.Empty)
-				continue;
-
-			examined++;
-			int diffs = CompareOne(cls.m_sKitName);
-			if (diffs > 0)
-			{
-				differing++;
-				report.Insert(string.Format("%1  %2 difference(s)", cls.m_sKitName, diffs));
-			}
-			else if (diffs < 0)
-			{
-				differing++;
-				report.Insert(string.Format("%1  compare failed", cls.m_sKitName));
-			}
-			else
-			{
-				report.Insert(string.Format("%1  EQUAL", cls.m_sKitName));
-			}
-		}
-
-		string summary;
-		if (differing == 0)
-			summary = string.Format("all %1 kit(s) match their prefabs", examined);
-		else
-			summary = string.Format("%1 of %2 kit(s) differ", differing, examined);
-		Print("[RK29] ===== kit compare: " + summary + " =====", LogLevel.NORMAL);
-
-		FileHandle fh = FileIO.OpenFile(COMPARE_REPORT, FileMode.WRITE);
-		if (!fh)
-			return;
-		fh.WriteLine("29th kit compare - " + summary);
-		fh.WriteLine("");
-		foreach (string line : report)
-			fh.WriteLine(line);
-		fh.Close();
-		Print("[RK29] report written to " + COMPARE_REPORT, LogLevel.NORMAL);
-	}
-
-	//--------------------------------------------------------------------------------------------
-	//! Composed-vs-captured diff. EQUAL when config reproduces the prefab byte-for-byte.
-	//! Returns the difference count, or -1 if the kit could not be compared at all.
-	protected static int CompareOne(string kitName)
-	{
-		RK29_KitManager mgr = RK29_KitManager.GetInstance();
-		if (!mgr || !mgr.m_Setup)
-			return -1;
-
-		RK29_ClassSetup cls = mgr.m_Setup.FindClass(kitName);
-		if (!cls || cls.m_sComposition == ResourceName.Empty)
-		{
-			Print("[RK29] compare - '" + kitName + "' has no composition configured", LogLevel.WARNING);
-			return -1;
-		}
-
-		// the boot capture, not a re-resolve: RK29_CaptureFresh reaches the loadout through the
-		// registry and can hand back parent-only content when a resource is stale in the editor
-		RK29_KitStruct stored = mgr.m_mCaptured.Get(kitName);
-		if (!stored)
-			stored = mgr.RK29_CaptureFresh(kitName);
-		if (!stored)
-		{
-			Print("[RK29] compare - capture failed for '" + kitName + "'", LogLevel.WARNING);
-			return -1;
-		}
-
-		// the grenade fold below rewrites the struct it is handed, and the boot capture is
-		// shared with /kitdump - compare against a copy so a compare never edits the evidence
-		RK29_KitStruct captured = CopyForCompare(stored);
-		RK29_KitStruct composed = Compose(cls, captured, mgr.m_Setup);
-		if (!composed)
-			return -1;
-
-		// config kits carry grenades as items only - fold slot grenades into items so
-		// the deliberate divergence never reads as a diff
-		NormalizeGrenadeSlot(captured);
-		NormalizeGrenadeSlot(composed);
-
-		int diffs = 0;
-		foreach (int idx, ResourceName weapon : captured.m_mWeapons)
-		{
-			ResourceName other;
-			composed.m_mWeapons.Find(idx, other);
-			if (other != weapon)
-			{
-				Print(string.Format("[RK29]  DIFF weapon slot %1: captured %2 vs composed %3", idx, FileOf(weapon), FileOf(other)), LogLevel.WARNING);
-				diffs++;
-			}
-		}
-		foreach (int idx2, ResourceName weapon2 : composed.m_mWeapons)
-		{
-			if (!captured.m_mWeapons.Contains(idx2))
-			{
-				Print(string.Format("[RK29]  DIFF weapon slot %1: only in composed (%2)", idx2, FileOf(weapon2)), LogLevel.WARNING);
-				diffs++;
-			}
-		}
-
-		map<string, int> capItems = new map<string, int>();
-		map<string, int> comItems = new map<string, int>();
-		CountItems(captured, capItems);
-		CountItems(composed, comItems);
-		foreach (string file, int n : capItems)
-		{
-			int m;
-			comItems.Find(file, m);
-			if (m != n)
-			{
-				Print(string.Format("[RK29]  DIFF item %1: captured %2 vs composed %3", file, n, m), LogLevel.WARNING);
-				diffs++;
-			}
-		}
-		foreach (string file2, int n2 : comItems)
-		{
-			if (!capItems.Contains(file2))
-			{
-				Print(string.Format("[RK29]  DIFF item %1: only in composed (%2)", file2, n2), LogLevel.WARNING);
-				diffs++;
-			}
-		}
-
-		foreach (string clothSlot, ResourceName garment : captured.m_mClothing)
-		{
-			ResourceName otherGarment;
-			composed.m_mClothing.Find(clothSlot, otherGarment);
-			if (otherGarment != garment)
-			{
-				Print(string.Format("[RK29]  DIFF clothing %1: captured %2 vs composed %3", clothSlot, FileOf(garment), FileOf(otherGarment)), LogLevel.WARNING);
-				diffs++;
-			}
-		}
-		foreach (string clothSlot2, ResourceName garment2 : composed.m_mClothing)
-		{
-			if (!captured.m_mClothing.Contains(clothSlot2))
-			{
-				Print(string.Format("[RK29]  DIFF clothing %1: only in composed (%2)", clothSlot2, FileOf(garment2)), LogLevel.WARNING);
-				diffs++;
-			}
-		}
-		foreach (string eqSlot, ResourceName eqItem : captured.m_mEquipment)
-		{
-			ResourceName otherEq;
-			composed.m_mEquipment.Find(eqSlot, otherEq);
-			if (otherEq != eqItem)
-			{
-				Print(string.Format("[RK29]  DIFF equipment %1: captured %2 vs composed %3", eqSlot, FileOf(eqItem), FileOf(otherEq)), LogLevel.WARNING);
-				diffs++;
-			}
-		}
-		foreach (string eqSlot2, ResourceName eqItem2 : composed.m_mEquipment)
-		{
-			if (!captured.m_mEquipment.Contains(eqSlot2))
-			{
-				Print(string.Format("[RK29]  DIFF equipment %1: only in composed (%2)", eqSlot2, FileOf(eqItem2)), LogLevel.WARNING);
-				diffs++;
-			}
-		}
-
-		if (diffs == 0)
-			Print("[RK29] compare '" + kitName + "': EQUAL", LogLevel.NORMAL);
-		else
-			Print("[RK29] compare '" + kitName + "': " + diffs.ToString() + " difference(s)", LogLevel.WARNING);
-
-		return diffs;
-	}
 }

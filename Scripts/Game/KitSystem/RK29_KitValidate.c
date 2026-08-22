@@ -6,6 +6,15 @@
 //! point: a static capacity estimate would drift from what the game actually does, and the
 //! engine's fit test is the only trustworthy oracle for whether an item has a home.
 //------------------------------------------------------------------------------------------------
+//! One kit + one weapon choice to test.
+class RK29_ValidateJob
+{
+	string m_sKit;
+	string m_sLabel;
+	ResourceName m_sWeapon;   //!< empty = the class default
+}
+
+//------------------------------------------------------------------------------------------------
 class RK29_KitValidate
 {
 	//! matches the apply path's own item-init guard - a body younger than this still has
@@ -13,7 +22,7 @@ class RK29_KitValidate
 	protected static const int SETTLE_MS = 750;
 	protected static const string REPORT = "$profile:RK29_KitValidation.txt";
 
-	protected static ref array<string> s_aQueue = {};
+	protected static ref array<ref RK29_ValidateJob> s_aQueue = {};
 	protected static ref array<string> s_aReport = {};
 	protected static bool s_bRunning;
 	protected static int s_iFailures;
@@ -41,10 +50,40 @@ class RK29_KitValidate
 		s_iFailures = 0;
 		s_bRunning = true;
 
+		// one job per WEAPON, not per kit: a kit that fits with the M249 can overflow with
+		// the M60's extra belt and pack, and only the default has a prefab to be judged by
 		foreach (string kitName, RK29_KitStruct kit : mgr.m_mKits)
 		{
-			if (kit && kit.m_sSourcePrefab != ResourceName.Empty)
-				s_aQueue.Insert(kitName);
+			if (!kit || kit.m_sSourcePrefab == ResourceName.Empty)
+				continue;
+
+			RK29_WeaponSlot primary = mgr.m_Setup.FindSlot(mgr.m_mKitOptions.Get(kitName), 0);
+			int primaries = 0;
+			if (primary && primary.m_aOptions)
+			{
+				foreach (RK29_WeaponOption option : primary.m_aOptions)
+				{
+					if (!option)
+						continue;
+					ResourceName prefab = mgr.m_Setup.WeaponPrefabOf(option, kit.m_sFactionKey);
+					if (prefab == ResourceName.Empty)
+						continue;
+
+					RK29_ValidateJob job = new RK29_ValidateJob();
+					job.m_sKit = kitName;
+					job.m_sWeapon = prefab;
+					job.m_sLabel = kitName + " [" + RK29_ItemNames.Get(prefab) + "]";
+					s_aQueue.Insert(job);
+					primaries++;
+				}
+			}
+			if (primaries > 0)
+				continue;
+
+			RK29_ValidateJob plain = new RK29_ValidateJob();
+			plain.m_sKit = kitName;
+			plain.m_sLabel = kitName;
+			s_aQueue.Insert(plain);
 		}
 
 		Print("[RK29] kitvalidate - checking " + s_aQueue.Count().ToString() + " kit(s), one every "
@@ -63,8 +102,9 @@ class RK29_KitValidate
 			return;
 		}
 
-		string kitName = s_aQueue[0];
+		RK29_ValidateJob job = s_aQueue[0];
 		s_aQueue.RemoveOrdered(0);
+		string kitName = job.m_sKit;
 
 		RK29_KitManager mgr = RK29_KitManager.GetInstance();
 		RK29_KitStruct kit;
@@ -79,7 +119,7 @@ class RK29_KitValidate
 		Resource res = Resource.Load(kit.m_sSourcePrefab);
 		if (!res.IsValid())
 		{
-			s_aReport.Insert(string.Format("%1  SKIP  prefab will not load", kitName));
+			s_aReport.Insert(string.Format("%1  SKIP  prefab will not load", job.m_sLabel));
 			GetGame().GetCallqueue().CallLater(Step, 10, false);
 			return;
 		}
@@ -92,21 +132,29 @@ class RK29_KitValidate
 		IEntity body = GetGame().SpawnEntityPrefabLocal(res, GetGame().GetWorld(), params);
 		if (!body)
 		{
-			s_aReport.Insert(string.Format("%1  SKIP  spawn failed", kitName));
+			s_aReport.Insert(string.Format("%1  SKIP  spawn failed", job.m_sLabel));
 			GetGame().GetCallqueue().CallLater(Step, 10, false);
 			return;
 		}
 
-		GetGame().GetCallqueue().CallLater(Check, SETTLE_MS, false, kitName, body);
+		GetGame().GetCallqueue().CallLater(Check, SETTLE_MS, false, job, body);
 	}
 
 	//--------------------------------------------------------------------------------------------
-	protected static void Check(string kitName, IEntity body)
+	protected static void Check(RK29_ValidateJob job, IEntity body)
 	{
 		RK29_KitManager mgr = RK29_KitManager.GetInstance();
 		RK29_KitStruct kit;
 		if (mgr)
-			kit = mgr.m_mKits.Get(kitName);
+			kit = mgr.m_mKits.Get(job.m_sKit);
+
+		// a non-default weapon is composed the same way the apply path composes it
+		if (kit && mgr && job.m_sWeapon != ResourceName.Empty)
+		{
+			RK29_KitStruct base = mgr.m_mKitsBase.Get(job.m_sKit);
+			if (base)
+				kit = RK29_KitCompose.ApplyWeaponChoices(base, mgr.m_mKitOptions.Get(job.m_sKit), job.m_sWeapon, mgr.m_Setup);
+		}
 
 		if (kit && body)
 		{
@@ -116,7 +164,7 @@ class RK29_KitValidate
 
 			if (!dropped || dropped.IsEmpty())
 			{
-				s_aReport.Insert(string.Format("%1  OK    %2 item(s) placed", kitName, kit.CountItems()));
+				s_aReport.Insert(string.Format("%1  OK    %2 item(s) placed", job.m_sLabel, kit.CountItems()));
 			}
 			else
 			{
@@ -142,7 +190,7 @@ class RK29_KitValidate
 					else
 						list += name;
 				}
-				s_aReport.Insert(string.Format("%1  FAIL  %2 dropped: %3", kitName, dropped.Count(), list));
+				s_aReport.Insert(string.Format("%1  FAIL  %2 dropped: %3", job.m_sLabel, dropped.Count(), list));
 			}
 		}
 

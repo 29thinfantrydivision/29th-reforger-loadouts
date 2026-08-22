@@ -25,6 +25,15 @@ class RK29_KitManager
 
 	ref map<string, ref RK29_KitStruct> m_mKits = new map<string, ref RK29_KitStruct>();
 
+	//! Each kit's weapon options, taken from its composition at boot. Kit-scoped rather than
+	//! class-scoped so everything a kit carries is declared in the kit's own file.
+	ref map<string, ref array<ref RK29_WeaponSlot>> m_mKitOptions = new map<string, ref array<ref RK29_WeaponSlot>>();
+
+	//! The composition WITHOUT any weapon option applied. A weapon choice is always laid over
+	//! this, never over an already-optioned kit, so re-picking a weapon cannot stack a second
+	//! copy of that weapon's blocks (its grenade set would double).
+	ref map<string, ref RK29_KitStruct> m_mKitsBase = new map<string, ref RK29_KitStruct>();
+
 	//! The raw prefab capture, kept beside the composed kit so /kitdump can export prefab
 	//! truth. Re-deriving it later by loadout name resolves to the wrong loadout object.
 	ref map<string, ref RK29_KitStruct> m_mCaptured = new map<string, ref RK29_KitStruct>();
@@ -87,9 +96,16 @@ class RK29_KitManager
 			RK29_ClassSetup cls = m_Setup.FindClass(kitName);
 			if (cls && cls.m_sComposition != ResourceName.Empty)
 			{
-				RK29_KitStruct composed = RK29_KitCompose.Compose(cls, kit, m_Setup);
+				array<ref RK29_WeaponSlot> options;
+				RK29_KitStruct composed = RK29_KitCompose.Compose(cls, kit, m_Setup, options);
 				if (composed)
 				{
+					m_mKitOptions.Set(kitName, options);
+					// the base is what weapon choices lay over; m_mKits keeps the
+					// default-weapon kit so every reader still sees a fieldable one
+					m_mKitsBase.Set(kitName, composed);
+					composed = RK29_KitCompose.ApplyWeaponChoices(composed, options, ResourceName.Empty, m_Setup);
+
 					// drift guardrail: intended config-vs-prefab deltas are small (grenade
 					// fold, bayonet normalization). A big gap means the prefab was reworked
 					// after the dump the configs were generated from - LAT taught us this.
@@ -228,6 +244,28 @@ class RK29_KitManager
 				}
 			}
 		}
+		if (m_Setup.m_aWeaponConfigs)
+		{
+			if (!m_Setup.m_aWeaponDefs)
+				m_Setup.m_aWeaponDefs = {};
+			foreach (ResourceName weaponRes : m_Setup.m_aWeaponConfigs)
+			{
+				Resource wres = Resource.Load(weaponRes);
+				RK29_WeaponCatalog wcat;
+				if (wres.IsValid())
+					wcat = RK29_WeaponCatalog.Cast(BaseContainerTools.CreateInstanceFromContainer(wres.GetResource().ToBaseContainer()));
+				if (!wcat || !wcat.m_aWeapons)
+				{
+					Print("[RK29] weapon config missing/unreadable: " + weaponRes, LogLevel.WARNING);
+					continue;
+				}
+				foreach (RK29_WeaponDef def : wcat.m_aWeapons)
+				{
+					if (def)
+						m_Setup.m_aWeaponDefs.Insert(def);
+				}
+			}
+		}
 		if (m_Setup.m_aSquadConfigs)
 		{
 			foreach (ResourceName squadRes : m_Setup.m_aSquadConfigs)
@@ -253,11 +291,23 @@ class RK29_KitManager
 		if (RK29_Log.s_bVerbose)
 			Print("[RK29] verbose apply trace ENABLED - turn m_bVerboseLogging off before a live session", LogLevel.WARNING);
 
+		int weaponCount = 0;
+		if (m_Setup.m_aWeaponDefs)
+			weaponCount = m_Setup.m_aWeaponDefs.Count();
+		Print("[RK29] weapon catalog - " + weaponCount.ToString() + " definition(s)", LogLevel.NORMAL);
+
+		foreach (RK29_ClassSetup stale : m_Setup.m_aClasses)
+		{
+			if (stale && stale.m_aWeapons && !stale.m_aWeapons.IsEmpty())
+				Print("[RK29] config WARNING - class '" + stale.m_sKitName + "' still declares m_aWeapons in the roster;"
+					+ " weapon options moved to the kit composition and these are ignored", LogLevel.WARNING);
+		}
+
 		Print("[RK29] setup loaded - " + m_Setup.m_aClasses.Count().ToString() + " class(es), " + m_Setup.m_aOpticCategories.Count().ToString() + " optic categorie(s), " + m_Setup.m_aAliases.Count().ToString() + " alias(es)", LogLevel.NORMAL);
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! Re-capture straight from the prefab, bypassing any config composition (for /kitcompare).
+	//! Re-capture straight from the prefab, bypassing any config composition.
 	RK29_KitStruct RK29_CaptureFresh(string kitName)
 	{
 		SCR_FactionPlayerLoadout fl = SCR_FactionPlayerLoadout.Cast(FindLoadoutByName(kitName));
@@ -322,7 +372,7 @@ class RK29_KitManager
 
 		if (weapon != ResourceName.Empty && weapon != kit.m_sPrimaryWeapon)
 		{
-			if (!m_Setup.FindWeapon(cls, weapon))
+			if (!m_Setup.FindWeapon(m_mKitOptions.Get(kitName), weapon, kit.m_sFactionKey))
 			{
 				Print("[RK29] request rejected - weapon not in class list (player " + playerId.ToString() + ")", LogLevel.WARNING);
 				return;
@@ -335,22 +385,8 @@ class RK29_KitManager
 			return;
 		}
 
-		// weapon choice may route to a different kit entirely (e.g. M60 -> Machine Gunner body)
-		RK29_WeaponOption chosenWo = m_Setup.FindWeapon(cls, weapon);
-		if (chosenWo && chosenWo.m_sSourceKitName != string.Empty)
-		{
-			RK29_KitStruct sourceKit = m_mKits.Get(chosenWo.m_sSourceKitName);
-			if (sourceKit && sourceKit.m_sFactionKey == kit.m_sFactionKey)
-			{
-				kitName = chosenWo.m_sSourceKitName;
-				kit = sourceKit;
-			}
-			else
-				Print("[RK29] source kit '" + chosenWo.m_sSourceKitName + "' unknown - using class kit", LogLevel.WARNING);
-		}
-		// stock for the effective kit = no weapon delta, authored item layout survives intact
-		if (weapon == kit.m_sPrimaryWeapon)
-			weapon = ResourceName.Empty;
+		// a weapon no longer routes to a different kit - the option brings its own gear,
+		// ammo and item deltas, so one class covers every weapon it offers
 
 		// the picker filters its own column, but the request is what the server acts on: a
 		// stale menu or a crafted call must not mount a scope the weapon has no rail for.
@@ -564,19 +600,29 @@ class RK29_KitManager
 				mounts = opt.m_aRequiredAttachments;
 		}
 
-		ResourceName chosenMag;
-		int magCount = 0;
-		RK29_WeaponOption wo = m_Setup.FindWeapon(cls, sel.m_sWeapon);
-		if (wo)
+		// a stash written before a config edit can name a weapon nobody offers any more -
+		// fall back to the class default rather than composing a weaponless kit
+		ResourceName pickedWeapon = sel.m_sWeapon;
+		array<ref RK29_WeaponSlot> options = m_mKitOptions.Get(kit.m_sKitName);
+		if (pickedWeapon != ResourceName.Empty && !m_Setup.FindWeapon(options, pickedWeapon, kit.m_sFactionKey))
 		{
-			chosenMag = wo.m_sMagazinePrefab;
-			magCount  = wo.m_iMagazineCount;
+			Print("[RK29] stashed weapon no longer offered by '" + kit.m_sKitName
+				+ "' - using the class default", LogLevel.WARNING);
+			pickedWeapon = ResourceName.Empty;
 		}
 
-		array<ResourceName> classMags = {};
-		m_Setup.GetClassMagazines(cls, classMags);
+		RK29_KitStruct base = m_mKitsBase.Get(kit.m_sKitName);
+		if (!base)
+			base = kit;
 
-		edited = kit.CloneWithChoices(chosenWeapon, chosenMag, classMags, magCount);
+		edited = RK29_KitCompose.ApplyWeaponChoices(base, options, pickedWeapon, m_Setup);
+
+		// an optic that swaps in a scoped weapon variant still wins the primary slot
+		if (opt && opt.m_sWeaponVariantPrefab != ResourceName.Empty && chosenWeapon != ResourceName.Empty)
+		{
+			edited.m_mWeapons.Set(0, chosenWeapon);
+			edited.m_sPrimaryWeapon = chosenWeapon;
+		}
 	}
 
 	//--------------------------------------------------------------------------------------------
