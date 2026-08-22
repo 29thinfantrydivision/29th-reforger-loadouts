@@ -1,0 +1,6 @@
+# Workbench's resource index. Rebuilt on open from the .meta files, which carry the
+# GUIDs - so a fresh clone binds to the same identities without it. Tracking it only
+# buys binary merge conflicts: it rewrote itself three times in one evening here.
+# NOTE: this only holds while every resource has its .meta committed. If you add a
+# resource, commit its .meta with it.
+resourceDatabase.rdb

@@ -1,0 +1,55 @@
+SUPERSEDED 2026-08-21 - every kit is wired and the paths below were rewritten for the
+Catalogs/Rosters/Common layout. Kept only as a record of the staging order.
+
+m_sComposition lines per kit (paste into RK29_Side_*.conf class entries)
+
+### 29th_Parade
+   m_sComposition "{AB29C0FFEE29B032}Configs/KitSystem/Kits/US/parade.conf"
+
+### 29th_USSR__Automatic_Rifleman
+   m_sComposition "{AB29C0FFEE29B01C}Configs/KitSystem/Kits/USSR/automatic_rifleman.conf"
+
+### 29th_USSR__Crewman
+   m_sComposition "{AB29C0FFEE29B01F}Configs/KitSystem/Kits/USSR/crewman.conf"
+
+### 29th_USSR__Grenadier
+   m_sComposition "{AB29C0FFEE29B022}Configs/KitSystem/Kits/USSR/grenadier.conf"
+
+### 29th_USSR__Light_AntiTank
+   m_sComposition "{AB29C0FFEE29B025}Configs/KitSystem/Kits/USSR/light_antitank.conf"
+
+### 29th_USSR__Machine_Gunner
+   m_sComposition "{AB29C0FFEE29B028}Configs/KitSystem/Kits/USSR/machine_gunner.conf"
+
+### 29th_USSR__Rifleman
+   m_sComposition "{AB29C0FFEE29B02B}Configs/KitSystem/Kits/USSR/rifleman.conf"
+
+### 29th_USSR__Sharpshooter
+   m_sComposition "{AB29C0FFEE29B02E}Configs/KitSystem/Kits/USSR/sharpshooter.conf"
+
+### 29th_USSR__Squad_Leader
+   m_sComposition "{AB29C0FFEE29B031}Configs/KitSystem/Kits/USSR/squad_leader.conf"
+
+### 29th_US__Automatic_Rifleman
+   m_sComposition "{AB29C0FFEE29B01B}Configs/KitSystem/Kits/US/automatic_rifleman.conf"
+
+### 29th_US__Crewman
+   m_sComposition "{AB29C0FFEE29B01E}Configs/KitSystem/Kits/US/crewman.conf"
+
+### 29th_US__Grenadier
+   m_sComposition "{AB29C0FFEE29B021}Configs/KitSystem/Kits/US/grenadier.conf"
+
+### 29th_US__Light_AntiTank
+   m_sComposition "{AB29C0FFEE29B024}Configs/KitSystem/Kits/US/light_antitank.conf"
+
+### 29th_US__Machine_Gunner
+   m_sComposition "{AB29C0FFEE29B027}Configs/KitSystem/Kits/US/machine_gunner.conf"
+
+### 29th_US__Rifleman
+   m_sComposition "{AB29C0FFEE29B02A}Configs/KitSystem/Kits/US/rifleman.conf"
+
+### 29th_US__Sniper
+   m_sComposition "{AB29C0FFEE29B02D}Configs/KitSystem/Kits/US/sniper.conf"
+
+### 29th_US__Squad_Leader
+   m_sComposition "{AB29C0FFEE29B030}Configs/KitSystem/Kits/US/squad_leader.conf"
