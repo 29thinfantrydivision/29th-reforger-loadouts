@@ -25,8 +25,11 @@ class RK29_OpticCategory
 	[Attribute(desc: "Category name shown to players, e.g. '1x' or 'Magnified'", category: "29th")]
 	string m_sName;
 
-	[Attribute("0", desc: "Counts toward the HUD magnified tally", category: "29th")]
+	[Attribute("0", desc: "These optics are magnified - drives the picker's magnification badge and the HUD tally", category: "29th")]
 	bool m_bMagnified;
+
+	[Attribute("0", desc: "Magnified, but never counted in the HUD tally - a sniper's scope is the squad's sniper, not one of its magnified riflemen", category: "29th")]
+	bool m_bTallyExempt;
 
 	[Attribute(desc: "Optic choices in this category", category: "29th")]
 	ref array<ref RK29_OpticOption> m_aOptics;
@@ -542,7 +545,7 @@ class RK29_KitSetup
 			return false;
 		foreach (RK29_OpticCategory cat : m_aOpticCategories)
 		{
-			if (!cat || !cat.m_bMagnified || !cat.m_aOptics)
+			if (!cat || !cat.m_bMagnified || cat.m_bTallyExempt || !cat.m_aOptics)
 				continue;
 			foreach (RK29_OpticOption opt : cat.m_aOptics)
 			{

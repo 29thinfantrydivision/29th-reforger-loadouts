@@ -435,6 +435,7 @@ class RK29_KitCompose
 	protected static ref map<ResourceName, string> s_mItemAttachTypeCache = new map<ResourceName, string>();
 	protected static ref map<ResourceName, ref array<string>> s_mObstructedCache = new map<ResourceName, ref array<string>>();
 	protected static ref map<ResourceName, ref array<string>> s_mMountedCache = new map<ResourceName, ref array<string>>();
+	protected static ref map<ResourceName, bool> s_mReadableCache = new map<ResourceName, bool>();
 
 	//--------------------------------------------------------------------------------------------
 	//! True when the weapon's prefab chain declares an attachment slot whose AttachmentType
@@ -473,9 +474,11 @@ class RK29_KitCompose
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! True when the weapon is KNOWN not to take this attachment: both sides declared mount
-	//! types and they share none. A prefab we cannot read answers false - an unreadable
-	//! resource must never silently empty a picker column.
+	//! True when the weapon is KNOWN not to take this attachment: the attachment declared
+	//! mount types the weapon does not answer. A weapon that reads fine and declares no
+	//! mounts at all takes nothing - the M249 and the M60 have neither an optic rail nor a
+	//! bayonet lug. A prefab we cannot READ still answers false: an unreadable resource must
+	//! never silently empty a picker column.
 	static bool WeaponRejectsAttachment(ResourceName weapon, ResourceName attachment)
 	{
 		if (weapon == ResourceName.Empty || attachment == ResourceName.Empty)
@@ -486,7 +489,7 @@ class RK29_KitCompose
 			return false;
 		array<string> weaponTypes = AttachTypesOf(weapon);
 		if (weaponTypes.IsEmpty())
-			return false;
+			return PrefabReadable(weapon);
 
 		foreach (string mount : attachTypes)
 		{
@@ -629,6 +632,27 @@ class RK29_KitCompose
 			s_mWeaponAttachTypeCache.Set(prefab, types);
 		}
 		return types;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Whether the prefab loads at all, so "declares no mounts" can be told apart from
+	//! "could not be read". Cached: the answer cannot change inside a session.
+	protected static bool PrefabReadable(ResourceName prefab)
+	{
+		bool readable;
+		if (s_mReadableCache.Find(prefab, readable))
+			return readable;
+
+		readable = false;
+		Resource res = Resource.Load(prefab);
+		if (res.IsValid())
+		{
+			IEntitySource src = res.GetResource().ToEntitySource();
+			readable = src != null;
+		}
+
+		s_mReadableCache.Set(prefab, readable);
+		return readable;
 	}
 
 	//--------------------------------------------------------------------------------------------
