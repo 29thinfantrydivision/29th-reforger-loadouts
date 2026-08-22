@@ -1,4 +1,4 @@
-GenericEntity : "{81EB948E6414BD6F}Prefabs/Weapons/Rifles/M14/Rifle_M21_ARTII.et" {
+GenericEntity : "{B31929F65F0D0279}Prefabs/Weapons/Rifles/M14/Rifle_M21.et" {
  ID "5254ACCA959048B9"
  components {
   WeaponComponent "{CFBAA4B706BA66E8}" {

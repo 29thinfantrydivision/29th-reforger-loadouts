@@ -204,19 +204,19 @@ class RK29_ItemAliasCatalog
 [BaseContainerProps(), BaseContainerCustomTitleField("m_sName")]
 class RK29_MagVariant
 {
-	[Attribute(desc: "Variant name used by MAG_* entries, e.g. tracer, ap, sniper", category: "29th")]
+	[Attribute(desc: "Variant name referenced by m_sVariant on a weapon ammo entry, e.g. tracer, ap", category: "29th")]
 	string m_sName;
 
 	[Attribute(desc: "Magazine/ammo prefab", params: "et", category: "29th")]
 	ResourceName m_sPrefab;
 }
 
-//! Variants per magazine well - a MAG_* entry with a variant resolves through the
-//! slot weapon's wells.
+//! Variants per magazine well - an ammo entry naming a variant resolves through the
+//! slot weapon's wells, so one declaration covers every weapon sharing that well.
 [BaseContainerProps(), BaseContainerCustomTitleField("m_sMagazineWell")]
 class RK29_MagazineSet
 {
-	[Attribute(desc: "MagazineWell class name, e.g. MagazineWellM16Stanag", category: "29th")]
+	[Attribute(desc: "MagazineWell class name, e.g. MagazineWellStanag556, MagazineWellAK545", category: "29th")]
 	string m_sMagazineWell;
 
 	[Attribute(desc: "Named variants", category: "29th")]
