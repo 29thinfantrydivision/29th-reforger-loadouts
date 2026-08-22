@@ -105,7 +105,7 @@ modded class SCR_GameModeEditor
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! "/kitmenu" chat fallback for the picker.
+	//! Registers the kit-authoring chat commands.
 	override void OnGameStart()
 	{
 		super.OnGameStart();
@@ -114,11 +114,7 @@ modded class SCR_GameModeEditor
 		if (!chatMgr)
 			return;
 
-		ChatCommandInvoker inv = chatMgr.GetCommandInvoker("kitmenu");
-		if (inv)
-			inv.Insert(RK29_OnChatKitMenu);
-
-		inv = chatMgr.GetCommandInvoker("kitdigest");
+		ChatCommandInvoker inv = chatMgr.GetCommandInvoker("kitdigest");
 		if (inv)
 			inv.Insert(RK29_OnChatKitDigest);
 
@@ -139,8 +135,8 @@ modded class SCR_GameModeEditor
 	//! Chat commands are dispatched entirely on the typing client - vanilla creates an invoker
 	//! for any name asked for and applies no permission model of its own. The kit diagnostics
 	//! are authoring tools (they spawn bodies, write files, flood the log), so they run on the
-	//! session's own machine only: Workbench or a listen host. /kitmenu is deliberately NOT
-	//! gated - it is the player-facing fallback for the picker key.
+	//! session's own machine only: Workbench or a listen host. The picker itself is not a
+	//! chat command at all - it is bound to F4 and gates itself on the round phase.
 	protected bool RK29_DiagAllowed()
 	{
 		if (Replication.IsServer())
@@ -158,12 +154,6 @@ modded class SCR_GameModeEditor
 		if (!RK29_DiagAllowed())
 			return;
 		RK29_KitValidate.Run();
-	}
-
-	//--------------------------------------------------------------------------------------------
-	protected void RK29_OnChatKitMenu(SCR_ChatPanel panel, string data)
-	{
-		RK29_KitPicker.ToggleFromChat();
 	}
 
 	//--------------------------------------------------------------------------------------------

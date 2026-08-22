@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------------------------
-//! Kit picker overlay, toggled by F4 (or /kitmenu). Workspace overlay, not a menu.
+//! Kit picker overlay, toggled by F4. Workspace overlay, not a menu.
 //------------------------------------------------------------------------------------------------
 
 class RK29_RowHandler : ScriptedWidgetEventHandler
@@ -184,13 +184,15 @@ class RK29_KitPicker
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! Deferred so the closing chat box does not eat the first click.
-	static void ToggleFromChat()
+	//! Local feedback for a refused open. Deliberately the popup and not the notification
+	//! log: that feed is keyed on ENotification values whose text lives in
+	//! Configs/Notifications/Notifications.conf and only arrives by RPC from the server,
+	//! while this refusal is decided entirely on the client and never leaves the machine.
+	protected void NotifyDisabled(string reason)
 	{
-		if (!s_Instance)
-			return;
-		Print("[RK29] toggle via CHAT", LogLevel.NORMAL);
-		GetGame().GetCallqueue().CallLater(s_Instance.Toggle, 100, false);
+		SCR_PopUpNotification popup = SCR_PopUpNotification.GetInstance();
+		if (popup)
+			popup.PopupMsg("Kit Menu currently disabled", 3, "Reason: " + reason);
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -203,12 +205,14 @@ class RK29_KitPicker
 		if (!mgr.IsPreround())
 		{
 			Print("[RK29] kit menu refused - not preround", LogLevel.NORMAL);
+			NotifyDisabled("kit selection is briefing only");
 			return;
 		}
 
 		if (RK29_KitHud.LocalFactionKey() == "")
 		{
 			Print("[RK29] kit menu refused - no faction yet", LogLevel.NORMAL);
+			NotifyDisabled("you have not joined a faction yet");
 			return;
 		}
 

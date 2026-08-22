@@ -340,6 +340,13 @@ Existing behavior plus, in rough priority order:
    kit). Options declaring `m_sWeaponVariantPrefab` or `m_aRequiredAttachments` are
    exempt - they swap the weapon or bring their own adapter. Same helper backs the
    bayonet gate, so the two can never disagree.
+   Fitment also honours obstruction, which the attachments themselves declare:
+   `SCR_WeaponAttachmentObstructionAttributes.m_aObstructedAttachmentTypes` on Bayonet_M9
+   names AttachmentUnderBarrelM203 / M203Carbine, and Bayonet_6Kh4 names
+   AttachmentUnderBarrelGP25. The test reads what is SEATED on the weapon (a slot with an
+   authored Prefab), never the slots it merely offers - an AK-74N advertises an empty GP-25
+   slot and must keep its bayonet, while a grenadier's rifle has a launcher in that slot
+   and loses it. No hand-maintained exception list.
 6. Weapon entries resolve to prefabs with `WeaponComponent`; item entries to prefabs
    with `InventoryItemComponent`; counts >= 1.
 7. Kit resolved-totals digest per kit for eyeballing after block surgery:
@@ -451,8 +458,8 @@ the old instead of leaving irons. Turns config mistakes cosmetic.
 Four chat commands, all server-side only (`Replication.IsServer()`): they run in Workbench
 or on a listen host and refuse for remote clients. Vanilla applies no permission model of
 its own - `GetCommandInvoker` mints an invoker for any name and dispatches on the typing
-client - so the gate is ours. `/kitmenu` is deliberately ungated; it is the player-facing
-fallback for the picker key and its outcome goes through the validated RPC.
+client - so the gate is ours. The picker is not a chat command: it is bound to F4, refuses
+outside preround, and its outcome goes through the validated RPC.
 
 | Command | Answers | Output |
 |---|---|---|

@@ -242,6 +242,8 @@ class RK29_KitCompose
 
 	protected static ref map<ResourceName, ref array<string>> s_mWeaponAttachTypeCache = new map<ResourceName, ref array<string>>();
 	protected static ref map<ResourceName, string> s_mItemAttachTypeCache = new map<ResourceName, string>();
+	protected static ref map<ResourceName, ref array<string>> s_mObstructedCache = new map<ResourceName, ref array<string>>();
+	protected static ref map<ResourceName, ref array<string>> s_mMountedCache = new map<ResourceName, ref array<string>>();
 
 	//--------------------------------------------------------------------------------------------
 	//! True when the weapon's prefab chain declares an attachment slot whose AttachmentType
@@ -272,7 +274,11 @@ class RK29_KitCompose
 			CollectAttachmentTypes(weapon, weaponTypes);
 			s_mWeaponAttachTypeCache.Set(weapon, weaponTypes);
 		}
-		return weaponTypes.Contains(itemType);
+		if (!weaponTypes.Contains(itemType))
+			return false;
+
+		// the lug existing is not the same as the lug being usable
+		return !AttachmentObstructed(weapon, item);
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -294,9 +300,129 @@ class RK29_KitCompose
 		foreach (string mount : attachTypes)
 		{
 			if (weaponTypes.Contains(mount))
-				return false;
+				return AttachmentObstructed(weapon, attachment);
 		}
 		return true;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! True when the game's own data says this attachment cannot sit on the weapon AS BUILT.
+	//! Attachments declare what blocks them - Bayonet_M9 lists AttachmentUnderBarrelM203 and
+	//! AttachmentUnderBarrelM203Carbine, Bayonet_6Kh4 lists AttachmentUnderBarrelGP25 - so a
+	//! grenadier's rifle rules its own bayonet out and nobody maintains a list of exceptions.
+	static bool AttachmentObstructed(ResourceName weapon, ResourceName attachment)
+	{
+		array<string> obstructedBy = s_mObstructedCache.Get(attachment);
+		if (!obstructedBy)
+		{
+			obstructedBy = {};
+			Resource res = Resource.Load(attachment);
+			if (res.IsValid())
+			{
+				IEntitySource src = res.GetResource().ToEntitySource();
+				if (src)
+				{
+					for (int i = 0, n = src.GetComponentCount(); i < n; i++)
+						WalkObstructedTypes(src.GetComponent(i), obstructedBy, 0);
+				}
+			}
+			s_mObstructedCache.Set(attachment, obstructedBy);
+		}
+		if (obstructedBy.IsEmpty())
+			return false;
+
+		array<string> mounted = MountedTypesOf(weapon);
+		foreach (string blocker : obstructedBy)
+		{
+			if (mounted.Contains(blocker))
+				return true;
+		}
+		return false;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Types of what is actually SEATED on the weapon by its prefab, not the slots it merely
+	//! offers. An AK-74N declares a GP-25 slot standing empty; the grenadier's rifle declares
+	//! the same slot with a launcher in it. Only the second obstructs anything.
+	protected static array<string> MountedTypesOf(ResourceName weapon)
+	{
+		array<string> types = s_mMountedCache.Get(weapon);
+		if (types)
+			return types;
+
+		types = {};
+		Resource res = Resource.Load(weapon);
+		if (res.IsValid())
+		{
+			IEntitySource src = res.GetResource().ToEntitySource();
+			if (src)
+			{
+				for (int i = 0, n = src.GetComponentCount(); i < n; i++)
+					WalkMountedTypes(src.GetComponent(i), types, 0);
+			}
+		}
+		s_mMountedCache.Set(weapon, types);
+		return types;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	protected static void WalkObstructedTypes(BaseContainer c, notnull array<string> outTypes, int depth)
+	{
+		if (!c || depth > 10)
+			return;
+
+		BaseContainerList blockers = c.GetObjectArray("m_aObstructedAttachmentTypes");
+		if (blockers)
+		{
+			for (int b = 0, nb = blockers.Count(); b < nb; b++)
+			{
+				BaseContainer blocker = blockers.Get(b);
+				if (blocker)
+					outTypes.Insert(blocker.GetClassName());
+			}
+		}
+
+		for (int i = 0, n = c.GetNumVars(); i < n; i++)
+		{
+			string varName = c.GetVarName(i);
+			if (varName == "m_aObstructedAttachmentTypes")
+				continue;
+			BaseContainer sub = c.GetObject(varName);
+			if (sub)
+				WalkObstructedTypes(sub, outTypes, depth + 1);
+			BaseContainerList list = c.GetObjectArray(varName);
+			if (!list)
+				continue;
+			for (int j = 0, m = list.Count(); j < m; j++)
+				WalkObstructedTypes(list.Get(j), outTypes, depth + 1);
+		}
+	}
+
+	//--------------------------------------------------------------------------------------------
+	protected static void WalkMountedTypes(BaseContainer c, notnull array<string> outTypes, int depth)
+	{
+		if (!c || depth > 10)
+			return;
+
+		ResourceName seated;
+		if (c.Get("Prefab", seated) && seated != ResourceName.Empty)
+		{
+			array<string> seatedTypes = AttachTypesOf(seated);
+			foreach (string t : seatedTypes)
+				outTypes.Insert(t);
+		}
+
+		for (int i = 0, n = c.GetNumVars(); i < n; i++)
+		{
+			BaseContainer sub = c.GetObject(c.GetVarName(i));
+			if (sub)
+				WalkMountedTypes(sub, outTypes, depth + 1);
+			BaseContainerList list = c.GetObjectArray(c.GetVarName(i));
+			if (!list)
+				continue;
+			for (int j = 0, m = list.Count(); j < m; j++)
+				WalkMountedTypes(list.Get(j), outTypes, depth + 1);
+		}
 	}
 
 	//--------------------------------------------------------------------------------------------
