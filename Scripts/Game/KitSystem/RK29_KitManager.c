@@ -484,10 +484,7 @@ class RK29_KitManager
 		}
 
 		// deploy menu shows "Current Kit" selected; spawn re-dresses from the stash
-		string identityKit = CurrentKitLoadoutName(kit.m_sFactionKey);
-		if (identityKit == "")
-			identityKit = kitName;
-		AssignIdentity_S(playerId, identityKit);
+		AssignIdentity_S(playerId, IdentityKitFor(kit.m_sFactionKey, kitName));
 
 		SCR_PlayerController spc = SCR_PlayerController.Cast(GetGame().GetPlayerManager().GetPlayerController(playerId));
 		if (spc)
@@ -513,12 +510,12 @@ class RK29_KitManager
 			RK29_KitStruct kit = m_mKits.Get(sel.m_sKitName);
 			SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(entity);
 			string current = CurrentLoadoutName(playerId);
-			// "Current Kit" spawns a placeholder body - always re-dress from the stash
-			// (EffectiveKitName's faction guard applies); a stock kit picked in the
-			// deploy menu only needs its stashed deltas. Stock spawns are NEVER mutated.
-			bool wantsApply = (IsCurrentKitLoadoutName(current) && EffectiveKitName(playerId) == sel.m_sKitName)
-				|| (current == sel.m_sKitName
-					&& (sel.m_sWeapon != ResourceName.Empty || sel.m_sOptic != ResourceName.Empty));
+			// "Current Kit" spawns a placeholder body and is the ONLY entry that re-dresses
+			// from the stash (EffectiveKitName's faction guard applies). Picking any other
+			// entry is a request for that loadout as authored - including the stock entry for
+			// the very class the stash was taken from, which used to quietly come back wearing
+			// the stashed weapon and optic. Stock spawns are NEVER mutated.
+			bool wantsApply = IsCurrentKitLoadoutName(current) && EffectiveKitName(playerId) == sel.m_sKitName;
 			if (kit && character && wantsApply)
 			{
 				RK29_ClassSetup cls = m_Setup.FindClass(sel.m_sKitName);
@@ -757,11 +754,25 @@ class RK29_KitManager
 		if (!kit)
 			return;
 
-		string identityKit = CurrentKitLoadoutName(kit.m_sFactionKey);
-		if (identityKit == "")
-			identityKit = sel.m_sKitName;
-		AssignIdentity_S(playerId, identityKit);
+		AssignIdentity_S(playerId, IdentityKitFor(kit.m_sFactionKey, sel.m_sKitName));
 		Recompute_S();
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Loadout to record the player under after a kit apply. Normally the faction's
+	//! "Current Kit" entry, which is what makes the stash survive a respawn. Without one we
+	//! fall back to the stock entry for the kit - the player keeps the right class, but only
+	//! "Current Kit" re-dresses on spawn, so the stash is lost on death. Loud, because the
+	//! cause is a missing roster entry and the symptom shows up a death later.
+	protected string IdentityKitFor(string factionKey, string kitName)
+	{
+		string identityKit = CurrentKitLoadoutName(factionKey);
+		if (identityKit != "")
+			return identityKit;
+
+		Print("[RK29] config WARNING - faction '" + factionKey + "' has no Current Kit loadout;"
+			+ " customization will not survive respawn", LogLevel.WARNING);
+		return kitName;
 	}
 
 	//--------------------------------------------------------------------------------------------

@@ -28,6 +28,14 @@ modded class SCR_PlayerLoadoutComponent
 		}
 
 		AssignLoadout_S(loadoutIndex);
+
+		// AssignLoadout_S only writes the SERVER's m_Loadout, and that field is not replicated -
+		// the owner learns its assigned loadout solely from this response RPC. Skipping it leaves
+		// the deploy menu reading a stale GetAssignedLoadout(): it believes the player already
+		// holds some other kit, so it never re-requests one. The player picks a kit, the server
+		// never hears about it, and spawns whatever WE last assigned. Unlock() on a lock we never
+		// took is a no-op, so borrowing the vanilla responder costs nothing.
+		SendRequestLoadoutResponse_S(loadoutIndex, true);
 		return true;
 	}
 }
