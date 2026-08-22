@@ -77,10 +77,12 @@ class RK29_KitApply
 		array<ResourceName> quickSlotPrefabs = {};
 		CaptureQuickSlots(character, quickSlotPrefabs);
 
-		// same-prefab WEAPONS are kept in place (loaded mag, attachments); garments are
-		// always replaced wholesale - see ReplaceClothing.
-		map<int, IEntity> keptWeapons = new map<int, IEntity>();
-		StripWeapons(manager, weaponStorage, kit, keptWeapons);
+		// weapons are replaced wholesale, like garments. Carrying one over would carry its
+		// state over too: a part-used magazine, and worse, an empty chamber - the engine
+		// exposes IsCurrentBarrelChambered and ClearChamber but no way to SEAT a round, so
+		// a kept weapon can end up full-mag-but-unchambered with no way back. A fresh spawn
+		// is always in its authored state.
+		StripWeapons(manager, weaponStorage);
 		StripGrenadeSlots(manager, character, kit);
 
 		// strip BEFORE clothing (while only old gear is on the body), then swap clothing
@@ -96,7 +98,7 @@ class RK29_KitApply
 		CensusRemaining(manager, character);
 		DressEquipment(manager, character, kit);
 
-		IEntity primaryWeapon = DressWeapons(manager, weaponStorage, kit, keptWeapons);
+		IEntity primaryWeapon = DressWeapons(manager, weaponStorage, kit);
 		DressItems(manager, weaponStorage, character, kit, droppedItems);
 
 		// optic last - weapon must be fully spawned
@@ -267,7 +269,7 @@ class RK29_KitApply
 
 	//--------------------------------------------------------------------------------------------
 	//! Deletes weapons the kit doesn't reuse; same-prefab ones stay, keyed by kit slot.
-	protected static void StripWeapons(SCR_InventoryStorageManagerComponent manager, EquipedWeaponStorageComponent weaponStorage, RK29_KitStruct kit, notnull map<int, IEntity> outKept)
+	protected static void StripWeapons(SCR_InventoryStorageManagerComponent manager, EquipedWeaponStorageComponent weaponStorage)
 	{
 		if (!weaponStorage)
 			return;
@@ -279,24 +281,6 @@ class RK29_KitApply
 				continue;
 			IEntity item = slot.GetAttachedEntity();
 			if (!item)
-				continue;
-
-			ResourceName prefab;
-			EntityPrefabData epd = item.GetPrefabData();
-			if (epd)
-				prefab = epd.GetPrefabName();
-
-			bool kept = false;
-			foreach (int kitSlot, ResourceName wanted : kit.m_mWeapons)
-			{
-				if (wanted == prefab && !outKept.Contains(kitSlot))
-				{
-					outKept.Set(kitSlot, item);
-					kept = true;
-					break;
-				}
-			}
-			if (kept)
 				continue;
 
 			if (!manager.TryDeleteItem(item))
@@ -353,7 +337,7 @@ class RK29_KitApply
 	//! occupies a storage slot anywhere on the body dies here and DressX rebuilds from config.
 	//! Skipped storage domains:
 	//!  - garment slots (ReplaceClothing) and weapon slots (StripWeapons/DressWeapons)
-	//!  - storages on weapons (kept weapons keep their mags/attachments)
+	//!  - storages on weapons (a weapon's own mags/attachments are its business)
 	//!  - the character's managed equipment storage (DressEquipment delta-swaps it)
 	//!  - medical/identity storages (applied tourniquets, dogtags - never ours to touch)
 	//! Kept occupants: containers (pouches, suspenders, buttpacks - capacity, emptied via
@@ -381,7 +365,7 @@ class RK29_KitApply
 			if (IsManagedEquipmentStorage(storage, character))
 				continue; // watch/binoculars - DressEquipment delta-swaps these
 			if (IsOnWeapon(storage))
-				continue; // kept weapons keep their mags and attachments
+				continue; // a weapon owns its mags and attachments
 
 			// collect first, delete after: universal storages reshuffle their slot list on
 			// removal, so deleting while indexing skips survivors (log-proven: one item
@@ -446,7 +430,7 @@ class RK29_KitApply
 			if (!item || item.FindComponent(WeaponComponent))
 				continue;
 			if (IsInsideWeapon(item))
-				continue; // kept weapons keep their loaded mags/attachments
+				continue; // a weapon owns its loaded mags/attachments
 
 			string where = "no-slot";
 			InventoryItemComponent iic = InventoryItemComponent.Cast(item.FindComponent(InventoryItemComponent));
@@ -748,8 +732,8 @@ class RK29_KitApply
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! Returns the primary weapon (kept or spawned) for the optic pass.
-	protected static IEntity DressWeapons(SCR_InventoryStorageManagerComponent manager, EquipedWeaponStorageComponent weaponStorage, RK29_KitStruct kit, notnull map<int, IEntity> kept)
+	//! Returns the spawned primary weapon for the optic pass.
+	protected static IEntity DressWeapons(SCR_InventoryStorageManagerComponent manager, EquipedWeaponStorageComponent weaponStorage, RK29_KitStruct kit)
 	{
 		if (!weaponStorage)
 		{
@@ -757,12 +741,9 @@ class RK29_KitApply
 			return null;
 		}
 
-		IEntity primary = kept.Get(0);
+		IEntity primary;
 		foreach (int slotIdx, ResourceName prefab : kit.m_mWeapons)
 		{
-			if (kept.Contains(slotIdx))
-				continue;
-
 			int targetSlot = slotIdx;
 			if (slotIdx == RK29_KitStruct.GRENADE_SLOT)
 				targetSlot = -1;
