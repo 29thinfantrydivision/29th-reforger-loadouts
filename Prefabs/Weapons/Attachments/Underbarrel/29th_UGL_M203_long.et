@@ -1,0 +1,8 @@
+GenericEntity : "{43FDAF3FA0FF2299}Prefabs/Weapons/Attachments/Underbarrel/UGL_M203_long.et" {
+ ID "AB29C0FFEE29D103"
+ components {
+  MuzzleInMagComponent "{B3A264F493CC5A18}" {
+   AmmoTemplate "{5375FA7CB1F68573}Prefabs/Weapons/Ammo/Ammo_Grenade_HE_M406.et"
+  }
+ }
+}
