@@ -333,6 +333,15 @@ class RK29_KitCompose
 				rounds = 1;
 
 			RK29_KitItemBatch batch = new RK29_KitItemBatch();
+
+			// Without this every magazine in the mod reached the placement solver with no
+			// opinion at all, which let the "start a stack where all of it fits" rule pull small
+			// stacks into the biggest container - pistol magazines in the backpack while the
+			// pockets sat empty. Declared on the weapon because a pistol magazine belongs in the
+			// same place whichever of the nine kits is carrying the pistol.
+			if (def && def.m_aPreferredContainers && !def.m_aPreferredContainers.IsEmpty())
+				batch.m_aPreferred = def.m_aPreferredContainers;
+
 			for (int i = 0; i < rounds; i++)
 				batch.m_aPrefabs.Insert(round);
 			kit.m_aItems.Insert(batch);

@@ -85,6 +85,9 @@ class RK29_WeaponDef
 
 	[Attribute(desc: "Ammo types this weapon can field", category: "29th")]
 	ref array<ref RK29_WeaponAmmoDef> m_aAmmo;
+
+	[Attribute(desc: "Where THIS WEAPON'S magazines should go, best first - same tokens as an item's preferred containers (uniform, trouser, rig, pack, or part of a container name). Anything left off the list is still used, but only once everything listed is full: leaving \"pack\" off is how a magazine ends up in the backpack last rather than first", category: "29th")]
+	ref array<string> m_aPreferredContainers;
 }
 
 //------------------------------------------------------------------------------------------------
