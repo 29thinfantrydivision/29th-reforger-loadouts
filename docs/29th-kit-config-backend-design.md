@@ -213,7 +213,7 @@ Kits/<faction>/<faction>_<kit>.conf  // : base_<role>. Carries the slot-0 primar
 ```
 
 Roles: rifleman, automatic_rifleman, machine_gunner, grenadier, light_antitank,
-sniper (US Sniper + USSR Sharpshooter pair), crewman, squad_leader. Bayonets were
+sniper (US Sniper + USSR Sharpshooter pair), crewman, leadership. Bayonets were
 normalized in the role bases (either side had one -> both get one; previously only
 USSR kits + US Crewman carried them — authoring oversight flagged 2026-08-20; veto =
 delete the bayonet entry in the role base), so /kitcompare will report the US kits'
@@ -370,7 +370,7 @@ the old instead of leaving irons. Turns config mistakes cosmetic.
 ## 9. Display names & ordering (already landed, config backend must preserve)
 
 - Class display standard: Rifleman / Machine Gunner / Anti-Tank (LAT) / Grenadier
-  / Sniper (incl. Sharpshooter) / Squad Leader / Crewman.
+  / Sniper (incl. Sharpshooter) / Leadership / Crewman.
 - Side-config class order drives both HUD and picker order; label aggregation sums kits
   sharing a display name (AR + legacy MG under "Machine Gunner").
 - Weapon/optic labels: config `m_sDisplayName` override first, else in-game name

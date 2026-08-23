@@ -15,7 +15,7 @@
 >   phase), height sizes to content, **zero-count rows are hidden**, row order follows
 >   the side-config class order. Display names standard: Rifleman / Machine Gunner
 >   (AR + legacy MG merged) / Anti-Tank (LAT) / Grenadier / Sniper (incl.
->   Sharpshooter) / Squad Leader / Crewman.
+>   Sharpshooter) / Leadership / Crewman.
 > - **Weapon choice = kit choice:** M60/PKM route to the Machine Gunner kits via
 >   `m_sSourceKitName` (rig, backpack, sidearm, ammo all correct; truthful identity,
 >   respawn, spectator icon).

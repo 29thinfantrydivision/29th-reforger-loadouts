@@ -27,8 +27,8 @@ m_sComposition lines per kit (paste into RK29_Side_*.conf class entries)
 ### 29th_USSR__Sharpshooter
    m_sComposition "{AB29C0FFEE29B02E}Configs/KitSystem/Kits/USSR/sharpshooter.conf"
 
-### 29th_USSR__Squad_Leader
-   m_sComposition "{AB29C0FFEE29B031}Configs/KitSystem/Kits/USSR/squad_leader.conf"
+### 29th_USSR__Leadership
+   m_sComposition "{AB29C0FFEE29B031}Configs/KitSystem/Kits/USSR/ussr_leadership.conf"
 
 ### 29th_US__Automatic_Rifleman
    m_sComposition "{AB29C0FFEE29B01B}Configs/KitSystem/Kits/US/automatic_rifleman.conf"
@@ -51,5 +51,5 @@ m_sComposition lines per kit (paste into RK29_Side_*.conf class entries)
 ### 29th_US__Sniper
    m_sComposition "{AB29C0FFEE29B02D}Configs/KitSystem/Kits/US/sniper.conf"
 
-### 29th_US__Squad_Leader
-   m_sComposition "{AB29C0FFEE29B030}Configs/KitSystem/Kits/US/squad_leader.conf"
+### 29th_US__Leadership
+   m_sComposition "{AB29C0FFEE29B030}Configs/KitSystem/Kits/US/us_leadership.conf"
