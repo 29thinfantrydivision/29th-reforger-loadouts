@@ -89,6 +89,49 @@ class RK29_KitPicker
 		s_bLocalStash = true;
 		s_sLocalStashKit = kitName;
 		s_sLocalStashOptic = optic;
+
+		// The mannequin is built from GetLoadoutResource(), which reads the values just set -
+		// but nothing in the deploy menu watches for a loadout changing underneath it. It only
+		// re-previews on spawn-point and supply-cost changes, so picking a kit while dead leaves
+		// the old body on display. This is the confirmation coming back from the server, so the
+		// stash is current by now and the preview can be rebuilt against it.
+		RefreshDeployPreview();
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Deferred by a frame, matching the deploy menu's own idiom for this call.
+	protected static void RefreshDeployPreview()
+	{
+		if (!IsDeployMenuOpen())
+			return;
+		GetGame().GetCallqueue().CallLater(RefreshDeployPreviewNow, 0, false);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! "LoadoutSelector" is the widget name SCR_DeployMenuHandler looks the component up by; it
+	//! is an attribute default, so a custom deploy layout could rename it - hence the quiet
+	//! bail rather than an error. Losing the refresh costs a stale preview, nothing more.
+	protected static void RefreshDeployPreviewNow()
+	{
+		MenuManager mm = GetGame().GetMenuManager();
+		if (!mm)
+			return;
+		MenuBase menu = mm.FindMenuByPreset(ChimeraMenuPreset.RespawnSuperMenu);
+		if (!menu)
+			return;
+		Widget root = menu.GetRootWidget();
+		if (!root)
+			return;
+		Widget holder = root.FindAnyWidget("LoadoutSelector");
+		if (!holder)
+			return;
+		SCR_LoadoutRequestUIComponent comp = SCR_LoadoutRequestUIComponent.Cast(
+			holder.FindHandler(SCR_LoadoutRequestUIComponent));
+		if (!comp)
+			return;
+
+		// rebuilds the mannequin, moves the gallery selection and updates the name label
+		comp.RefreshLoadoutPreview();
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -109,6 +152,14 @@ class RK29_KitPicker
 
 		im.RemoveActionListener("RK29_ToggleKitMenu", EActionTrigger.DOWN, OnToggleStatic);
 		im.AddActionListener("RK29_ToggleKitMenu", EActionTrigger.DOWN, OnToggleStatic);
+
+		// same Remove-then-Insert discipline: this runs again on scenario change
+		SCR_PlayerController pc = SCR_PlayerController.Cast(GetGame().GetPlayerController());
+		if (pc && s_Instance)
+		{
+			pc.m_OnControlledEntityChanged.Remove(s_Instance.OnLocalEntityChanged);
+			pc.m_OnControlledEntityChanged.Insert(s_Instance.OnLocalEntityChanged);
+		}
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -144,6 +195,7 @@ class RK29_KitPicker
 	//--------------------------------------------------------------------------------------------
 	protected void OnDialogClosed()
 	{
+		GetGame().GetCallqueue().Remove(WatchDeployMenu);
 		m_Dialog = null;
 		m_wRoot = null;
 		m_aHandlers.Clear();
@@ -196,39 +248,121 @@ class RK29_KitPicker
 	}
 
 	//--------------------------------------------------------------------------------------------
+	//! A body we control and that is not a corpse. Everything else - no body yet, dead body,
+	//! spectator camera - counts as not alive.
+	protected static bool IsLocalAlive()
+	{
+		PlayerController pc = GetGame().GetPlayerController();
+		if (!pc)
+			return false;
+		SCR_ChimeraCharacter body = SCR_ChimeraCharacter.Cast(pc.GetControlledEntity());
+		if (!body)
+			return false;
+		CharacterControllerComponent ctrl = body.GetCharacterController();
+		return ctrl && !ctrl.IsDead();
+	}
+
+	//--------------------------------------------------------------------------------------------
+	protected static bool IsDeployMenuOpen()
+	{
+		MenuManager mm = GetGame().GetMenuManager();
+		return mm && mm.FindMenuByPreset(ChimeraMenuPreset.RespawnSuperMenu) != null;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! True between pressing Deploy and the world finishing streaming in around the spawn.
+	//! Best-effort: a game mode registers one request component per spawn type and we read the
+	//! first, so an exotic spawn type may not report. The respawn auto-close covers that case.
+	protected static bool IsLocalPreloading()
+	{
+		PlayerController pc = GetGame().GetPlayerController();
+		if (!pc)
+			return false;
+		SCR_SpawnRequestComponent req = SCR_SpawnRequestComponent.Cast(pc.FindComponent(SCR_SpawnRequestComponent));
+		return req && req.IsPreloading();
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! The body arrived (or was taken away). Either way the reason the menu was open is gone,
+	//! and leaving it up over a spawning character is exactly the state we refuse to open in.
+	protected void OnLocalEntityChanged(IEntity from, IEntity to)
+	{
+		CloseMenu();
+	}
+
+
+	//--------------------------------------------------------------------------------------------
+	//! While open WITHOUT a live body, the deploy menu is the thing keeping us legal. Runs for
+	//! the whole life of the dialog, not just when it was opened dead, because dying with the
+	//! picker up lands you in exactly that state without any open/close of ours in between.
+	//!
+	//! Covers three exits with one check: deploying (body arrives), dropping into the spectator
+	//! camera (deploy menu goes away), and dying while it is open (body goes away). The
+	//! controlled-entity hook only catches the first of those.
+	protected void WatchDeployMenu()
+	{
+		if (!m_Dialog)
+			return;
+		if (!IsLocalAlive() && !IsDeployMenuOpen())
+		{
+			Print("[RK29] kit menu closed - no live body and no deploy menu", LogLevel.NORMAL);
+			CloseMenu();
+			return;
+		}
+		GetGame().GetCallqueue().CallLater(WatchDeployMenu, 500, false);
+	}
+
+	//--------------------------------------------------------------------------------------------
 	void Open()
 	{
 		RK29_KitManager mgr = RK29_KitManager.GetInstance();
 		if (!mgr)
 			return;
 
-		if (!mgr.IsPreround())
+		// Two ways in, and they are gated differently. ALIVE is a live re-kit and stays
+		// briefing-only. DEAD is a request for the NEXT body: the server stashes it and assigns
+		// "Current Kit" without touching anything, so it is safe at any point in the round.
+		if (IsLocalAlive())
 		{
-			Print("[RK29] kit menu refused - not preround", LogLevel.NORMAL);
-			NotifyDisabled("kit selection is briefing only");
-			return;
-		}
+			// LocalFactionKey falls back to the controlled entity's affiliation, so a corpse or
+			// no body at all reads as factionless. Only worth refusing over while alive.
+			if (RK29_KitHud.LocalFactionKey() == "")
+			{
+				Print("[RK29] kit menu refused - no faction yet", LogLevel.NORMAL);
+				NotifyDisabled("you have not joined a faction yet");
+				return;
+			}
 
-		if (RK29_KitHud.LocalFactionKey() == "")
-		{
-			Print("[RK29] kit menu refused - no faction yet", LogLevel.NORMAL);
-			NotifyDisabled("you have not joined a faction yet");
-			return;
+			if (!mgr.IsPreround())
+			{
+				Print("[RK29] kit menu refused - not preround", LogLevel.NORMAL);
+				NotifyDisabled("kit selection is briefing only");
+				return;
+			}
 		}
-
-		// Refusing beats racing. Applying a kit to a body that is not finished arriving is how
-		// the strip-then-dress pass ends up fighting whatever lands next; the server still
-		// defers such an apply, but a player who is told "not yet" and presses again a second
-		// later never creates the situation in the first place.
-		PlayerController localPc = GetGame().GetPlayerController();
-		SCR_ChimeraCharacter body;
-		if (localPc)
-			body = SCR_ChimeraCharacter.Cast(localPc.GetControlledEntity());
-		if (!body || !body.GetCharacterController())
+		else
 		{
-			Print("[RK29] kit menu refused - no controllable body yet", LogLevel.NORMAL);
-			NotifyDisabled("you are still spawning in");
-			return;
+			// The deploy menu being open is what separates "dead, choosing my next kit" from
+			// "in the spectator camera". Spectator is entered FROM the deploy menu, so the menu
+			// is closed by then and this refuses without the mod needing to know spectator exists.
+			//
+			// Silent on purpose: the same condition covers the moment between dying and the deploy
+			// menu appearing, where a popup would be scolding the player for good timing.
+			if (!IsDeployMenuOpen())
+			{
+				Print("[RK29] kit menu refused - dead and not in the deploy menu", LogLevel.NORMAL);
+				return;
+			}
+
+			// Deploy pressed, world streaming in. The body is moments away and the menu would be
+			// torn down under the player anyway - and this is the one place IsPreloading() is not
+			// already false, since spawn finalization is what waits on it.
+			if (IsLocalPreloading())
+			{
+				Print("[RK29] kit menu refused - spawn preloading", LogLevel.NORMAL);
+				NotifyDisabled("you are spawning in");
+				return;
+			}
 		}
 
 		m_Dialog = SCR_ConfigurableDialogUi.CreateFromPreset(DIALOGS_CONF, "kitpicker");
@@ -241,6 +375,8 @@ class RK29_KitPicker
 		m_Dialog.m_OnClose.Insert(OnDialogClosed);
 		m_Dialog.m_OnConfirm.Insert(OnApplyConfirm);
 		BindWidgets(m_Dialog.GetRootWidget());
+
+		WatchDeployMenu();
 	}
 
 	// ============================================================================== building
