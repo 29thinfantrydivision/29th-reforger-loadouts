@@ -503,9 +503,9 @@ RPK's 17. Two files, neither able to state the truth alone.
 Catalogs/RK29_Weapons.conf     a weapon: prefab, display name, its ammo ALIAS table
                                ("belt" is one magazine on an M249, another on a PKM)
 
-roster class option            m_sWeapon "m60" · m_iSlotIndex 0
-                               m_aAmmo   { belt x4 }
-                               m_aBlocks { gear_m60 }
+composition weapon option      m_sWeapon "pkmn"
+                               m_aAmmo   { x4 }
+                               m_aBlocks { gear_pkm }
 
 composition weapon entry       m_iSlotIndex 2 · m_sAlias "handgun"
                                m_aAmmo   { x2 }
