@@ -1,5 +1,5 @@
 MetaFileClass {
- Name "{AB29C0FFEE29B101}Configs/KitSystem/Blocks/USSR/ussr_dress.conf"
+ Name "{AB29C0FFEE29B100}Configs/KitSystem/Blocks/Common/dress.conf"
  Configurations {
   CONFResourceClass PC {
   }
