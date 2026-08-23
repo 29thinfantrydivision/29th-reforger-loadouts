@@ -369,7 +369,7 @@ the old instead of leaving irons. Turns config mistakes cosmetic.
 
 ## 9. Display names & ordering (already landed, config backend must preserve)
 
-- Class display standard: Rifleman / Machine Gunner / Combat Engineer (LAT) / Grenadier
+- Class display standard: Rifleman / Machine Gunner / Anti-Tank (LAT) / Grenadier
   / Sniper (incl. Sharpshooter) / Squad Leader / Crewman.
 - Side-config class order drives both HUD and picker order; label aggregation sums kits
   sharing a display name (AR + legacy MG under "Machine Gunner").
