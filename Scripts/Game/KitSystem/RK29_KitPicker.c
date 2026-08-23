@@ -216,6 +216,21 @@ class RK29_KitPicker
 			return;
 		}
 
+		// Refusing beats racing. Applying a kit to a body that is not finished arriving is how
+		// the strip-then-dress pass ends up fighting whatever lands next; the server still
+		// defers such an apply, but a player who is told "not yet" and presses again a second
+		// later never creates the situation in the first place.
+		PlayerController localPc = GetGame().GetPlayerController();
+		SCR_ChimeraCharacter body;
+		if (localPc)
+			body = SCR_ChimeraCharacter.Cast(localPc.GetControlledEntity());
+		if (!body || !body.GetCharacterController())
+		{
+			Print("[RK29] kit menu refused - no controllable body yet", LogLevel.NORMAL);
+			NotifyDisabled("you are still spawning in");
+			return;
+		}
+
 		m_Dialog = SCR_ConfigurableDialogUi.CreateFromPreset(DIALOGS_CONF, "kitpicker");
 		if (!m_Dialog)
 		{

@@ -465,10 +465,11 @@ class RK29_KitManager
 			float bodyAge = 999999;
 			if (m_mSpawnAt_S.Find(playerId, spawnAt))
 				bodyAge = GetGame().GetWorld().GetWorldTime() - spawnAt;
-			if (bodyAge < 700)
+			int gen = BumpApplyGen(playerId);
+			if (bodyAge < SPAWN_SETTLE_MS)
 			{
 				Print("[RK29] apply deferred - body is " + bodyAge.ToString() + "ms old (item-init race)", LogLevel.NORMAL);
-				GetGame().GetCallqueue().CallLater(ApplySpawnMutation, 700 - bodyAge, false, playerId, edited, applyOptic, mounts);
+				GetGame().GetCallqueue().CallLater(ApplySpawnMutation, SPAWN_SETTLE_MS - bodyAge, false, playerId, gen, edited, applyOptic, mounts);
 			}
 			else
 			{
@@ -495,7 +496,32 @@ class RK29_KitManager
 
 	//--------------------------------------------------------------------------------------------
 	//! Applies the stashed customization onto a freshly spawned body.
+	//! Stock loadout items land async after the spawn frame. Dressing a body younger than this
+	//! strips an empty body and the stock items then land on top of the kit - mass duplicates.
+	//! ONE number, used by both the spawn path and the live-apply path; they used to disagree
+	//! (500 vs 700) with the spawn path on the unsafe side.
+	//!
+	//! KNOWN TOO SHORT - the real wait is much longer in practice. Not yet raised because the
+	//! right value is not a guess: see RK29_Log's settle trace before changing this.
+	protected static const int SPAWN_SETTLE_MS = 700;
+
 	protected ref map<int, float> m_mSpawnAt_S = new map<int, float>();
+
+	//! Bumped on every spawn and every apply. A deferred mutation carries the value it was
+	//! scheduled under and abandons itself if it is no longer current - so a stale snapshot
+	//! cannot dress a body that has since respawned, and two applies inside the settle window
+	//! do not both run.
+	protected ref map<int, int> m_mApplyGen_S = new map<int, int>();
+
+	//--------------------------------------------------------------------------------------------
+	protected int BumpApplyGen(int playerId)
+	{
+		int gen;
+		m_mApplyGen_S.Find(playerId, gen);
+		gen++;
+		m_mApplyGen_S.Set(playerId, gen);
+		return gen;
+	}
 
 	void OnPlayerSpawned_S(int playerId, IEntity entity)
 	{
@@ -503,6 +529,10 @@ class RK29_KitManager
 			return;
 
 		m_mSpawnAt_S.Set(playerId, GetGame().GetWorld().GetWorldTime());
+
+		// EVERY spawn, not just a kitted one: a mutation queued against the previous body must
+		// not find itself still current and dress the new one.
+		BumpApplyGen(playerId);
 
 		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
 		if (sel)
@@ -524,7 +554,8 @@ class RK29_KitManager
 				array<ResourceName> mounts;
 				ResolveSelection(kit, cls, sel, edited, applyOptic, mounts);
 				// deferred: InitialInventoryItems land async on the spawn frame
-				GetGame().GetCallqueue().CallLater(ApplySpawnMutation, 500, false, playerId, edited, applyOptic, mounts);
+				GetGame().GetCallqueue().CallLater(ApplySpawnMutation, SPAWN_SETTLE_MS, false, playerId,
+					BumpApplyGen(playerId), edited, applyOptic, mounts);
 			}
 		}
 
@@ -532,8 +563,14 @@ class RK29_KitManager
 	}
 
 	//--------------------------------------------------------------------------------------------
-	protected void ApplySpawnMutation(int playerId, RK29_KitStruct edited, ResourceName optic, array<ResourceName> mounts)
+	protected void ApplySpawnMutation(int playerId, int gen, RK29_KitStruct edited, ResourceName optic, array<ResourceName> mounts)
 	{
+		// a newer spawn or a newer apply has happened since this was queued - that one owns the
+		// body now, and this snapshot would dress it with something the player has moved on from
+		int current;
+		if (!m_mApplyGen_S.Find(playerId, current) || current != gen)
+			return;
+
 		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(GetGame().GetPlayerManager().GetPlayerControlledEntity(playerId));
 		if (!character || !character.GetCharacterController() || character.GetCharacterController().IsDead())
 			return;
@@ -707,6 +744,8 @@ class RK29_KitManager
 
 		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
 		m_mSelections.Remove(playerId);
+		m_mSpawnAt_S.Remove(playerId);
+		m_mApplyGen_S.Remove(playerId);
 		if (sel && sel.m_sIdentityUid != "")
 			m_mParkedSelections.Set(sel.m_sIdentityUid, sel);
 

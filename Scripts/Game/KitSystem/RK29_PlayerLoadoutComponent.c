@@ -33,9 +33,18 @@ modded class SCR_PlayerLoadoutComponent
 		// the owner learns its assigned loadout solely from this response RPC. Skipping it leaves
 		// the deploy menu reading a stale GetAssignedLoadout(): it believes the player already
 		// holds some other kit, so it never re-requests one. The player picks a kit, the server
-		// never hears about it, and spawns whatever WE last assigned. Unlock() on a lock we never
-		// took is a no-op, so borrowing the vanilla responder costs nothing.
-		SendRequestLoadoutResponse_S(loadoutIndex, true);
+		// never hears about it, and spawns whatever WE last assigned.
+		//
+		// But ONLY when nothing is in flight. The spawn lock is a set keyed by source, and every
+		// vanilla lock/unlock uses this same component as that source - so the responder would
+		// release a pending request's lock along with ours and answer the owner for a request it
+		// never made. A player reconnecting into the deploy menu is exactly that case. When a
+		// request IS pending, its own response carries the truth to the client moments later,
+		// and whichever assignment lands last is the one the player asked for.
+		SCR_SpawnLockComponent lock = GetLock();
+		if (!lock || (!lock.IsLocked(true) && !lock.IsLocked(false)))
+			SendRequestLoadoutResponse_S(loadoutIndex, true);
+
 		return true;
 	}
 }
