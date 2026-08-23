@@ -36,6 +36,29 @@ class RK29_KitApply
 		s_mPlanCache.Clear();
 	}
 
+	//! Items that DID find a home, but only by displacing something else or by falling
+	//! through to "anywhere it fits". A kit can report zero drops and still be over-stuffed;
+	//! this is the difference between "nothing hit the floor" and "everything has a home".
+	//! Valid until the next Apply.
+	protected static ref array<ResourceName> s_aCrammed = {};
+
+	//! "PaperMap_01.et -> Pants_US_BDU.et#0" for the last Apply. The audit needs to know where
+	//! the solver BELIEVED it put an item, because "solver sent it to the trousers" and "the
+	//! trousers refused it" are different bugs from "the solver never considered the pack".
+	protected static ref array<string> s_aLastSent = {};
+
+	//--------------------------------------------------------------------------------------------
+	static array<string> LastSent()
+	{
+		return s_aLastSent;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	static array<ResourceName> LastCrammed()
+	{
+		return s_aCrammed;
+	}
+
 	//--------------------------------------------------------------------------------------------
 	//! Re-dress character as kit, then attach mounts + optic (empty = irons). False only on
 	//! hard failure. `mounts` seats before the optic; weapon-variant optics never reach here
@@ -362,7 +385,16 @@ class RK29_KitApply
 				|| SCR_SalineStorageComponent.Cast(storage)
 				|| SCR_TourniquetStorageComponent.Cast(storage))
 				continue; // body state (applied tourniquets, dogtags), not loadout
-			if (IsManagedEquipmentStorage(storage, character))
+			// Nothing owned by the CHARACTER ENTITY is cargo. Real cargo lives in worn garments,
+			// which are separate entities - the character's own storages are the hands and the
+			// gadget/offhand slot, which report a capacity of 1 and accept anything offered.
+			// ChooseContainer scored them like any other container and happily sent the map,
+			// compass, bandages and morphine there; capacity 1 means each new item displaced the
+			// last, so all but one silently disappeared, and whatever survived got taken into the
+			// left hand on spawn. That is the auto-equipped compass. Slots on WORN GEAR (the
+			// suspender flashlight strap, a bayonet scabbard) are owned by the garment, so this
+			// leaves them alone.
+			if (storage.GetOwner() == character)
 				continue; // watch/binoculars - DressEquipment delta-swaps these
 			if (IsOnWeapon(storage))
 				continue; // a weapon owns its mags and attachments
@@ -776,7 +808,7 @@ class RK29_KitApply
 		// primed one, and that slot is free capacity (prevents pouch overfill). Frags
 		// first to mirror authored priming; the sniper's smoke-primed kit still works
 		// because its only grenades ARE smokes.
-		PrimeGrenadeSlot(manager, weaponStorage, character, kit);
+		ResourceName primed = PrimeGrenadeSlot(manager, weaponStorage, character, kit);
 
 		array<BaseInventoryStorageComponent> containers = {};
 		array<int> slotIds = {};
@@ -787,15 +819,25 @@ class RK29_KitApply
 		array<ResourceName> items = {};
 		array<string> hints = {};
 		array<ref array<string>> prefs = {};
+		bool primedSkipped = primed == ResourceName.Empty;
 		foreach (RK29_KitItemBatch batch : kit.m_aItems)
 		{
 			foreach (ResourceName item : batch.m_aPrefabs)
 			{
+				// exactly one copy: the one already riding the throwable slot
+				if (!primedSkipped && item == primed)
+				{
+					primedSkipped = true;
+					continue;
+				}
 				items.Insert(item);
 				hints.Insert(batch.m_sTargetHint);
 				prefs.Insert(batch.m_aPreferred);
 			}
 		}
+
+		s_aCrammed.Clear();
+		s_aLastSent.Clear();
 
 		string planKey = kit.m_sKitName + "|" + kit.m_sPrimaryWeapon;
 		array<ref RK29_PlanEntry> plan = s_mPlanCache.Get(planKey);
@@ -898,7 +940,16 @@ class RK29_KitApply
 				continue;
 			if (EquipedLoadoutStorageComponent.Cast(storage) || EquipedWeaponStorageComponent.Cast(storage))
 				continue;
-			if (IsManagedEquipmentStorage(storage, character))
+			// Nothing owned by the CHARACTER ENTITY is cargo. Real cargo lives in worn garments,
+			// which are separate entities - the character's own storages are the hands and the
+			// gadget/offhand slot, which report a capacity of 1 and accept anything offered.
+			// ChooseContainer scored them like any other container and happily sent the map,
+			// compass, bandages and morphine there; capacity 1 means each new item displaced the
+			// last, so all but one silently disappeared, and whatever survived got taken into the
+			// left hand on spawn. That is the auto-equipped compass. Slots on WORN GEAR (the
+			// suspender flashlight strap, a bayonet scabbard) are owned by the garment, so this
+			// leaves them alone.
+			if (storage.GetOwner() == character)
 				continue;
 			if (SCR_IdentityItemStorageComponent.Cast(storage)
 				|| SCR_SalineStorageComponent.Cast(storage)
@@ -1099,7 +1150,11 @@ class RK29_KitApply
 		{
 			int chosen = ChooseContainer(manager, containers, slotIds, keys, kinds, items, prefs, eligible, placed, stackHome, idx);
 			if (chosen == -1)
+			{
 				chosen = EvictAndPlace(manager, containers, slotIds, items[idx], eligible[idx]);
+				if (chosen != -1)
+					s_aCrammed.Insert(items[idx]);   // nothing wanted it; room was made
+			}
 
 			if (chosen == -1)
 			{
@@ -1118,6 +1173,7 @@ class RK29_KitApply
 
 			placed[idx] = true;
 			stackHome.Set(items[idx], chosen);
+			s_aLastSent.Insert(FileOf29(items[idx]) + " -> " + keys[chosen]);
 			RK29_Log.Trace("[RK29] placed: " + FileOf29(items[idx]) + " -> " + keys[chosen]);
 
 			RK29_PlanEntry entry = new RK29_PlanEntry();
@@ -1375,6 +1431,10 @@ class RK29_KitApply
 				droppedItems.Insert(items[leftover]);
 				Print("[RK29] dropped: " + items[leftover], LogLevel.WARNING);
 			}
+			else
+			{
+				s_aCrammed.Insert(items[leftover]);   // the plan had no home for it
+			}
 		}
 	}
 
@@ -1526,16 +1586,19 @@ class RK29_KitApply
 
 	//--------------------------------------------------------------------------------------------
 	//! If the throwable slot is empty and the kit carries grenades, put one there (frag
-	//! preferred). It is removed from the item batches so counts stay exact.
-	protected static void PrimeGrenadeSlot(SCR_InventoryStorageManagerComponent manager, EquipedWeaponStorageComponent weaponStorage, IEntity character, RK29_KitStruct kit)
+	//! preferred). Returns the prefab primed so the caller can leave it out of the cargo pass
+	//! and keep counts exact. It must NOT be removed from the batches: for a kit with no weapon
+	//! options ApplyWeaponChoices hands back the SHARED struct, and editing that would make the
+	//! kit lose a grenade on every apply for the rest of the session.
+	protected static ResourceName PrimeGrenadeSlot(SCR_InventoryStorageManagerComponent manager, EquipedWeaponStorageComponent weaponStorage, IEntity character, RK29_KitStruct kit)
 	{
 		if (!weaponStorage)
-			return;
+			return ResourceName.Empty;
 
 		CharacterGrenadeSlotComponent grenadeSlot = CharacterGrenadeSlotComponent.Cast(
 			character.FindComponent(CharacterGrenadeSlotComponent));
 		if (!grenadeSlot || grenadeSlot.GetWeaponEntity())
-			return; // no slot, or already occupied (kit-authored keep)
+			return ResourceName.Empty; // no slot, or already occupied (kit-authored keep)
 
 		RK29_KitItemBatch bestBatch;
 		int bestIdx = -1;
@@ -1562,15 +1625,15 @@ class RK29_KitApply
 				break;
 		}
 		if (bestIdx == -1)
-			return;
+			return ResourceName.Empty;
 
 		ResourceName grenade = bestBatch.m_aPrefabs[bestIdx];
 		RK29_SpawnCallback cb = new RK29_SpawnCallback();
-		if (manager.TrySpawnPrefabToStorage(grenade, weaponStorage, -1, cb: cb))
-		{
-			bestBatch.m_aPrefabs.RemoveOrdered(bestIdx);
-			RK29_Log.Trace("[RK29] primed grenade slot: " + FileOf29(grenade));
-		}
+		if (!manager.TrySpawnPrefabToStorage(grenade, weaponStorage, -1, cb: cb))
+			return ResourceName.Empty;
+
+		RK29_Log.Trace("[RK29] primed grenade slot: " + FileOf29(grenade));
+		return grenade;
 	}
 
 	//--------------------------------------------------------------------------------------------
