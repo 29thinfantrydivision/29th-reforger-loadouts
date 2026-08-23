@@ -109,8 +109,11 @@ class RK29_BlockClothingEntry
 	[Attribute(desc: "Loadout slot name as authored on the character prefab: Jacket, ArmoredVest, Vest, Pants, Boots, Hat, Back", category: "29th")]
 	string m_sSlot;
 
-	[Attribute(desc: "Garment prefab. Empty = clear the slot", params: "et", category: "29th")]
+	[Attribute(desc: "Garment prefab. Empty = clear the slot (ignored when an alias is set)", params: "et", category: "29th")]
 	ResourceName m_sPrefab;
+
+	[Attribute(desc: "Item alias to resolve for this kit's faction instead of a literal prefab - lets one shared entry dress both sides (binoculars, watch)", category: "29th")]
+	string m_sAlias;
 }
 
 //------------------------------------------------------------------------------------------------

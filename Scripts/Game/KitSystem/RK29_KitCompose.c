@@ -55,25 +55,25 @@ class RK29_KitCompose
 				if (block.m_aClothing)
 				{
 					foreach (RK29_BlockClothingEntry bc : block.m_aClothing)
-						ApplyClothingEntry(bc, kit);
+						ApplyClothingEntry(bc, kit, setup);
 				}
 
 				if (block.m_aEquipment)
 				{
 					foreach (RK29_BlockClothingEntry be : block.m_aEquipment)
-						ApplyEquipmentEntry(be, kit);
+						ApplyEquipmentEntry(be, kit, setup);
 				}
 			}
 		}
 		if (comp.m_aClothing)
 		{
 			foreach (RK29_BlockClothingEntry cc : comp.m_aClothing)
-				ApplyClothingEntry(cc, kit);
+				ApplyClothingEntry(cc, kit, setup);
 		}
 		if (comp.m_aEquipment)
 		{
 			foreach (RK29_BlockClothingEntry ce : comp.m_aEquipment)
-				ApplyEquipmentEntry(ce, kit);
+				ApplyEquipmentEntry(ce, kit, setup);
 		}
 
 		ResourceName primary;
@@ -187,12 +187,12 @@ class RK29_KitCompose
 			if (block.m_aClothing)
 			{
 				foreach (RK29_BlockClothingEntry bc : block.m_aClothing)
-					ApplyClothingEntry(bc, kit);
+					ApplyClothingEntry(bc, kit, setup);
 			}
 			if (block.m_aEquipment)
 			{
 				foreach (RK29_BlockClothingEntry be : block.m_aEquipment)
-					ApplyEquipmentEntry(be, kit);
+					ApplyEquipmentEntry(be, kit, setup);
 			}
 			if (!block.m_aItems)
 				continue;
@@ -403,32 +403,64 @@ class RK29_KitCompose
 
 
 	//--------------------------------------------------------------------------------------------
+	//! An alias resolves per faction, so one shared entry can dress both sides. An alias that
+	//! does not resolve is a config error, NOT an instruction to strip the slot - only a
+	//! literal empty prefab means "clear this".
+	protected static ResourceName SlotPrefabOf(RK29_BlockClothingEntry c, RK29_KitStruct kit,
+		notnull RK29_KitSetup setup, out bool clear)
+	{
+		clear = false;
+		if (c.m_sAlias == "")
+		{
+			clear = c.m_sPrefab == ResourceName.Empty;
+			return c.m_sPrefab;
+		}
+
+		ResourceName resolved = setup.ResolveAlias(c.m_sAlias, kit.m_sFactionKey);
+		if (resolved == ResourceName.Empty)
+			Print("[RK29] config ERROR - slot '" + c.m_sSlot + "' alias '" + c.m_sAlias
+				+ "' does not resolve for faction " + kit.m_sFactionKey + " (" + kit.m_sKitName + ")",
+				LogLevel.ERROR);
+		return resolved;
+	}
+
+	//--------------------------------------------------------------------------------------------
 	//! Slot-keyed later-wins over the prefab-captured dress; empty prefab clears the slot.
-	protected static void ApplyClothingEntry(RK29_BlockClothingEntry c, RK29_KitStruct kit)
+	protected static void ApplyClothingEntry(RK29_BlockClothingEntry c, RK29_KitStruct kit,
+		notnull RK29_KitSetup setup)
 	{
 		if (!c || c.m_sSlot == "")
 			return;
 
-		if (c.m_sPrefab == ResourceName.Empty)
+		bool clear;
+		ResourceName prefab = SlotPrefabOf(c, kit, setup, clear);
+		if (clear)
 		{
 			kit.m_mClothing.Remove(c.m_sSlot);
 			return;
 		}
-		kit.m_mClothing.Set(c.m_sSlot, c.m_sPrefab);
+		if (prefab == ResourceName.Empty)
+			return;
+		kit.m_mClothing.Set(c.m_sSlot, prefab);
 	}
 
 	//--------------------------------------------------------------------------------------------
-	protected static void ApplyEquipmentEntry(RK29_BlockClothingEntry c, RK29_KitStruct kit)
+	protected static void ApplyEquipmentEntry(RK29_BlockClothingEntry c, RK29_KitStruct kit,
+		notnull RK29_KitSetup setup)
 	{
 		if (!c || c.m_sSlot == "")
 			return;
 
-		if (c.m_sPrefab == ResourceName.Empty)
+		bool clear;
+		ResourceName prefab = SlotPrefabOf(c, kit, setup, clear);
+		if (clear)
 		{
 			kit.m_mEquipment.Remove(c.m_sSlot);
 			return;
 		}
-		kit.m_mEquipment.Set(c.m_sSlot, c.m_sPrefab);
+		if (prefab == ResourceName.Empty)
+			return;
+		kit.m_mEquipment.Set(c.m_sSlot, prefab);
 	}
 
 	protected static ref map<ResourceName, ref array<string>> s_mWeaponAttachTypeCache = new map<ResourceName, ref array<string>>();
