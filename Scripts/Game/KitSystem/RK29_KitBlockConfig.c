@@ -129,12 +129,20 @@ class RK29_BlockClothingTitle : BaseContainerCustomTitle
 		string slot;
 		source.Get("m_sSlot", slot);
 
-		ResourceName prefab;
-		source.Get("m_sPrefab", prefab);
-		string label = "" + prefab;
-		int slash = label.LastIndexOf("/");
-		if (slash >= 0)
-			label = label.Substring(slash + 1, label.Length() - slash - 1);
+		// same precedence as SlotPrefabOf: an alias wins outright and the prefab is not even
+		// read, so only an entry with neither clears the slot. Reading the prefab alone
+		// rendered every alias-dressed slot - which is every kit's backpack - as "(clear slot)"
+		string label;
+		source.Get("m_sAlias", label);
+		if (label == "")
+		{
+			ResourceName prefab;
+			source.Get("m_sPrefab", prefab);
+			label = "" + prefab;
+			int slash = label.LastIndexOf("/");
+			if (slash >= 0)
+				label = label.Substring(slash + 1, label.Length() - slash - 1);
+		}
 		if (label == "")
 			label = "(clear slot)";
 
