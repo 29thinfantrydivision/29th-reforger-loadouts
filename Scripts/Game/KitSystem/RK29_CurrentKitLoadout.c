@@ -1,6 +1,11 @@
 //------------------------------------------------------------------------------------------------
 //! "Current Kit" deploy-menu entry - respawns the player's stashed picker selection.
-//! Resource is a placeholder body; the real kit is applied on spawn by the manager.
+//!
+//! The body it spawns is the side's BARE base: no dress, no weapons, no stock inventory. The kit
+//! is applied in OnLoadoutSpawned, the same hook vanilla's arsenal uses. That is what makes this
+//! entry honest - it spawns the saved loadout rather than spawning somebody else's kit and
+//! stripping it a fraction of a second later, which is what forced the old settle timer and the
+//! duplicate-item race it was guessing at.
 //------------------------------------------------------------------------------------------------
 [BaseContainerProps(configRoot: true), BaseContainerCustomTitleField("m_sLoadoutName")]
 class RK29_CurrentKitLoadout : SCR_FactionPlayerLoadout
@@ -31,25 +36,35 @@ class RK29_CurrentKitLoadout : SCR_FactionPlayerLoadout
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! Any machine with a local player renders the stashed kit's body (deploy preview)
-	//! instead of the placeholder - listen hosts included. Spawn correctness never
-	//! depends on this resource: Current Kit spawns are fully re-dressed from the stash.
+	//! The side's bare body, both for the spawn and for the deploy mannequin. Neither inherits
+	//! anything from it: the spawn is dressed in OnLoadoutSpawned and the mannequin from the
+	//! loadout the server sent. Borrowing another kit's dressed prefab here is exactly how the
+	//! preview ended up showing the wrong gun.
 	override ResourceName GetLoadoutResource()
 	{
-		if (!System.IsConsoleApp())
+		RK29_KitManager mgr = RK29_KitManager.GetInstance();
+		if (mgr)
 		{
-			string kitName = RK29_KitPicker.LocalStashKit();
-			if (kitName != "")
-			{
-				RK29_KitManager mgr = RK29_KitManager.GetInstance();
-				if (mgr)
-				{
-					RK29_KitStruct kit = mgr.m_mKits.Get(kitName);
-					if (kit && kit.m_sSourcePrefab != ResourceName.Empty && kit.m_sFactionKey == GetFactionKey())
-						return kit.m_sSourcePrefab;
-				}
-			}
+			ResourceName body = mgr.SideBody(GetFactionKey());
+			if (body != ResourceName.Empty)
+				return body;
 		}
 		return super.GetLoadoutResource();
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Dress the body the instant it exists, before the player is ever shown it. Same hook
+	//! SCR_PlayerArsenalLoadout applies its saved loadout in.
+	override void OnLoadoutSpawned(GenericEntity pOwner, int playerId)
+	{
+		super.OnLoadoutSpawned(pOwner, playerId);
+
+		RK29_KitManager mgr = RK29_KitManager.GetInstance();
+		if (!mgr)
+			return;
+
+		if (!mgr.ApplyStashOnSpawn_S(playerId, pOwner))
+			Print("[RK29] Current Kit spawned with no usable stash - body stays bare (player "
+				+ playerId.ToString() + ")", LogLevel.WARNING);
 	}
 }

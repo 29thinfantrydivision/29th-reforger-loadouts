@@ -161,8 +161,9 @@ class RK29_KitApply
 	//! The kit's role qualifications, as instance labels on the body. Vanilla user actions and
 	//! consumables read these for their qualified-personnel speed bonus - a medic's field
 	//! dressing, a sapper's building. Written on every apply, empty list included, so a re-kit
-	//! never leaves the previous class's traits behind. Instance labels only: whatever the
-	//! character prefab bakes in is merged by the engine and cannot be taken away here.
+	//! never leaves the previous class's traits behind. The write also marks the body kit-owned
+	//! (RK29_CharacterLabels.c), which is what stops the prefab's own labels counting - so a kit
+	//! with no traits really does grant none, whatever body it spawned on.
 	//! Public because the spawn path calls it alone, without the re-dress, for stock spawns.
 	static void ApplyTraits(notnull IEntity character, notnull RK29_KitStruct kit)
 	{
@@ -189,7 +190,9 @@ class RK29_KitApply
 			}
 		}
 
-		editable.SetCustomCharacterLabels_S(labels);
+		// RK29_SetTraits_S, not the vanilla setter: it also marks the body kit-owned, so the
+		// prefab's own labels stop counting. Without that a body could only ever gain traits.
+		editable.RK29_SetTraits_S(labels);
 		if (labels.IsEmpty())
 			named = " none";
 		// logged even when empty: "did the medic trait come off on the swap" is otherwise only

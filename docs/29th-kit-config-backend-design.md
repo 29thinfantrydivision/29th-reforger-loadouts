@@ -23,8 +23,9 @@ this one covers where kit *content* comes from.
 ## 2. Non-goals (unchanged from main doc §15)
 
 - Personal save/load of kits, hard kit limits, mid-round HUD, ammo-count picker UI.
-- Replacing GM29_Kits.conf: vanilla loadout entries remain the identity spine
-  (deploy menu, squad restriction via GetPlayerLoadoutsByGroup, counting index,
+- ~~Replacing GM29_Kits.conf: vanilla loadout entries remain the identity spine~~
+  **(revised 2026-08-24 - see §17. A loadout entry is now how a kit is SPAWNED, not what
+  makes it exist.)** (deploy menu, squad restriction via GetPlayerLoadoutsByGroup, counting index,
   Current Kit pseudo-entries, spectator icons).
 
 ## 3. Authoring rules (the short version an editor needs)
@@ -316,7 +317,8 @@ these bugs findable, and it is ~100 lines per apply. It is gated behind
 
 Existing behavior plus, in rough priority order:
 
-1. Every `m_sKitName` matches a GM29_Kits.conf loadout name (join-key check).
+1. Every `m_sKitName` matches a GM29_Kits.conf loadout name, **or the class resolves a body
+   prefab of its own** (§17). A class with neither is an ERROR at boot.
 2. Every block ResourceName loads and is an `RK29_KitBlock`.
 3. Optic category names referenced by classes resolve; `m_sDefaultOptic` lies inside an
    allowed category.
@@ -565,10 +567,15 @@ so its prefab labels stand.
 | Trait | Label | What vanilla does with it (factor = default, per-instance overridable) |
 |---|---|---|
 | `MEDIC` | `ROLE_MEDIC` | field dressing 1.5x, tourniquet 1.2x, heal-other action (any health item) by that item's factor, casualty inspect 4x, casualty load 2x, station heal 2x |
-| `SAPPER` | `ROLE_SAPPER` | Conflict building 2x, multi-part assembly (mortars, tripods, NSV) 1.5x, station repair 1.5x |
-| `VEHICLE_CREW` | `TRAIT_VEHICLE_CREW` | station repair 1.5x, refuel 1.5x, vehicle rearm 1.5x, supply load/unload 2x |
+| `SAPPER` | `ROLE_SAPPER` | Conflict building 2x, multi-part assembly (mortars, tripods, NSV) 1.5x, vehicle repair 1.5x |
+| `VEHICLE_CREW` | `TRAIT_VEHICLE_CREW` | vehicle repair 1.5x, refuel 1.5x, rearm 1.5x, supply load/unload 2x |
 | `HELI_CREW` | `TRAIT_HELI_CREW` | every vehicle-crew station above, repair included |
 | `LOGISTICS` | `TRAIT_LOGISTICS` | loading a resource container into a vehicle 2x |
+
+Vehicle repair is one action, `SCR_RepairAtSupportStationAction` on `Vehicle_Base` - "support
+station" names the PROVIDER, which is either a static station or someone carrying a repair kit
+(the kit itself hosts `SCR_RepairSupportStationComponent`). So the bonus applies to field wrench
+repair, not just to repairing at a depot.
 
 Only **field dressing** and **tourniquet** prefabs configure `m_aCharacterLabels` +
 `m_fRoleSpeedBonus`, so morphine, saline and gauze get no medic bonus - `GetUsageSpeedFactor`
@@ -587,3 +594,85 @@ Two rules follow from where traits live:
 The write is unconditional so re-kitting mid-round is symmetric: pick the medic kit, get
 `ROLE_MEDIC`; pick rifleman next, the list is overwritten with the rifleman's (usually empty)
 one. `/kitdigest <kit>` prints the composed traits beside the clothing lines.
+
+
+## 17. Kits without prefabs, and without deploy entries (settled 2026-08-24)
+
+Three couplings went, in dependency order. Together they mean a new kit is a config edit and
+nothing else - no prefab, no deploy-menu row.
+
+**Identity is config-owned, and lives with the role.** `m_UIInfo` (a `SCR_EditableEntityUIInfo`,
+the same type prefabs use) supplies icon, preview image, name and browser labels. It sits on
+`RK29_KitComposition`, so a role states what it looks like beside what it is qualified at, and
+`Compose` resolves nearest-first: captured body -> composition chain -> `RK29_ClassSetup.m_UIInfo`.
+The class-level field remains for entries with no composition at all (the two Current Kit
+pseudo-entries and the legacy Machine Gunner rows).
+
+The role/faction split falls out of conf inheritance. `role_medic.conf` states name, icon and the
+faction-invariant labels; `us_medic.conf` inherits it and adds only `m_Image`, `m_sFaction` and
+`m_aAuthoredLabels +{ FACTION_US }`. Both declare the sub-object under the SAME GUID, which is
+what makes Enfusion merge them field-by-field rather than replace - the family GUIDs are
+`{AB29C0FFEE29CA01..CA09}`, one per role, and each appears only in its own role plus that role's
+two faction kits.
+
+The short picker/HUD label stays on the roster as `m_sDisplayName` - it is presentation, not
+identity, and it is what the class list and the count rows read.
+
+All 23 classes were migrated from their prefabs' effective UIInfo, labels included, so nothing
+moved on screen. Two pre-existing errors were corrected on the way: the medic carried the
+rifleman body's `ROLE_RIFLEMAN` (now `ROLE_MEDIC`) and the Soviet crewman had no name or icon at
+all, having resolved to a KLMK sniper prefab up its chain (now matches the US crewman).
+
+**Dress is config-owned.** `Compose` no longer seeds `m_mClothing` / `m_mEquipment` from the
+captured body. It never needed to: `ReplaceClothing` deletes every garment before re-dressing
+and `DressEquipment` clears every unwanted occupant, so apply was always scorched earth. Seeding
+only meant an undeclared slot silently inherited whatever body the kit happened to spawn on -
+which is how a combat vest ended up on the parade uniform the moment bodies were shared. The
+composition is now the whole truth; an undeclared slot is empty.
+
+**Bodies are per-side by default.** `RK29_SideSetup.m_sBodyPrefab` names the faction body and
+`RK29_ClassSetup.m_sBodyPrefab` overrides it. The prefab only ever supplied five things and
+config now owns three:
+
+| From the prefab | Still needed? |
+|---|---|
+| Weapon / grenade slot components | shared - all from `Character_Base`, identical on every body |
+| Equipment slots | shared from `Character_Base`; contents replaced by `m_aEquipment` |
+| Clothing, weapons, items | replaced at apply, and no longer even seeded |
+| UIInfo | **config** (`m_UIInfo`) |
+| Faction affiliation, voices, identity | **per side** - the one real reason a body exists |
+
+**The rule for when a kit still wants its own body:** only if it is deploy-selectable. A stock
+deploy spawn never runs apply, so its body is what the player wears and what the preview
+mannequin renders. A picker-only kit is always applied before anyone sees it, so it can take the
+side body freely. The 19 kits with deploy rows keep their own prefabs for exactly this reason;
+Medic and Pilot, being picker-only, do not have one.
+
+**A loadout entry is now optional.** Boot runs two passes: the loadout walk as before, then every
+`RK29_ClassSetup` not already built, captured from its resolved body. `m_aIndexToKit` grows past
+the loadout count - every consumer iterates it by position and never maps back to the loadout
+manager, and it is built identically on server and client. What a deploy row still buys is
+reachability on a cold spawn: selections live in server memory only (§9), so a picker-only kit is
+reached by spawning as something else and re-kitting.
+
+**Traits are authoritative on a kitted body.** Vanilla unions instance labels with the prefab's,
+so a body could only gain labels, never shed them - wrong when the body is an implementation
+detail and a re-kit must actually stop the player being a medic. `RK29_CharacterLabels.c` mods
+`SCR_EditableCharacterComponent`: `RK29_SetTraits_S` writes the labels and a replicated
+`m_bRK29_TraitsAuthoritative` in one bump, and `GetAllCharacterLabels` returns the kit's list
+alone when the flag is set. Anything the kit system never dressed - vanilla characters,
+GM-placed AI wearing 29th prefabs - keeps vanilla behaviour untouched. Reach is small by
+construction: that method feeds only `HasLabel` and `SCR_PlayerArsenalLoadout`'s save.
+
+Across all 23 bodies exactly one prefab label had a gameplay consumer, the US crew prefab's
+`TRAIT_VEHICLE_CREW`; it is now `VEHICLE_CREW` on `role_crewman.conf`, which also gives the
+Soviet crewman the parity it never had. The other labels - `ROLE_RIFLEMAN`, `SIZE_M`,
+`TRAIT_OPTICS` and the rest - are browser categorisation with no code path, and ride along in
+`m_UIInfo`.
+
+**Known gap:** the deploy preview renders the loadout's prefab as-is. Vanilla dresses a mannequin
+from data only for `SCR_PlayerArsenalLoadout`; every other loadout takes the
+`SetPreviewItemFromPrefab` branch. So a preview shows prefab dress, not the composed kit - a
+latent inaccuracy for any kit whose config differs from its body, and the reason a shared body
+would show every kit as a rifleman. Fixable by dressing the mannequin from `RK29_KitStruct` in
+the `SCR_LoadoutPreviewComponent` mod that already exists for the optic swap.

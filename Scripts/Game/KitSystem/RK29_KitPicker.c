@@ -30,6 +30,10 @@ class RK29_KitPicker
 	protected static bool s_bLocalStash;
 	protected static string s_sLocalStashKit;
 	protected static ResourceName s_sLocalStashOptic;
+	//! The server's resolved loadout for this player - what they will actually spawn wearing.
+	//! The preview draws from these instead of re-deriving anything.
+	protected static ref map<string, ResourceName> s_mLocalStashDress = new map<string, ResourceName>();
+	protected static ref map<int, ResourceName> s_mLocalStashWeapons = new map<int, ResourceName>();
 
 	protected SCR_ConfigurableDialogUi m_Dialog;
 
@@ -84,11 +88,28 @@ class RK29_KitPicker
 	}
 
 	//--------------------------------------------------------------------------------------------
-	static void MarkLocalStash(string kitName, ResourceName optic)
+	//! Dress the server resolved for this player, by loadout slot name.
+	static map<string, ResourceName> LocalStashDress()
+	{
+		return s_mLocalStashDress;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Weapons the server resolved, by weapon slot index - 0 primary, 1 launcher, 2 sidearm.
+	//! Index, not a "which one looks like a rifle" guess, so a class with two weapon options
+	//! previews the one that was actually applied.
+	static map<int, ResourceName> LocalStashWeapons()
+	{
+		return s_mLocalStashWeapons;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	static void MarkLocalStash(string kitName, ResourceName optic, string loadoutWire)
 	{
 		s_bLocalStash = true;
 		s_sLocalStashKit = kitName;
 		s_sLocalStashOptic = optic;
+		RK29_KitWire.Unpack(loadoutWire, s_mLocalStashDress, s_mLocalStashWeapons);
 
 		// The mannequin is built from GetLoadoutResource(), which reads the values just set -
 		// but nothing in the deploy menu watches for a loadout changing underneath it. It only

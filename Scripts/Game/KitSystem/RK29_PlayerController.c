@@ -26,9 +26,9 @@ modded class SCR_PlayerController
 	}
 
 	//--------------------------------------------------------------------------------------------
-	void RK29_NotifyKitSaved_S(string kitName, ResourceName optic)
+	void RK29_NotifyKitSaved_S(string kitName, ResourceName optic, string loadoutWire)
 	{
-		Rpc(RK29_RpcKitSaved, kitName, optic);
+		Rpc(RK29_RpcKitSaved, kitName, optic, loadoutWire);
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -90,16 +90,22 @@ modded class SCR_PlayerController
 			if (slot && slot.GetWeaponSlotIndex() == slotIndex && slot.GetWeaponEntity())
 			{
 				ctrl.SelectWeapon(slot);
-				return;
+				break;
 			}
 		}
+
+		// Always low ready, whatever the player was doing before. The weapon they were holding
+		// no longer exists - re-dressing deletes and respawns it - so "restoring" a raised
+		// weapon means drawing a fresh one already aimed, which is how a re-kit ends with a
+		// round in a teammate.
+		ctrl.SetWeaponRaised(false);
 	}
 
 	//--------------------------------------------------------------------------------------------
 	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
-	protected void RK29_RpcKitSaved(string kitName, ResourceName optic)
+	protected void RK29_RpcKitSaved(string kitName, ResourceName optic, string loadoutWire)
 	{
-		RK29_KitPicker.MarkLocalStash(kitName, optic);
+		RK29_KitPicker.MarkLocalStash(kitName, optic, loadoutWire);
 	}
 
 	//--------------------------------------------------------------------------------------------

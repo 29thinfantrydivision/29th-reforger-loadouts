@@ -1,6 +1,6 @@
 //------------------------------------------------------------------------------------------------
-//! Builds RK29_KitStruct from config blocks. Dress and identity come from the captured
-//! prefab kit; weapons overlay it slot-wise; items come from blocks only.
+//! Builds RK29_KitStruct from config blocks. Dress, identity and items are config-owned; the
+//! captured body supplies only its weapons, which the composition then overlays slot-wise.
 //! Also home of the /kitdigest and /kitdump tooling.
 //------------------------------------------------------------------------------------------------
 class RK29_KitCompose
@@ -29,6 +29,16 @@ class RK29_KitCompose
 		kit.m_sSourcePrefab = captured.m_sSourcePrefab;
 		kit.m_UIInfo        = captured.m_UIInfo;
 
+		// Identity, nearest statement wins: the captured body is the fallback, the composition
+		// chain states what the ROLE looks like (and a faction kit refines it), and a roster
+		// class still overrides outright - which is what composition-less legacy entries use.
+		// This is the seam that lets classes share a body: icon, image and name follow the kit,
+		// so the picker, the HUD and the stamped body all read the right one.
+		if (comp.m_UIInfo)
+			kit.m_UIInfo = comp.m_UIInfo;
+		if (cls.m_UIInfo)
+			kit.m_UIInfo = cls.m_UIInfo;
+
 		// traits come off the composition chain alone - the captured prefab's own labels are
 		// merged by the engine at read time and stay whatever the prefab author made them
 		if (comp.m_aTraits)
@@ -46,10 +56,10 @@ class RK29_KitCompose
 			}
 		}
 
-		foreach (string slot, ResourceName garment : captured.m_mClothing)
-			kit.m_mClothing.Set(slot, garment);
-		foreach (string eqSlot, ResourceName eqItem : captured.m_mEquipment)
-			kit.m_mEquipment.Set(eqSlot, eqItem);
+		// Dress is NOT seeded from the body. Apply deletes every garment and clears every
+		// equipment slot before re-dressing, so the composition is the whole truth: a slot
+		// nobody declares ends up empty rather than inheriting whichever body this kit spawned
+		// on. That is what makes the body interchangeable.
 		foreach (int idx, ResourceName weapon : captured.m_mWeapons)
 		{
 			// NOT the throwable slot: a config kit counts its grenades in m_aItems, and apply

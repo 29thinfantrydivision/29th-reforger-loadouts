@@ -228,6 +228,27 @@ class RK29_ClassSetup
 
 	[Attribute(desc: "This kit's composition. Empty = capture the kit prefab", params: "conf class=RK29_KitComposition", category: "29th")]
 	ResourceName m_sComposition;
+
+	[Attribute(desc: "Icon, preview image and name shown in the picker, the HUD and to spectators. Set it and the kit stops borrowing whichever body it spawns from - which is what lets every class of a faction share one body prefab. Empty = the body's own UIInfo, as before", category: "29th")]
+	ref SCR_EditableEntityUIInfo m_UIInfo;
+
+	[Attribute(desc: "Body this kit spawns as. Empty = the side's default body. Only needed for a class whose body differs in something config cannot dress: an extra weapon slot, different equipment slots", params: "et", category: "29th")]
+	ResourceName m_sBodyPrefab;
+
+	//! Stamped at load from the owning side config - a class row does not name its own faction.
+	string m_sSideFactionKey;
+
+	//! Stamped at load from the owning side config's default body.
+	ResourceName m_sSideBodyPrefab;
+
+	//--------------------------------------------------------------------------------------------
+	//! The body to spawn and capture: this class's own, else its side's default.
+	ResourceName BodyPrefab()
+	{
+		if (m_sBodyPrefab != ResourceName.Empty)
+			return m_sBodyPrefab;
+		return m_sSideBodyPrefab;
+	}
 }
 
 //------------------------------------------------------------------------------------------------
@@ -237,6 +258,9 @@ class RK29_SideSetup
 {
 	[Attribute(desc: "Faction key this file covers, e.g. US", category: "29th")]
 	string m_sFactionKey;
+
+	[Attribute(desc: "Body every class on this side spawns as unless it names its own. Faction identity - affiliation, voices, identity - lives here and config cannot dress it, which is the one thing that genuinely needs a prefab per side", params: "et", category: "29th")]
+	ResourceName m_sBodyPrefab;
 
 	[Attribute(desc: "This side's classes", category: "29th")]
 	ref array<ref RK29_ClassSetup> m_aClasses;

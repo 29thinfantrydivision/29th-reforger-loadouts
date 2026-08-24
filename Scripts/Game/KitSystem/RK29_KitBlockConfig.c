@@ -216,6 +216,9 @@ class RK29_KitComposition
 	[Attribute(desc: "This kit's equipment storage slots (WristwatchSlot, BinocularSlot, ...), later-wins", category: "29th")]
 	ref array<ref RK29_BlockClothingEntry> m_aEquipment;
 
+	[Attribute(desc: "Icon, preview image and browser labels for this role - what it IS, stated beside its traits rather than in the roster. Faction kits inherit it and add only what differs (preview image, faction). The roster keeps m_sDisplayName, the short picker label", category: "29th")]
+	ref SCR_EditableEntityUIInfo m_UIInfo;
+
 	[Attribute(uiwidget: UIWidgets.ComboBox, desc: "What this role is qualified at - a medic dresses wounds faster, a sapper builds faster. Declared on the shared role file so both factions' kits inherit it; a faction kit restating the list REPLACES it, and '+' appends. Applied to the body at kit apply, so re-kitting to another class drops them", enums: ParamEnumArray.FromEnum(RK29_ETrait), category: "29th")]
 	ref array<RK29_ETrait> m_aTraits;
 }
