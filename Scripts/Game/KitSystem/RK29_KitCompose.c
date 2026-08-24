@@ -534,7 +534,16 @@ class RK29_KitCompose
 			CollectAttachmentTypes(weapon, weaponTypes);
 			s_mWeaponAttachTypeCache.Set(weapon, weaponTypes);
 		}
-		if (!weaponTypes.Contains(itemType))
+		bool fits;
+		foreach (string slot : weaponTypes)
+		{
+			if (MountFits(itemType, slot))
+			{
+				fits = true;
+				break;
+			}
+		}
+		if (!fits)
 			return false;
 
 		// the lug existing is not the same as the lug being usable
@@ -561,10 +570,34 @@ class RK29_KitCompose
 
 		foreach (string mount : attachTypes)
 		{
-			if (weaponTypes.Contains(mount))
-				return AttachmentObstructed(weapon, attachment);
+			foreach (string slot : weaponTypes)
+			{
+				if (MountFits(mount, slot))
+					return AttachmentObstructed(weapon, attachment);
+			}
 		}
 		return true;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! A SLOT names the loosest mount it accepts; an ATTACHMENT names its own, which may be a
+	//! subclass of that. Vanilla happens to spell the same leaf class on both sides, so string
+	//! equality carried us until the first modded weapon: RHS types the M40's rail
+	//! AttachmentOpticsRIS1913 and every scope that fits it AttachmentOpticsRIS1913Short. The
+	//! engine mounts them fine - only this pre-filter disagreed - so ask the type system rather
+	//! than compare spellings. Prefix matching would be wrong: AttachmentOpticsDovetailUK59
+	//! reads like a DovetailAK sibling but inherits straight from AttachmentOptics.
+	protected static bool MountFits(string attachType, string slotType)
+	{
+		if (attachType == slotType)
+			return true;
+
+		typename attach = attachType.ToType();
+		typename slot   = slotType.ToType();
+		if (!attach || !slot)
+			return false;
+
+		return attach.IsInherited(slot);
 	}
 
 	//--------------------------------------------------------------------------------------------
