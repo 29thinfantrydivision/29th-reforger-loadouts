@@ -1592,24 +1592,20 @@ class RK29_KitApply
 			}
 		}
 
-		RK29_SpawnCallback cb = new RK29_SpawnCallback();
-		if (manager.TrySpawnPrefabToStorage(item, null, -1, EStoragePurpose.PURPOSE_DEPOSIT, cb))
-		{
-			IEntity spawned = cb.RK29_GetSpawned();
-			string where = "?";
-			if (spawned && spawned.GetParent())
-				where = FileNameOf(spawned.GetParent());
-			RK29_Log.Trace("[RK29] placed(deposit): " + FileOf29(item) + " -> " + where);
-			return true;
-		}
+		// No engine-routed deposit here. A null storage lets the engine pick, and the only
+		// containers it can reach that the sweep below cannot are the ones we deliberately
+		// exclude - the hands and gadget/offhand slot, the identity/saline/tourniquet
+		// storages, weapon storages. So its sole distinct ability was to put the last item of
+		// an over-stuffed kit somewhere we never want it. CollectBodyStorages already recurses
+		// the whole entity tree, and the sweep asks with PURPOSE_ANY rather than
+		// PURPOSE_DEPOSIT, so it is the broader request against the same real containers.
 
-		// auto-deposit quits once its preferred storage is full - walk every storage on
-		// the body before calling the item dropped
+		// last resort: walk every real container on the body before calling the item dropped
 		foreach (BaseInventoryStorageComponent anyStorage : storages)
 		{
 			if (!anyStorage)
 				continue;
-			cb = new RK29_SpawnCallback();
+			RK29_SpawnCallback cb = new RK29_SpawnCallback();
 			if (manager.TrySpawnPrefabToStorage(item, anyStorage, -1, cb: cb))
 			{
 				RK29_Log.Trace("[RK29] placed(sweep): " + FileOf29(item) + " -> " + OwnerFileName(anyStorage));
