@@ -43,6 +43,10 @@ class RK29_KitStruct
 
 	ref array<ref RK29_KitItemBatch> m_aItems = {};
 
+	//! Role qualifications, granted as character labels at apply (medic, sapper, ...).
+	//! Composition-owned: a weapon choice can never add or drop one.
+	ref array<RK29_ETrait> m_aTraits = {};
+
 	//! Instanced at capture, shared read-only. Do NOT store the BaseContainer instead -
 	//! containers die with their resource even behind a held ref Resource.
 	ref SCR_UIInfo m_UIInfo;
@@ -61,6 +65,9 @@ class RK29_KitStruct
 
 		foreach (string slot, ResourceName res : m_mClothing)
 			c.m_mClothing.Set(slot, res);
+
+		foreach (RK29_ETrait trait : m_aTraits)
+			c.m_aTraits.Insert(trait);
 
 		foreach (string eqSlot, ResourceName eqRes : m_mEquipment)
 			c.m_mEquipment.Set(eqSlot, eqRes);

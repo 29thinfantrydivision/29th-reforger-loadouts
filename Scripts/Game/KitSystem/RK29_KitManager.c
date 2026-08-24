@@ -534,6 +534,7 @@ class RK29_KitManager
 		// not find itself still current and dress the new one.
 		BumpApplyGen(playerId);
 
+		bool willApply = false;
 		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
 		if (sel)
 		{
@@ -548,6 +549,7 @@ class RK29_KitManager
 			bool wantsApply = IsCurrentKitLoadoutName(current) && EffectiveKitName(playerId) == sel.m_sKitName;
 			if (kit && character && wantsApply)
 			{
+				willApply = true;
 				RK29_ClassSetup cls = m_Setup.FindClass(sel.m_sKitName);
 				RK29_KitStruct edited;
 				ResourceName applyOptic;
@@ -557,6 +559,19 @@ class RK29_KitManager
 				GetGame().GetCallqueue().CallLater(ApplySpawnMutation, SPAWN_SETTLE_MS, false, playerId,
 					BumpApplyGen(playerId), edited, applyOptic, mounts);
 			}
+		}
+
+		// A stock spawn keeps its GEAR as authored - that is the rule above and it stands - but a
+		// role's QUALIFICATIONS are config-owned, and selections live in server memory only, so
+		// the first spawn of every session is a stock one. Without this a medic would bandage at
+		// rifleman speed until they opened the picker. Labels only, nothing touched in the
+		// inventory, and no settle defer: labels do not race the async item-init that the apply
+		// pass waits out. Foreign or vanilla loadouts resolve to no kit and are left alone.
+		if (!willApply)
+		{
+			RK29_KitStruct spawnedKit = m_mKits.Get(CurrentLoadoutName(playerId));
+			if (spawnedKit && entity)
+				RK29_KitApply.ApplyTraits(entity, spawnedKit);
 		}
 
 		Recompute_S();

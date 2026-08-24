@@ -151,8 +151,50 @@ class RK29_KitApply
 		if (affiliation)
 			affiliation.InitPlayerOutfitFaction_S();
 
+		ApplyTraits(character, kit);
+
 		Print("[RK29] apply '" + kit.m_sKitName + "' done", LogLevel.NORMAL);
 		return true;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! The kit's role qualifications, as instance labels on the body. Vanilla user actions and
+	//! consumables read these for their qualified-personnel speed bonus - a medic's field
+	//! dressing, a sapper's building. Written on every apply, empty list included, so a re-kit
+	//! never leaves the previous class's traits behind. Instance labels only: whatever the
+	//! character prefab bakes in is merged by the engine and cannot be taken away here.
+	//! Public because the spawn path calls it alone, without the re-dress, for stock spawns.
+	static void ApplyTraits(notnull IEntity character, notnull RK29_KitStruct kit)
+	{
+		SCR_EditableCharacterComponent editable = SCR_EditableCharacterComponent.Cast(
+			character.FindComponent(SCR_EditableCharacterComponent));
+		if (!editable)
+		{
+			if (kit.m_aTraits && !kit.m_aTraits.IsEmpty())
+				Print("[RK29] traits skipped - no SCR_EditableCharacterComponent on the character", LogLevel.WARNING);
+			return;
+		}
+
+		array<EEditableEntityLabel> labels = {};
+		string named;
+		if (kit.m_aTraits)
+		{
+			foreach (RK29_ETrait trait : kit.m_aTraits)
+			{
+				EEditableEntityLabel label = RK29_Traits.LabelOf(trait);
+				if (label == EEditableEntityLabel.NONE || labels.Contains(label))
+					continue;
+				labels.Insert(label);
+				named = named + " " + RK29_Traits.NameOf(trait);
+			}
+		}
+
+		editable.SetCustomCharacterLabels_S(labels);
+		if (labels.IsEmpty())
+			named = " none";
+		// logged even when empty: "did the medic trait come off on the swap" is otherwise only
+		// answerable by timing a bandage
+		Print("[RK29] traits:" + named, LogLevel.NORMAL);
 	}
 
 	//--------------------------------------------------------------------------------------------

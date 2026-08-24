@@ -11,6 +11,47 @@ enum RK29_EItemSource
 }
 
 //------------------------------------------------------------------------------------------------
+//! What a role is QUALIFIED at, as opposed to what it carries. Each trait is one vanilla
+//! EEditableEntityLabel that user actions and consumables read for their qualified-personnel
+//! speed bonus, so the effect is whatever the base game does with that label - we grant it,
+//! we do not set the multipliers.
+enum RK29_ETrait
+{
+	NONE,			//!< nothing - a fresh row reads as unset rather than as a medic
+	MEDIC,			//!< field dressing 1.5x, tourniquet 1.2x, casualty inspect/load/heal at a station 2x
+	SAPPER,			//!< building 2x, deploying multi-part fortifications 2x, vehicle repair 2x
+	VEHICLE_CREW,	//!< vehicle repair, refuel, rearm and supply unloading 2x
+	HELI_CREW,		//!< the same stations as VEHICLE_CREW, minus repair
+	LOGISTICS		//!< loading supplies into a vehicle 2x
+}
+
+//------------------------------------------------------------------------------------------------
+//! Trait -> the vanilla label carrying it. The indirection is the point: the config names a
+//! job, not an engine enum, so the 150-entry label list never reaches the kit author.
+class RK29_Traits
+{
+	//--------------------------------------------------------------------------------------------
+	static EEditableEntityLabel LabelOf(RK29_ETrait trait)
+	{
+		switch (trait)
+		{
+			case RK29_ETrait.MEDIC:			return EEditableEntityLabel.ROLE_MEDIC;
+			case RK29_ETrait.SAPPER:		return EEditableEntityLabel.ROLE_SAPPER;
+			case RK29_ETrait.VEHICLE_CREW:	return EEditableEntityLabel.TRAIT_VEHICLE_CREW;
+			case RK29_ETrait.HELI_CREW:		return EEditableEntityLabel.TRAIT_HELI_CREW;
+			case RK29_ETrait.LOGISTICS:		return EEditableEntityLabel.TRAIT_LOGISTICS;
+		}
+		return EEditableEntityLabel.NONE;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	static string NameOf(RK29_ETrait trait)
+	{
+		return typename.EnumToString(RK29_ETrait, trait);
+	}
+}
+
+//------------------------------------------------------------------------------------------------
 class RK29_BlockItemTitle : BaseContainerCustomTitle
 {
 	override bool _WB_GetCustomTitle(BaseContainer source, out string title)
@@ -166,6 +207,9 @@ class RK29_KitComposition
 
 	[Attribute(desc: "This kit's equipment storage slots (WristwatchSlot, BinocularSlot, ...), later-wins", category: "29th")]
 	ref array<ref RK29_BlockClothingEntry> m_aEquipment;
+
+	[Attribute(uiwidget: UIWidgets.ComboBox, desc: "What this role is qualified at - a medic dresses wounds faster, a sapper builds faster. Declared on the shared role file so both factions' kits inherit it; a faction kit restating the list REPLACES it, and '+' appends. Applied to the body at kit apply, so re-kitting to another class drops them", enums: ParamEnumArray.FromEnum(RK29_ETrait), category: "29th")]
+	ref array<RK29_ETrait> m_aTraits;
 }
 
 //------------------------------------------------------------------------------------------------

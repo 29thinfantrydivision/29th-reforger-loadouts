@@ -29,6 +29,23 @@ class RK29_KitCompose
 		kit.m_sSourcePrefab = captured.m_sSourcePrefab;
 		kit.m_UIInfo        = captured.m_UIInfo;
 
+		// traits come off the composition chain alone - the captured prefab's own labels are
+		// merged by the engine at read time and stay whatever the prefab author made them
+		if (comp.m_aTraits)
+		{
+			foreach (RK29_ETrait trait : comp.m_aTraits)
+			{
+				if (trait == RK29_ETrait.NONE)
+				{
+					Print("[RK29] '" + kit.m_sKitName + "' declares an unset trait row in "
+						+ FileOf(cls.m_sComposition), LogLevel.WARNING);
+					continue;
+				}
+				if (!kit.m_aTraits.Contains(trait))
+					kit.m_aTraits.Insert(trait);
+			}
+		}
+
 		foreach (string slot, ResourceName garment : captured.m_mClothing)
 			kit.m_mClothing.Set(slot, garment);
 		foreach (string eqSlot, ResourceName eqItem : captured.m_mEquipment)
@@ -944,6 +961,8 @@ class RK29_KitCompose
 			Print(string.Format("[RK29]  weapon slot %1: %2", idx, FileOf(weapon)), LogLevel.NORMAL);
 		foreach (string slot, ResourceName garment : kit.m_mClothing)
 			Print(string.Format("[RK29]  clothing %1: %2", slot, FileOf(garment)), LogLevel.NORMAL);
+		foreach (RK29_ETrait trait : kit.m_aTraits)
+			Print("[RK29]  trait: " + RK29_Traits.NameOf(trait), LogLevel.NORMAL);
 
 		map<string, int> totals = new map<string, int>();
 		CountItems(kit, totals);

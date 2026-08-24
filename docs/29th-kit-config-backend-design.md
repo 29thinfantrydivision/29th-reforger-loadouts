@@ -532,3 +532,58 @@ blocks would stack a second time.
 meaningful once weapons, ammo and dress became config-owned: a non-default weapon has no
 prefab to be judged against. `/kitvalidate` now queues one job per weapon option and is
 the release gate.
+
+## 16. Role traits (settled 2026-08-23)
+
+A kit says what a soldier *carries*; traits say what they are *qualified at*. Vanilla already
+has the mechanism: `SCR_EditableCharacterComponent` merges labels baked into the character
+prefab with a per-instance list, and a scatter of user actions and consumables read the merged
+set for a "qualified personnel" speed bonus. We grant labels; the base game owns the numbers.
+
+```
+composition (Kits/Roles/<role>.conf)   m_aTraits { MEDIC }
+       |  RK29_KitCompose.Compose      copied onto the struct, NONE rows warned about
+       v
+RK29_KitStruct.m_aTraits               survives CloneWithChoices - a weapon pick cannot
+       |                               add or drop a qualification
+       v
+RK29_KitApply.ApplyTraits              SetCustomCharacterLabels_S on every apply, empty
+                                       list included (RplProp - replicates to clients)
+```
+
+Stock deploy-menu spawns never run the apply pass - their GEAR is authored, by design - but
+qualifications are config-owned, so `OnPlayerSpawned_S` calls `ApplyTraits` alone for them,
+keyed on the loadout the player actually spawned with. This is not optional polish: selections
+live in server memory only (§9), so the first spawn of every session is a stock spawn, and
+without it a medic would bandage at rifleman speed until they opened the picker. Labels only,
+no inventory touched, and no `SPAWN_SETTLE_MS` defer - labels do not race the async item-init
+that the apply pass waits out. A loadout that resolves to no kit (vanilla, foreign) is skipped
+so its prefab labels stand.
+
+`RK29_ETrait` is a curated vocabulary, not the raw 150-entry `EEditableEntityLabel`:
+
+| Trait | Label | What vanilla does with it (factor = default, per-instance overridable) |
+|---|---|---|
+| `MEDIC` | `ROLE_MEDIC` | field dressing 1.5x, tourniquet 1.2x, heal-other action (any health item) by that item's factor, casualty inspect 4x, casualty load 2x, station heal 2x |
+| `SAPPER` | `ROLE_SAPPER` | Conflict building 2x, multi-part assembly (mortars, tripods, NSV) 1.5x, station repair 1.5x |
+| `VEHICLE_CREW` | `TRAIT_VEHICLE_CREW` | station repair 1.5x, refuel 1.5x, vehicle rearm 1.5x, supply load/unload 2x |
+| `HELI_CREW` | `TRAIT_HELI_CREW` | every vehicle-crew station above, repair included |
+| `LOGISTICS` | `TRAIT_LOGISTICS` | loading a resource container into a vehicle 2x |
+
+Only **field dressing** and **tourniquet** prefabs configure `m_aCharacterLabels` +
+`m_fRoleSpeedBonus`, so morphine, saline and gauze get no medic bonus - `GetUsageSpeedFactor`
+returns 1 for them. A medic's advantage with those items is carrying more of them, nothing more.
+
+Two rules follow from where traits live:
+
+- **Traits belong on the shared role file**, not the faction kit. US character prefabs carry
+  hand-authored labels (`TRAIT_SUPPRESSIVE` on the AR, `TRAIT_VEHICLE_CREW` on the crewman)
+  and the Soviet ones carry none — declaring the trait in `Kits/Roles/` is what makes both
+  sides of a role equal. Faction kits still may restate the list (replaces) or `+` append.
+- **Prefab labels cannot be removed at runtime.** `GetAllCharacterLabels` unions prefab and
+  instance labels; the instance list only adds. Taking a trait away from a role whose prefab
+  bakes it in means editing the prefab.
+
+The write is unconditional so re-kitting mid-round is symmetric: pick the medic kit, get
+`ROLE_MEDIC`; pick rifleman next, the list is overwritten with the rifleman's (usually empty)
+one. `/kitdigest <kit>` prints the composed traits beside the clothing lines.
