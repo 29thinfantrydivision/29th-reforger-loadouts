@@ -8,6 +8,9 @@ GenericEntity : "{5A987A8A13763769}Prefabs/Weapons/Rifles/M16/Rifle_M16A2_M203.e
       Prefab "{AB29C0FFEE29D003}Prefabs/Weapons/Attachments/Underbarrel/29th_UGL_M203_long.et"
      }
     }
+    MuzzleComponent "{CA6BE4D6B867541F}" {
+     MagazineTemplate "{2EBF60EF24B108FC}Prefabs/Weapons/Magazines/Magazine_556x45_STANAG_30rnd_M855_Ball.et"
+    }
    }
   }
  }
