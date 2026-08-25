@@ -47,21 +47,6 @@ SizeLayoutWidgetClass {
         Padding 8 0 8 0
        }
        {
-        ItemPreviewWidgetClass "{AB29C0FFEE291017}" {
-         Name "RowPreview"
-         Slot LayoutSlot "{AB29C0FFEE291018}" {
-          HorizontalAlign 0
-          VerticalAlign 1
-          Padding 0 0 8 0
-         }
-         "Is Visible" 0
-         "Use Engine Scale" 0
-         Filter Bilinear
-         Format LDR
-         "Clear Color" 0 0 0 0
-         "Blend mode" Blend
-         Size 52 32
-        }
         ImageWidgetClass "{AB29C0FFEE291007}" {
          Name "RowIcon"
          Slot LayoutSlot "{AB29C0FFEE291008}" {
