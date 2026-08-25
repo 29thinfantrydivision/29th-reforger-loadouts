@@ -28,13 +28,6 @@ modded class SCR_EditableCharacterComponent
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! \return true if this body's labels are kit-owned rather than inherited from its prefab
-	bool RK29_TraitsAuthoritative()
-	{
-		return m_bRK29_TraitsAuthoritative;
-	}
-
-	//--------------------------------------------------------------------------------------------
 	override bool GetAllCharacterLabels(notnull out array<EEditableEntityLabel> labels)
 	{
 		if (!m_bRK29_TraitsAuthoritative)

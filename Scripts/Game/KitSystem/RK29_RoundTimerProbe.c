@@ -1,6 +1,6 @@
 //------------------------------------------------------------------------------------------------
-//! Soft Round Timer integration - reads the RT_ fields off the game mode by name, no dependency.
-//! Field names mirror the RT sources; a rename there silently drops to the config fallback.
+//! Soft Round Timer integration - reads the RT phase field off the game mode by name, no dependency.
+//! The name mirrors the RT source; a rename there silently drops to the config fallback.
 //------------------------------------------------------------------------------------------------
 class RK29_RoundTimerProbe
 {
@@ -13,25 +13,14 @@ class RK29_RoundTimerProbe
 	protected bool m_bResolved;
 	protected BaseGameMode m_GameMode;
 	protected int m_iIdxPhase     = -1;
-	protected int m_iIdxStartTs   = -1;
-	protected int m_iIdxDurationS = -1;
-	protected int m_iIdxPaused    = -1;
-	protected int m_iIdxPausedRemaining = -1;
 
 	protected bool m_bReported;
-
-	//--------------------------------------------------------------------------------------------
-	bool IsActive() { return m_bActive; }
 
 	//--------------------------------------------------------------------------------------------
 	void Probe()
 	{
 		m_bActive       = false;
 		m_iIdxPhase     = -1;
-		m_iIdxStartTs   = -1;
-		m_iIdxDurationS = -1;
-		m_iIdxPaused    = -1;
-		m_iIdxPausedRemaining = -1;
 
 		m_GameMode = GetGame().GetGameMode();
 		if (!m_GameMode)
@@ -42,15 +31,10 @@ class RK29_RoundTimerProbe
 		{
 			string name = t.GetVariableName(i);
 			if (name == "m_eRTPhase")
+			{
 				m_iIdxPhase = i;
-			else if (name == "m_RTPhaseStartTs")
-				m_iIdxStartTs = i;
-			else if (name == "m_iRTPhaseDurationS")
-				m_iIdxDurationS = i;
-			else if (name == "m_bRTPaused")
-				m_iIdxPaused = i;
-			else if (name == "m_iRTPausedRemainingS")
-				m_iIdxPausedRemaining = i;
+				break;
+			}
 		}
 
 		// fields are type-level: one look at a live game mode settles it for this world
@@ -104,50 +88,5 @@ class RK29_RoundTimerProbe
 		if (!m_bActive)
 			return noTimerOpen;
 		return GetPhase() == PHASE_BRIEFING;
-	}
-
-	//--------------------------------------------------------------------------------------------
-	//! "mm:ss" remaining, empty when unknown.
-	string GetClock()
-	{
-		if (!m_bActive || !m_GameMode || m_iIdxStartTs < 0 || m_iIdxDurationS < 0)
-			return "";
-
-		typename t = m_GameMode.Type();
-		WorldTimestamp startTs;
-		int durationS;
-		bool paused;
-		int pausedRemaining;
-		t.GetVariableValue(m_GameMode, m_iIdxStartTs, startTs);
-		t.GetVariableValue(m_GameMode, m_iIdxDurationS, durationS);
-		if (m_iIdxPaused >= 0)
-			t.GetVariableValue(m_GameMode, m_iIdxPaused, paused);
-		if (m_iIdxPausedRemaining >= 0)
-			t.GetVariableValue(m_GameMode, m_iIdxPausedRemaining, pausedRemaining);
-
-		ChimeraWorld world = ChimeraWorld.CastFrom(GetGame().GetWorld());
-		if (!world)
-			return "";
-
-		int remaining;
-		if (paused)
-		{
-			remaining = pausedRemaining;
-		}
-		else
-		{
-			float elapsedS = world.GetServerTimestamp().DiffMilliseconds(startTs) / 1000;
-			float r = durationS - elapsedS;
-			if (r < 0)
-				r = 0;
-			remaining = r;
-		}
-
-		int mm = remaining / 60;
-		int ss = remaining % 60;
-		string secs = ss.ToString();
-		if (ss < 10)
-			secs = "0" + secs;
-		return mm.ToString() + ":" + secs;
 	}
 }

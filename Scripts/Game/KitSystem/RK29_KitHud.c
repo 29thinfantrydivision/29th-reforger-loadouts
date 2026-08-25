@@ -58,7 +58,7 @@ class RK29_KitHud
 			s_bShownReported = true;
 			float x, y;
 			m_wRows.GetScreenPos(x, y);
-			Print(string.Format("[RK29] HUD visible at screen %1,%2 | rows parent ok", x, y), LogLevel.NORMAL);
+			RK29_Log.Trace(string.Format("[RK29] HUD visible at screen %1,%2 | rows parent ok", x, y));
 		}
 	}
 
@@ -157,7 +157,7 @@ class RK29_KitHud
 			if (!s_bHiddenReported)
 			{
 				s_bHiddenReported = true;
-				Print("[RK29] HUD hidden - local player has no faction yet", LogLevel.NORMAL);
+				RK29_Log.Trace("[RK29] HUD hidden - local player has no faction yet");
 			}
 			m_wRoot.SetVisible(false);
 			return;

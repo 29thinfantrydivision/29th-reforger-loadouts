@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------------------------
 //! Builds RK29_KitStruct from config blocks. Dress, identity and items are config-owned; the
 //! captured body supplies only its weapons, which the composition then overlays slot-wise.
-//! Also home of the /kitdigest and /kitdump tooling.
+//! Also home of the /kitdigest tooling.
 //------------------------------------------------------------------------------------------------
 class RK29_KitCompose
 {
@@ -1058,114 +1058,6 @@ class RK29_KitCompose
 		}
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Writes every kit's contents as an RK29_KitBlock conf to $profile:RK29_KitDump/.
-	static void Dump()
-	{
-		RK29_KitManager mgr = RK29_KitManager.GetInstance();
-		if (!mgr)
-			return;
-
-		FileIO.MakeDirectory("$profile:RK29_KitDump");
-		int written = 0;
-		foreach (string kitName, RK29_KitStruct composedOrCaptured : mgr.m_mKits)
-		{
-			// ALWAYS dump prefab truth. m_mKits holds the COMPOSED kit for any class wired
-			// to a composition, so dumping that would export our own config back at us -
-			// and a regeneration from it would launder every normalization in as if the
-			// prefab had authored it.
-			RK29_KitStruct kit = mgr.m_mCaptured.Get(kitName);
-			if (!kit)
-				kit = composedOrCaptured;
-
-			string safe = kitName;
-			safe.Replace(" ", "_");
-			safe.Replace("-", "");
-			FileHandle fh = FileIO.OpenFile("$profile:RK29_KitDump/" + safe + ".conf", FileMode.WRITE);
-			if (!fh)
-				continue;
-
-			fh.WriteLine("RK29_KitBlock {");
-			fh.WriteLine(" m_aClothing {");
-			foreach (string clothSlot, ResourceName garment : kit.m_mClothing)
-			{
-				fh.WriteLine("  RK29_BlockClothingEntry {");
-				fh.WriteLine("   m_sSlot \"" + clothSlot + "\"");
-				fh.WriteLine("   m_sPrefab \"" + garment + "\"");
-				fh.WriteLine("  }");
-			}
-			fh.WriteLine(" }");
-			fh.WriteLine(" m_aEquipment {");
-			foreach (string eqSlot, ResourceName eqItem : kit.m_mEquipment)
-			{
-				fh.WriteLine("  RK29_BlockClothingEntry {");
-				fh.WriteLine("   m_sSlot \"" + eqSlot + "\"");
-				fh.WriteLine("   m_sPrefab \"" + eqItem + "\"");
-				fh.WriteLine("  }");
-			}
-			fh.WriteLine(" }");
-			// dumped in the shape a kit conf actually takes, so it can be pasted
-			fh.WriteLine(" m_aWeaponSlots {");
-			foreach (int idx, ResourceName weapon : kit.m_mWeapons)
-			{
-				if (idx == RK29_KitStruct.GRENADE_SLOT)
-					continue;                       // throwables are items, not a weapon slot
-				fh.WriteLine("  RK29_WeaponSlot {");
-				if (idx != 0)
-					fh.WriteLine("   m_iSlot " + idx.ToString());
-				fh.WriteLine("   m_aOptions {");
-				fh.WriteLine("    RK29_WeaponOption {");
-				string weaponId = mgr.m_Setup.WeaponIdOf(weapon, kit.m_sFactionKey);
-				if (weaponId != "")
-					fh.WriteLine("     m_sWeapon \"" + weaponId + "\"");
-				else
-					fh.WriteLine("     // NOT IN THE WEAPON CATALOG: " + weapon);
-				fh.WriteLine("    }");
-				fh.WriteLine("   }");
-				fh.WriteLine("  }");
-			}
-			fh.WriteLine(" }");
-			fh.WriteLine(" m_aItems {");
-
-			// aggregate identical prefab+hint pairs into counted entries
-			array<string> keys = {};
-			array<ResourceName> prefabs = {};
-			array<string> hints = {};
-			array<int> counts = {};
-			foreach (RK29_KitItemBatch batch : kit.m_aItems)
-			{
-				foreach (ResourceName p : batch.m_aPrefabs)
-				{
-					string key = "" + p + "|" + batch.m_sTargetHint;
-					int at = keys.Find(key);
-					if (at == -1)
-					{
-						keys.Insert(key);
-						prefabs.Insert(p);
-						hints.Insert(batch.m_sTargetHint);
-						counts.Insert(1);
-					}
-					else
-						counts[at] = counts[at] + 1;
-				}
-			}
-			for (int i = 0, n = keys.Count(); i < n; i++)
-			{
-				fh.WriteLine("  RK29_BlockItemEntry {");
-				fh.WriteLine("   m_sPrefab \"" + prefabs[i] + "\"");
-				if (counts[i] != 1)
-					fh.WriteLine("   m_iCount " + counts[i].ToString());
-				if (hints[i] != "")
-					fh.WriteLine("   m_sTargetHint \"" + hints[i] + "\"");
-				fh.WriteLine("  }");
-			}
-			fh.WriteLine(" }");
-			fh.WriteLine("}");
-			fh.Close();
-			written++;
-		}
-		Print("[RK29] kit dump - " + written.ToString() + " file(s) in $profile:RK29_KitDump/", LogLevel.NORMAL);
-	}
 
 
 }

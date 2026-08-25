@@ -509,36 +509,40 @@ class RK29_KitApply
 			if (IsInsideWeapon(item))
 				continue; // a weapon owns its loaded mags/attachments
 
-			string where = "no-slot";
 			InventoryItemComponent iic = InventoryItemComponent.Cast(item.FindComponent(InventoryItemComponent));
-			InventoryStorageSlot slot;
-			if (iic)
+			// no InventoryItemComponent = not gear at all, but cosmetic cloth hung on a
+			// garment's LoadoutSlotInfo - the ALICE AR vest's e-tool carrier is the one on the
+			// roster. It has no parent slot to test, so every keep rule below is unreachable for
+			// it and it fell through to the delete: the MG lost the shovel pouch off the vest on
+			// every apply. Same rule as the !slot case - not something the inventory owns.
+			if (!iic)
+				continue;
+
+			InventoryStorageSlot slot = iic.GetParentSlot();
+			if (!slot)
+				continue; // not slotted anywhere the inventory owns - leave it
+			// same keep rule as the strip: authored AND structural
+			if (IsSlotAuthored(slot, item)
+				&& (item.FindComponent(BaseInventoryStorageComponent)
+					|| item.FindComponent(BaseLoadoutClothComponent)))
+				continue;
+			BaseInventoryStorageComponent slotStorage = slot.GetStorage();
+			if (slotStorage)
 			{
-				slot = iic.GetParentSlot();
-				if (!slot)
-					continue; // not slotted anywhere the inventory owns - leave it
-				// same keep rule as the strip: authored AND structural
-				if (IsSlotAuthored(slot, item)
-					&& (item.FindComponent(BaseInventoryStorageComponent)
-						|| item.FindComponent(BaseLoadoutClothComponent)))
-					continue;
-				BaseInventoryStorageComponent slotStorage = slot.GetStorage();
-				if (slotStorage)
-				{
-					if (EquipedLoadoutStorageComponent.Cast(slotStorage))
-						continue; // worn garment
-					if (IsManagedEquipmentStorage(slotStorage, character))
-						continue; // DressEquipment's delta domain
-					if (SCR_IdentityItemStorageComponent.Cast(slotStorage)
-						|| SCR_SalineStorageComponent.Cast(slotStorage)
-						|| SCR_TourniquetStorageComponent.Cast(slotStorage))
-						continue; // body state
-				}
-				if (slot && slot.GetStorage())
-					where = slot.GetStorage().ClassName() + " on " + OwnerFileName(slot.GetStorage()) + "/" + slot.GetSourceName();
-				else if (slot)
-					where = "slot-without-storage/" + slot.GetSourceName();
+				if (EquipedLoadoutStorageComponent.Cast(slotStorage))
+					continue; // worn garment
+				if (IsManagedEquipmentStorage(slotStorage, character))
+					continue; // DressEquipment's delta domain
+				if (SCR_IdentityItemStorageComponent.Cast(slotStorage)
+					|| SCR_SalineStorageComponent.Cast(slotStorage)
+					|| SCR_TourniquetStorageComponent.Cast(slotStorage))
+					continue; // body state
 			}
+			string where;
+			if (slotStorage)
+				where = slotStorage.ClassName() + " on " + OwnerFileName(slotStorage) + "/" + slot.GetSourceName();
+			else
+				where = "slot-without-storage/" + slot.GetSourceName();
 			string parentName = "none";
 			if (item.GetParent())
 				parentName = FileNameOf(item.GetParent());
@@ -546,7 +550,7 @@ class RK29_KitApply
 
 			if (!manager.TryDeleteItem(item))
 			{
-				if (slot && slot.GetAttachedEntity() == item)
+				if (slot.GetAttachedEntity() == item)
 					slot.DetachEntity();
 				SCR_EntityHelper.DeleteEntityAndChildren(item);
 			}
@@ -578,16 +582,6 @@ class RK29_KitApply
 			return false;
 		EntityPrefabData epd = occupant.GetPrefabData();
 		return epd && epd.GetPrefabName() == tmpl;
-	}
-
-	//--------------------------------------------------------------------------------------------
-	protected static bool IsInManagedEquipmentStorageSlot(IEntity item, IEntity character)
-	{
-		InventoryItemComponent iic = InventoryItemComponent.Cast(item.FindComponent(InventoryItemComponent));
-		if (!iic)
-			return false;
-		InventoryStorageSlot slot = iic.GetParentSlot();
-		return slot && IsManagedEquipmentStorage(slot.GetStorage(), character);
 	}
 
 	//--------------------------------------------------------------------------------------------

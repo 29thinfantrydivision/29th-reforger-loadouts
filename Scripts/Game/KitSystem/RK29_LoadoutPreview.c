@@ -201,7 +201,12 @@ modded class SCR_LoadoutPreviewComponent
 			{
 				EntityPrefabData epd = current.GetPrefabData();
 				if (epd && epd.GetPrefabName() == wanted)
+				{
+					// already right from a previous pass on this cached body - still dressed,
+					// so it counts. Skipping it made a fully-correct re-hover report 0/7.
+					dressed++;
 					continue;
+				}
 
 				delete current;
 			}

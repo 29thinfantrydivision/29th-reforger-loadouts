@@ -34,10 +34,6 @@ class RK29_KitManager
 	//! copy of that weapon's blocks (its grenade set would double).
 	ref map<string, ref RK29_KitStruct> m_mKitsBase = new map<string, ref RK29_KitStruct>();
 
-	//! The raw prefab capture, kept beside the composed kit so /kitdump can export prefab
-	//! truth. Re-deriving it later by loadout name resolves to the wrong loadout object.
-	ref map<string, ref RK29_KitStruct> m_mCaptured = new map<string, ref RK29_KitStruct>();
-
 	//! Last group identity that fell through to the default squad list - so the warning is
 	//! printed once per group rather than on every picker rebuild. Keyed on name+role, since an
 	//! unnamed group is the common case and every one of those would otherwise share a key.
@@ -94,7 +90,7 @@ class RK29_KitManager
 			if (!kitName.StartsWith("29th"))
 				continue;
 
-			RK29_KitStruct kit = BuildKit(kitName, fl.GetFactionKey(), loadout.GetLoadoutResource(), true);
+			RK29_KitStruct kit = BuildKit(kitName, fl.GetFactionKey(), loadout.GetLoadoutResource());
 			if (!kit)
 				continue;
 
@@ -120,7 +116,7 @@ class RK29_KitManager
 				continue;
 			}
 
-			RK29_KitStruct standalone = BuildKit(cls2.m_sKitName, cls2.m_sSideFactionKey, body, false);
+			RK29_KitStruct standalone = BuildKit(cls2.m_sKitName, cls2.m_sSideFactionKey, body);
 			if (!standalone)
 				continue;
 
@@ -549,13 +545,15 @@ class RK29_KitManager
 	//! Capture a body, then compose over it when the class says how. Shared by both boot
 	//! passes so a kit built from a roster class is identical to one built from a loadout -
 	//! only where the body came from differs. Null = the body would not capture.
-	protected RK29_KitStruct BuildKit(string kitName, string factionKey, ResourceName body, bool ownBody)
+	//!
+	//! The capture is a starting point, not a reference: no kit is defined by a role prefab
+	//! any more, so there is nothing to compare config against and no drift to detect. Config
+	//! is the whole truth.
+	protected RK29_KitStruct BuildKit(string kitName, string factionKey, ResourceName body)
 	{
 		RK29_KitStruct kit = RK29_KitCapture.Capture(kitName, factionKey, body);
 		if (!kit)
 			return null;
-
-		m_mCaptured.Set(kitName, kit);
 
 		// hybrid: a class with a composition composes from config, else the capture stands
 		RK29_ClassSetup cls = m_Setup.FindClass(kitName);
@@ -573,21 +571,6 @@ class RK29_KitManager
 		// default-weapon kit so every reader still sees a fieldable one
 		m_mKitsBase.Set(kitName, composed);
 		composed = RK29_KitCompose.ApplyWeaponChoices(composed, options, ResourceName.Empty, m_Setup);
-
-		// drift guardrail: only meaningful for a kit whose body is the prefab that used to
-		// DEFINE it - i.e. one built from its own deploy entry. A kit built from a shared side
-		// body is dressed entirely from config, so the body's item count says nothing and the
-		// comparison would fire on every one of them.
-		if (ownBody)
-		{
-			// intended config-vs-prefab deltas are small (grenade fold, bayonet
-			// normalization). A big gap means the prefab was reworked after the dump the
-			// configs were generated from - LAT taught us this.
-			int drift = composed.CountItems() - kit.CountItems();
-			if (drift < -2 || drift > 4)
-				Print(string.Format("[RK29] DRIFT WARNING '%1': composed %2 vs prefab %3 items - regenerate configs from a fresh /kitdump",
-					kitName, composed.CountItems(), kit.CountItems()), LogLevel.WARNING);
-		}
 
 		Print(string.Format("[RK29] kit '%1' from CONFIG (%2 items)",
 			kitName, composed.CountItems()), LogLevel.NORMAL);
@@ -1411,12 +1394,4 @@ class RK29_KitManager
 		return loadout.GetLoadoutName();
 	}
 
-	//--------------------------------------------------------------------------------------------
-	int CurrentLoadoutIndex(int playerId)
-	{
-		SCR_LoadoutManager lm = GetGame().GetLoadoutManager();
-		if (!lm)
-			return -1;
-		return lm.RK29_IndexOfLoadout(lm.GetPlayerLoadout(playerId));
-	}
 }
