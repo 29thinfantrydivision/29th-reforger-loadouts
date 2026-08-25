@@ -215,12 +215,25 @@ picker APPLY ──RPC (playerController, RK29_-prefixed)──▶ server chokep
      class list, optic in a class-allowed category + fits weapon slot (or class
      has none → optic must be kit default)                 (client is never trusted)
   2. clone class struct, edit weapon/optic nodes + magazine auto-swap
-  3. struct.ApplyTo(living body)          — or stash for spawn-time mutation if dead
-  4. RK29_AssignLoadout_S(classLoadout)   — identity update, atomic with apply
-  5. (OnPlayerLoadoutSet_S fires) → Recompute() → RplProp → all HUDs update
+  3. full-heal the body if it is alive    — the Game Master's heal, plus tourniquets
+  4. struct.ApplyTo(living body)          — or stash for spawn-time mutation if dead
+  5. RK29_AssignLoadout_S(classLoadout)   — identity update, atomic with apply
+  6. (OnPlayerLoadoutSet_S fires) → Recompute() → RplProp → all HUDs update
 ```
 
-Steps 3–4 live in one server function so the ledger can never disagree with the body.
+Steps 3–5 live in one server function so the ledger can never disagree with the body.
+
+**The heal (step 3):** a live re-kit is preround-only, so anything wrong with the body is
+staging-area damage — a clean loadout deserves a clean body. `RK29_KitHeal` is four steps: clear
+tourniquets (items, so no heal can see them, and a tourniquetted limb counts as 70% damaged
+whatever its hitzones say), `FullHeal(false)` — every persistent effect terminated, every DOT
+dropped, fires out, hitzones restored — then a top-up for the sub-threshold damage `FullHeal`
+skips (its first damage state is 0.75 on Health and 0.7 on limbs, so alone it leaves a player at
+76%), then wake. `FullHeal` is the virtual call the Game Master's heal action makes and the one
+medical mods override, which is what makes this compatible by construction; `false` rather than
+the GM's default because a re-kit is a reset, not a battlefield heal. An unconscious player is
+woken, and the stance restore is forced to STAND so the revive does not put them straight back
+down.
 
 ---
 

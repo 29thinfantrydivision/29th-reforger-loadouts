@@ -448,11 +448,13 @@ class RK29_KitManager
 			int heldSlot = -1;
 			int stance = 0;
 			float dynStance = 1.0;
+			bool wasDown = false;
 			CharacterControllerComponent charCtrl = character.GetCharacterController();
 			if (charCtrl)
 			{
 				stance = charCtrl.GetStance();
 				dynStance = charCtrl.GetDynamicStance();
+				wasDown = charCtrl.GetLifeState() == ECharacterLifeState.INCAPACITATED;
 				BaseWeaponManagerComponent wm = charCtrl.GetWeaponManagerComponent();
 				if (wm && wm.GetCurrentWeapon())
 				{
@@ -460,6 +462,22 @@ class RK29_KitManager
 					if (heldWs)
 						heldSlot = heldWs.GetWeaponSlotIndex();
 				}
+			}
+
+			// A re-kit hands out a clean loadout; hand out the clean body to go with it.
+			// Preround only - the guards above see to that - so this is scratch damage from
+			// the staging area, never a round the player is meant to live with. Immediate
+			// even when the apply below is deferred: the heal has nothing to do with the
+			// item-init race the defer is waiting out.
+			RK29_KitHeal.Heal(character);
+
+			// an incapacitated player was lying down; the heal just stood them back up, so
+			// the stance we captured a moment ago is a stance they no longer have. Restoring
+			// it would drop the freshly revived player straight back onto their face.
+			if (wasDown)
+			{
+				stance = ECharacterStance.STAND;
+				dynStance = 1.0;
 			}
 
 			// stock item-init spawns land async on the spawn frame - applying to a body
