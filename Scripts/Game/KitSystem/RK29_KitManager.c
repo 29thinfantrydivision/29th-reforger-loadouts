@@ -522,6 +522,38 @@ class RK29_KitManager
 	protected ref map<int, int> m_mApplyGen_S = new map<int, int>();
 
 	//--------------------------------------------------------------------------------------------
+	//! Two options in one slot both claiming m_bDefault is an authoring mistake with a silent
+	//! outcome - the earlier one just wins and the other looks ignored. Say so once, at boot.
+	protected void WarnOnDuplicateDefaults(string kitName, array<ref RK29_WeaponSlot> slots)
+	{
+		if (!slots)
+			return;
+
+		foreach (RK29_WeaponSlot slotGroup : slots)
+		{
+			if (!slotGroup || !slotGroup.m_aOptions)
+				continue;
+
+			string flagged;
+			int count = 0;
+			foreach (RK29_WeaponOption opt : slotGroup.m_aOptions)
+			{
+				if (!opt || !opt.m_bDefault)
+					continue;
+				count = count + 1;
+				if (flagged != "")
+					flagged = flagged + ", ";
+				flagged = flagged + opt.m_sWeapon;
+			}
+
+			if (count > 1)
+				Print("[RK29] '" + kitName + "' slot " + slotGroup.m_iSlot.ToString() + " marks "
+					+ count.ToString() + " defaults (" + flagged + ") - the first wins, the rest are"
+					+ " ignored. Leave m_bDefault set on only one", LogLevel.WARNING);
+		}
+	}
+
+	//--------------------------------------------------------------------------------------------
 	//! Capture a body, then compose over it when the class says how. Shared by both boot
 	//! passes so a kit built from a roster class is identical to one built from a loadout -
 	//! only where the body came from differs. Null = the body would not capture.
@@ -544,6 +576,7 @@ class RK29_KitManager
 			return kit;
 
 		m_mKitOptions.Set(kitName, options);
+		WarnOnDuplicateDefaults(kitName, options);
 		// the base is what weapon choices lay over; m_mKits keeps the
 		// default-weapon kit so every reader still sees a fieldable one
 		m_mKitsBase.Set(kitName, composed);
@@ -607,6 +640,25 @@ class RK29_KitManager
 		sel.m_sIdentityUid = SCR_PlayerIdentityUtils.GetPlayerIdentityId(playerId);
 
 		m_mSelections.Set(playerId, sel);
+
+		// Tell the client, exactly like an apply or a rejoin does. Without this the seed is the
+		// one selection change the client never hears about: its stash stays empty, the deploy
+		// row keeps whatever icon and label it was built with, and the mannequin falls back to
+		// composing the kit locally instead of showing the loadout the server actually resolved.
+		// On a listen host those two happen to agree; on a dedicated server the resolved wire is
+		// the only thing that carries the server's own fit decisions.
+		SCR_PlayerController spc = SCR_PlayerController.Cast(GetGame().GetPlayerManager().GetPlayerController(playerId));
+		if (spc)
+		{
+			RK29_KitStruct seedKit = m_mKits.Get(kitName);
+			RK29_KitStruct seedEdited;
+			ResourceName seedOptic;
+			array<ResourceName> seedMounts;
+			if (seedKit)
+				ResolveSelection(seedKit, cls, sel, seedEdited, seedOptic, seedMounts);
+			spc.RK29_NotifyKitSaved_S(kitName, sel.m_sOptic, RK29_KitWire.Pack(seedEdited));
+		}
+
 		Print("[RK29] player " + playerId.ToString() + " had no kit - started on '" + kitName + "'", LogLevel.NORMAL);
 		return sel;
 	}

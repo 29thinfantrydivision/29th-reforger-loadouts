@@ -155,7 +155,7 @@ class RK29_WeaponSlot
 	[Attribute("0", desc: "0 primary, 1 launcher, 2 sidearm", category: "29th")]
 	int m_iSlot;
 
-	[Attribute(desc: "What may fill this slot. One entry = a fixed weapon; several = a picker column, first is the default", category: "29th")]
+	[Attribute(desc: "What may fill this slot. One entry = a fixed weapon; several = a picker column. The default is whichever option sets m_bDefault, else the first", category: "29th")]
 	ref array<ref RK29_WeaponOption> m_aOptions;
 }
 
@@ -196,6 +196,9 @@ class RK29_WeaponOption
 
 	[Attribute(desc: "Overrides the catalog's display name", category: "29th")]
 	string m_sDisplayName;
+
+	[Attribute("0", desc: "Make this the slot's default - what the kit composes with and what the picker pre-selects - regardless of where it sits in the list. Unset on every option = the first one is the default, as before", category: "29th")]
+	bool m_bDefault;
 }
 
 //------------------------------------------------------------------------------------------------
@@ -703,11 +706,21 @@ class RK29_KitSetup
 
 	//--------------------------------------------------------------------------------------------
 	//! First option in a slot - its default, and what boot composes.
+	//! The option a slot composes with and the picker pre-selects: the one flagged m_bDefault,
+	//! else the first. Listing order is presentation, so a kit can show a rifle second and still
+	//! issue it by default. First flagged wins if several are (see RK29_KitManager's boot check).
 	RK29_WeaponOption DefaultWeapon(array<ref RK29_WeaponSlot> slots, int slot = 0)
 	{
 		RK29_WeaponSlot group = FindSlot(slots, slot);
 		if (!group || !group.m_aOptions || group.m_aOptions.IsEmpty())
 			return null;
+
+		foreach (RK29_WeaponOption opt : group.m_aOptions)
+		{
+			if (opt && opt.m_bDefault)
+				return opt;
+		}
+
 		return group.m_aOptions[0];
 	}
 

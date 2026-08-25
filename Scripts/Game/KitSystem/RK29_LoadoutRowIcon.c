@@ -88,8 +88,28 @@ modded class SCR_LoadoutRequestUIComponent
 	{
 		super.RefreshLoadoutPreview();
 
-		if (m_PlyLoadoutComp)
-			RK29_StampRowName(m_PlyLoadoutComp.GetLoadout());
+		if (!m_PlyLoadoutComp)
+			return;
+
+		SCR_BasePlayerLoadout loadout = m_PlyLoadoutComp.GetLoadout();
+		RK29_StampRowName(loadout);
+
+		// SetLoadoutPreview() is ALSO the gallery's hover handler, so it early-returns while the
+		// last input was the keyboard - that guard is there to stop keyboard navigation from
+		// re-previewing on every hover. RefreshLoadoutPreview() reuses the same method for an
+		// EXPLICIT refresh and inherits the guard with it, so confirming a kit from the keyboard
+		// updated the row icon and the label but left the mannequin wearing the previous kit.
+		// Redo the preview super skipped; on mouse or gamepad it already ran and we do nothing.
+		InputManager inputManager = GetGame().GetInputManager();
+		if (!inputManager || inputManager.GetLastUsedInputDevice() != EInputDeviceType.KEYBOARD)
+			return;
+
+		if (!m_PreviewComp || !loadout)
+			return;
+
+		m_PreviewedEntity = m_PreviewComp.SetPreviewedLoadout(loadout);
+		if (m_wLoadoutPreview)
+			m_wLoadoutPreview.SetVisible(true);
 	}
 
 	//--------------------------------------------------------------------------------------------
