@@ -231,34 +231,69 @@ class RK29_StashedLoadoutUIInfo
 	}
 
 	//--------------------------------------------------------------------------------------------
+	//! Sight the server would seed this kit with - the class default, screened by the same
+	//! allow-list the picker uses so config can never mount a sight the kit forbids.
+	protected static ResourceName DefaultOpticFor(string kitName)
+	{
+		RK29_KitManager mgr = RK29_KitManager.GetInstance();
+		if (!mgr || !mgr.m_Setup)
+			return ResourceName.Empty;
+
+		RK29_ClassSetup cls = mgr.m_Setup.FindClass(kitName);
+		if (!cls || cls.m_sDefaultOptic == ResourceName.Empty)
+			return ResourceName.Empty;
+
+		if (!mgr.m_Setup.IsOpticAllowed(cls, cls.m_sDefaultOptic))
+			return ResourceName.Empty;
+
+		return cls.m_sDefaultOptic;
+	}
+
+	//--------------------------------------------------------------------------------------------
 	//! Dress and weapons for a Current Kit mannequin.
 	//!
-	//! The server's resolved wire wins whenever the player has a stash: it carries the weapon
-	//! OPTION they actually picked, which the catalog's default-weapon copy does not. Before a
-	//! first pick there is no wire, so the composed default kit is read straight out of the
-	//! local catalog - it is the same struct the server will dress the body from, so the
-	//! mannequin shows a rifleman instead of a bare body.
+	//! The server's resolved wire wins whenever it matches the kit the row resolved to: it
+	//! carries the weapon OPTION the player actually picked, which the catalog's default-weapon
+	//! copy does not. Otherwise - before a first pick, or when the row has fallen back off a
+	//! stash the player can no longer spawn - the composed kit is read straight out of the local
+	//! catalog, the same struct the server will dress the body from. outOptic follows the same
+	//! source, so the sight on the mannequin's rifle can never come from a kit the rest of the
+	//! preview is no longer showing.
 	static bool ResolvePreviewLoadout(SCR_BasePlayerLoadout loadout,
-		notnull map<string, ResourceName> outDress, notnull map<int, ResourceName> outWeapons)
+		notnull map<string, ResourceName> outDress, notnull map<int, ResourceName> outWeapons,
+		out ResourceName outOptic)
 	{
 		outDress.Clear();
 		outWeapons.Clear();
+		outOptic = ResourceName.Empty;
 
 		if (!RK29_CurrentKitLoadout.Cast(loadout))
 			return false;
 
-		if (RK29_KitPicker.HasLocalStash())
+		RK29_KitStruct kit = ResolveKit(loadout);
+		if (!kit)
+			return false;
+
+		// ...but only while the wire still DESCRIBES the kit this row resolved to. The stash is
+		// not cleared when the player changes side or squad, so a stale one out-votes a row that
+		// has correctly fallen back to the new side's default: the label reads Rifleman and the
+		// mannequin stands there in the faction the player just left.
+		if (RK29_KitPicker.HasLocalStash() && RK29_KitPicker.LocalStashKit() == kit.m_sKitName)
 		{
 			foreach (string stashSlot, ResourceName stashGarment : RK29_KitPicker.LocalStashDress())
 				outDress.Set(stashSlot, stashGarment);
 			foreach (int stashIdx, ResourceName stashWeapon : RK29_KitPicker.LocalStashWeapons())
 				outWeapons.Set(stashIdx, stashWeapon);
+			outOptic = RK29_KitPicker.LocalStashOptic();
 			return true;
 		}
 
-		RK29_KitStruct kit = ResolveKit(loadout);
-		if (!kit)
-			return false;
+		// The optic travels with the stash, so falling off one has to drop it too. The mannequin
+		// does not merely paint the wrong sight otherwise: the swap DELETES whatever the weapon
+		// was authored with before mounting, and a sight from the side the player just left will
+		// not mount on this side's rifle - so the stale value leaves the preview on irons.
+		// The seed the server is about to run picks the class default, so preview that instead.
+		outOptic = DefaultOpticFor(kit.m_sKitName);
 
 		foreach (string slot, ResourceName garment : kit.m_mClothing)
 		{

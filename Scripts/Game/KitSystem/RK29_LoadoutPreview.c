@@ -22,14 +22,15 @@ modded class SCR_LoadoutPreviewComponent
 		if (!ent)
 			return ent;
 
-		// Once the player has a stash this is the loadout the SERVER resolved and sent - never
-		// re-derived here. That is the whole point: the client used to guess which weapon a
+		// While the player's stash still names the kit this row resolves to, this is the loadout
+		// the SERVER resolved and sent - never re-derived here. That is the whole point: the client used to guess which weapon a
 		// class with two options had ended up with, and guessed wrong. Before a first pick
 		// there is nothing to send yet, so the resolver falls back to the composed default kit
 		// - without it a first-time player hovers Current Kit and sees the bare body.
 		map<string, ResourceName> dress = new map<string, ResourceName>();
 		map<int, ResourceName> weapons = new map<int, ResourceName>();
-		if (!RK29_StashedLoadoutUIInfo.ResolvePreviewLoadout(loadout, dress, weapons))
+		ResourceName optic;
+		if (!RK29_StashedLoadoutUIInfo.ResolvePreviewLoadout(loadout, dress, weapons, optic))
 			return ent;
 
 		string unresolved;
@@ -97,7 +98,7 @@ modded class SCR_LoadoutPreviewComponent
 
 		if (primary)
 		{
-			RK29_SwapPreviewOptic(primary, RK29_KitPicker.LocalStashOptic(), 0);
+			RK29_SwapPreviewOptic(primary, optic, 0);
 
 			// nothing selects a weapon on a freshly built mannequin, so it stands there with
 			// the rifle slung. Vanilla's arsenal branch does this off its Active flag.

@@ -656,6 +656,45 @@ class RK29_KitManager
 	}
 
 	//--------------------------------------------------------------------------------------------
+	//! The stash the spawn may actually dress from, re-seeded when it no longer fits.
+	//!
+	//! A selection belongs to the side and the squad it was applied on, and NOTHING clears it
+	//! when either changes - a faction swap or a group change just leaves the old one sitting in
+	//! m_mSelections. Every other reader already filters it (EffectiveKitFor for the deploy row
+	//! and its mannequin, EffectiveKitName for the counts), so an unfiltered spawn was the one
+	//! place the two disagreed: the row honestly advertised the new side's Rifleman and the body
+	//! came up wearing last life's kit from the side the player just left.
+	//!
+	//! Same order EffectiveKitFor resolves in, so the row and the body cannot part ways: keep the
+	//! stash only while it is this faction's AND still offered to this squad, otherwise drop it
+	//! and seed the side default. Dropping (not just ignoring) is what re-runs the confirmation
+	//! RPC, which is how the client's own copy of the stash gets corrected too.
+	protected RK29_PlayerSelection UsableSelection_S(int playerId, string factionKey)
+	{
+		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
+
+		// No faction to judge against - the caller could not name a side, so leave the stash
+		// alone rather than throwing away a good one on a missing argument. There is nothing to
+		// seed from either; SeedDefaultSelection_S would only refuse.
+		if (factionKey == "")
+			return sel;
+
+		if (sel)
+		{
+			if (EffectiveKitFor(playerId, factionKey) == sel.m_sKitName)
+				return sel;
+
+			Print("[RK29] player " + playerId.ToString() + " stash '" + sel.m_sKitName + "' does not"
+				+ " belong to side '" + factionKey + "' (or is no longer offered to this squad)"
+				+ " - re-seeding", LogLevel.NORMAL);
+
+			m_mSelections.Remove(playerId);
+		}
+
+		return SeedDefaultSelection_S(playerId, factionKey);
+	}
+
+	//--------------------------------------------------------------------------------------------
 	//! Dress a body straight from the stash, called by RK29_CurrentKitLoadout.OnLoadoutSpawned.
 	//! This is the whole spawn path now: the body arrives bare, so there is nothing to strip,
 	//! no async stock-item race to wait out, and no window where the player sees another kit.
@@ -669,9 +708,7 @@ class RK29_KitManager
 		// kit rather than refusing - Current Kit is the only row most squads have, so refusing
 		// spawns a bare body. Seeding a real selection (not just dressing one) keeps the HUD
 		// count, the picker's pre-selection and the respawn identity agreeing from the first life.
-		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
-		if (!sel)
-			sel = SeedDefaultSelection_S(playerId, factionKey);
+		RK29_PlayerSelection sel = UsableSelection_S(playerId, factionKey);
 		if (!sel)
 			return false;
 
