@@ -198,7 +198,7 @@ class RK29_KitHud
 		}
 
 		// row order follows the side config's class order, leftovers append in loadout order;
-		// kits sharing a display label (AR + legacy MG under "Machine Gunner") sum into one row
+		// kits sharing a display label sum into one row
 		array<string> labels = {};
 		map<string, RK29_KitStruct> labelKits = new map<string, RK29_KitStruct>();
 		if (mgr.m_Setup && mgr.m_Setup.m_aClasses)

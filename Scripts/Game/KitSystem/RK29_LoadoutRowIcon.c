@@ -1,13 +1,17 @@
 //------------------------------------------------------------------------------------------------
-//! Deploy-menu row identity for "Current Kit", and the list rebuild that makes the row exist.
+//! Deploy-menu row identity for "Current Kit" - icon AND label - and the list rebuild that
+//! makes the row exist.
 //!
 //! Vanilla builds a loadout row's icon straight from its resource prefab: load the resource,
 //! find SCR_EditableCharacterComponent, read m_UIInfo. That bypasses the kit system entirely -
 //! and Current Kit's resource is the stashed kit's BODY, which for a picker-only class is the
-//! side's shared body. A stashed medic therefore drew the rifleman's icon.
+//! side's shared body. A stashed medic therefore drew the rifleman's icon. The label has the
+//! same problem from the other direction: it is the loadout's name, so every kit in the game
+//! reads "Current Kit".
 //!
-//! The stash already knows which kit it is, and the composed kit already carries the config
-//! identity, so hand that over instead. Every other loadout row is left to vanilla: its
+//! The kit manager already knows which kit this row would spawn - the stash, or the side
+//! default for a player who has not picked yet - and the composed kit carries the config
+//! identity, so hand that over for both. Every other loadout row is left to vanilla: its
 //! resource IS its kit, so reading the prefab is correct there.
 //------------------------------------------------------------------------------------------------
 
@@ -22,6 +26,70 @@ modded class SCR_LoadoutRequestUIComponent
 		if (stashed)
 			return stashed;
 		return super.GetUIInfo(loadout);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Row label, stamped over vanilla's after the fact.
+	//!
+	//! Vanilla writes loadout.GetLoadoutName() into three widgets from four different methods,
+	//! and GetLoadoutName() cannot be the hook: it is the loadout's IDENTITY - the key the kit
+	//! manager, the injector and the ownership cache all match on - and it is shared by every
+	//! player on the machine, while the kit behind a Current Kit row is per player and per
+	//! side. So the name stays honest and the DISPLAY is corrected here, after super has run.
+	//! Overriding the setters rather than reimplementing them keeps this from rotting when
+	//! vanilla changes what else those methods do.
+	protected void RK29_StampRowName(SCR_BasePlayerLoadout loadout)
+	{
+		string label = RK29_StashedLoadoutUIInfo.ResolveName(loadout);
+		if (label == "")
+			return;
+
+		if (m_wLoadoutName)
+			m_wLoadoutName.SetText(label);
+		if (m_wLoadoutNameText)
+			m_wLoadoutNameText.SetText(label);
+		if (m_wExpandButtonName)
+			m_wExpandButtonName.SetText(label);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	override void HandlerAttached(Widget w)
+	{
+		super.HandlerAttached(w);
+		RK29_StampRowName(GetPlayerLoadout());
+	}
+
+	//--------------------------------------------------------------------------------------------
+	override protected void RequestPlayerLoadout(SCR_BasePlayerLoadout loadout)
+	{
+		super.RequestPlayerLoadout(loadout);
+		RK29_StampRowName(loadout);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Mirrors vanilla's own two gates. Without them a hover would relabel the row on mouse and
+	//! keyboard, where vanilla deliberately leaves the preview - and its name - alone.
+	override protected void SetLoadoutPreview(SCR_BasePlayerLoadout loadout)
+	{
+		super.SetLoadoutPreview(loadout);
+
+		InputManager inputManager = GetGame().GetInputManager();
+		if (inputManager && inputManager.GetLastUsedInputDevice() == EInputDeviceType.KEYBOARD)
+			return;
+
+		if (!m_PreviewComp || !loadout)
+			return;
+
+		RK29_StampRowName(loadout);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	override void RefreshLoadoutPreview()
+	{
+		super.RefreshLoadoutPreview();
+
+		if (m_PlyLoadoutComp)
+			RK29_StampRowName(m_PlyLoadoutComp.GetLoadout());
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -92,21 +160,112 @@ modded class SCR_LoadoutButton
 class RK29_StashedLoadoutUIInfo
 {
 	//--------------------------------------------------------------------------------------------
-	//! Config identity of the stashed kit, or null for anything that is not Current Kit - which
-	//! leaves vanilla's prefab read in charge of every ordinary loadout row.
+	//! Config identity of the kit this row would actually spawn, or null for anything that is
+	//! not Current Kit - which leaves vanilla's prefab read in charge of every ordinary row.
 	static SCR_EditableEntityUIInfo Resolve(SCR_BasePlayerLoadout loadout)
 	{
-		if (!loadout || !RK29_CurrentKitLoadout.Cast(loadout) || !RK29_KitPicker.HasLocalStash())
-			return null;
-
-		RK29_KitManager mgr = RK29_KitManager.GetInstance();
-		if (!mgr)
-			return null;
-
-		RK29_KitStruct kit = mgr.m_mKits.Get(RK29_KitPicker.LocalStashKit());
+		RK29_KitStruct kit = ResolveKit(loadout);
 		if (!kit)
 			return null;
 
-		return SCR_EditableEntityUIInfo.Cast(kit.m_UIInfo);
+		SCR_EditableEntityUIInfo info = SCR_EditableEntityUIInfo.Cast(kit.m_UIInfo);
+		if (!info)
+			return null;
+
+		// SCR_LoadoutButton.SetLoadout() does entityUIInfo.GetFaction().GetFactionColor() with
+		// no null check, so a UIInfo whose m_sFaction is unset or unknown crashes the deploy
+		// menu outright - "NULL pointer to instance" the moment a row is built. Refusing to
+		// hand ours over sends vanilla back to reading the prefab instead of taking the menu
+		// down, so one missing key in a kit conf costs an icon, not the round.
+		if (!info.GetFaction())
+		{
+			Print("[RK29] kit '" + kit.m_sKitName + "' has a UIInfo with no usable m_sFaction -"
+				+ " falling back to the prefab icon. Set m_sFaction in its composition",
+				LogLevel.WARNING);
+			return null;
+		}
+
+		return info;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! The kit behind a Current Kit row: the stash, or the side default a player who has never
+	//! opened the picker will be spawned with. Resolved through the manager rather than off the
+	//! local stash directly, so an untouched row shows Rifleman instead of an empty identity.
+	static RK29_KitStruct ResolveKit(SCR_BasePlayerLoadout loadout)
+	{
+		RK29_CurrentKitLoadout currentKit = RK29_CurrentKitLoadout.Cast(loadout);
+		if (!currentKit)
+			return null;
+
+		RK29_KitManager mgr = RK29_KitManager.GetInstance();
+		PlayerController pc = GetGame().GetPlayerController();
+		if (!mgr || !pc)
+			return null;
+
+		string kitName = mgr.EffectiveKitFor(pc.GetPlayerId(), currentKit.GetFactionKey());
+		if (kitName == "")
+			return null;
+
+		return mgr.m_mKits.Get(kitName);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Dress and weapons for a Current Kit mannequin.
+	//!
+	//! The server's resolved wire wins whenever the player has a stash: it carries the weapon
+	//! OPTION they actually picked, which the catalog's default-weapon copy does not. Before a
+	//! first pick there is no wire, so the composed default kit is read straight out of the
+	//! local catalog - it is the same struct the server will dress the body from, so the
+	//! mannequin shows a rifleman instead of a bare body.
+	static bool ResolvePreviewLoadout(SCR_BasePlayerLoadout loadout,
+		notnull map<string, ResourceName> outDress, notnull map<int, ResourceName> outWeapons)
+	{
+		outDress.Clear();
+		outWeapons.Clear();
+
+		if (!RK29_CurrentKitLoadout.Cast(loadout))
+			return false;
+
+		if (RK29_KitPicker.HasLocalStash())
+		{
+			foreach (string stashSlot, ResourceName stashGarment : RK29_KitPicker.LocalStashDress())
+				outDress.Set(stashSlot, stashGarment);
+			foreach (int stashIdx, ResourceName stashWeapon : RK29_KitPicker.LocalStashWeapons())
+				outWeapons.Set(stashIdx, stashWeapon);
+			return true;
+		}
+
+		RK29_KitStruct kit = ResolveKit(loadout);
+		if (!kit)
+			return false;
+
+		foreach (string slot, ResourceName garment : kit.m_mClothing)
+		{
+			if (garment != ResourceName.Empty)
+				outDress.Set(slot, garment);
+		}
+
+		// grenades live in the weapon map under a sentinel index and never reach a mannequin,
+		// same exclusion RK29_KitWire.Pack() makes
+		foreach (int idx, ResourceName weapon : kit.m_mWeapons)
+		{
+			if (weapon != ResourceName.Empty && idx != RK29_KitStruct.GRENADE_SLOT)
+				outWeapons.Set(idx, weapon);
+		}
+
+		return true;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Row label for a Current Kit row - the kit's own short name ("Machine Gunner"), not the
+	//! literal loadout name. Empty for every other row, which keeps its own name.
+	static string ResolveName(SCR_BasePlayerLoadout loadout)
+	{
+		RK29_KitStruct kit = ResolveKit(loadout);
+		if (!kit)
+			return "";
+
+		return RK29_KitHud.ShortKitName(kit.m_sKitName);
 	}
 }
