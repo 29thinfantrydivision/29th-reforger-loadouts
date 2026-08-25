@@ -115,24 +115,24 @@ class RK29_KitPicker
 		// but nothing in the deploy menu watches for a loadout changing underneath it. It only
 		// re-previews on spawn-point and supply-cost changes, so picking a kit while dead leaves
 		// the old body on display. This is the confirmation coming back from the server, so the
-		// stash is current by now and the preview can be rebuilt against it.
-		RefreshDeployPreview();
+		// stash is current by now and the preview and the row list can be rebuilt against it.
+		RefreshDeployMenu();
 	}
 
 	//--------------------------------------------------------------------------------------------
 	//! Deferred by a frame, matching the deploy menu's own idiom for this call.
-	protected static void RefreshDeployPreview()
+	protected static void RefreshDeployMenu()
 	{
 		if (!IsDeployMenuOpen())
 			return;
-		GetGame().GetCallqueue().CallLater(RefreshDeployPreviewNow, 0, false);
+		GetGame().GetCallqueue().CallLater(RefreshDeployMenuNow, 0, false);
 	}
 
 	//--------------------------------------------------------------------------------------------
 	//! "LoadoutSelector" is the widget name SCR_DeployMenuHandler looks the component up by; it
 	//! is an attribute default, so a custom deploy layout could rename it - hence the quiet
-	//! bail rather than an error. Losing the refresh costs a stale preview, nothing more.
-	protected static void RefreshDeployPreviewNow()
+	//! bail rather than an error. Losing the refresh costs a stale menu, nothing more.
+	protected static void RefreshDeployMenuNow()
 	{
 		MenuManager mm = GetGame().GetMenuManager();
 		if (!mm)
@@ -150,6 +150,10 @@ class RK29_KitPicker
 			holder.FindHandler(SCR_LoadoutRequestUIComponent));
 		if (!comp)
 			return;
+
+		// The row has to exist before anything can select or highlight it: a first-ever apply
+		// makes Current Kit available, and vanilla's list was built before that was true.
+		comp.RK29_RefreshLoadoutList();
 
 		// rebuilds the mannequin, moves the gallery selection and updates the name label
 		comp.RefreshLoadoutPreview();
