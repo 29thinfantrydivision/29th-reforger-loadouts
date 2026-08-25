@@ -467,8 +467,7 @@ class RK29_KitManager
 			// A re-kit hands out a clean loadout; hand out the clean body to go with it.
 			// Preround only - the guards above see to that - so this is scratch damage from
 			// the staging area, never a round the player is meant to live with. Immediate
-			// even when the apply below is deferred: the heal has nothing to do with the
-			// item-init race the defer is waiting out.
+			// even when the apply below waits: healing does not touch the hands.
 			RK29_KitHeal.Heal(character);
 
 			// an incapacitated player was lying down; the heal just stood them back up, so
@@ -480,31 +479,19 @@ class RK29_KitManager
 				dynStance = 1.0;
 			}
 
-			// stock item-init spawns land async on the spawn frame - applying to a body
-			// younger than that window strips an empty body, then the stock items land on
-			// top of the dressed kit (mass duplicates; log-proven at 21:40). Same defer
-			// the spawn path uses.
-			float spawnAt;
-			float bodyAge = 999999;
-			if (m_mSpawnAt_S.Find(playerId, spawnAt))
-				bodyAge = GetGame().GetWorld().GetWorldTime() - spawnAt;
-			int gen = BumpApplyGen(playerId);
-			if (bodyAge < SPAWN_SETTLE_MS)
-			{
-				Print("[RK29] apply deferred - body is " + bodyAge.ToString() + "ms old (item-init race)", LogLevel.NORMAL);
-				GetGame().GetCallqueue().CallLater(ApplySpawnMutation, SPAWN_SETTLE_MS - bodyAge, false, playerId, gen, edited, applyOptic, mounts);
-			}
-			else
-			{
-				array<ResourceName> droppedItems;
-				RK29_KitApply.Apply(character, edited, applyOptic, mounts, droppedItems);
-				NotifyDropped_S(playerId, droppedItems);
-			}
+			// The generation bump no longer guards anything - every apply is synchronous again -
+			// but it keeps the counter moving in step with the applies, ready if deferred work
+			// ever comes back.
+			BumpApplyGen(playerId);
+
+			array<ResourceName> droppedItems;
+			RK29_KitApply.Apply(character, edited, applyOptic, mounts, droppedItems);
+			NotifyDropped_S(playerId, droppedItems);
 			StampBody(character, kit);
 
 			SCR_PlayerController heldPc = SCR_PlayerController.Cast(GetGame().GetPlayerManager().GetPlayerController(playerId));
 			if (heldPc)
-				heldPc.RK29_NotifyRestoreState_S(heldSlot, stance, dynStance);
+				heldPc.RK29_NotifyRestoreState_S(stance, dynStance, WeaponRplIdInSlot(character, heldSlot));
 		}
 
 		// deploy menu shows "Current Kit" selected; spawn re-dresses from the stash
@@ -519,19 +506,6 @@ class RK29_KitManager
 
 		Recompute_S();
 	}
-
-	//--------------------------------------------------------------------------------------------
-	//! Applies the stashed customization onto a freshly spawned body.
-	//! Stock loadout items land async after the spawn frame. Dressing a body younger than this
-	//! strips an empty body and the stock items then land on top of the kit - mass duplicates.
-	//! ONE number, used by both the spawn path and the live-apply path; they used to disagree
-	//! (500 vs 700) with the spawn path on the unsafe side.
-	//!
-	//! KNOWN TOO SHORT - the real wait is much longer in practice. Not yet raised because the
-	//! right value is not a guess: see RK29_Log's settle trace before changing this.
-	protected static const int SPAWN_SETTLE_MS = 700;
-
-	protected ref map<int, float> m_mSpawnAt_S = new map<int, float>();
 
 	//! Bumped on every spawn and every apply. A deferred mutation carries the value it was
 	//! scheduled under and abandons itself if it is no longer current - so a stale snapshot
@@ -725,7 +699,7 @@ class RK29_KitManager
 		if (spawnChar)
 			ctrl = spawnChar.GetCharacterController();
 		if (pc && ctrl)
-			pc.RK29_NotifyRestoreState_S(0, ctrl.GetStance(), ctrl.GetDynamicStance());
+			pc.RK29_NotifyRestoreState_S(ctrl.GetStance(), ctrl.GetDynamicStance(), WeaponRplIdInSlot(body, 0));
 
 		m_mSpawnApplied_S.Set(playerId, BumpApplyGen(playerId));
 		return true;
@@ -750,48 +724,26 @@ class RK29_KitManager
 		if (!Replication.IsServer())
 			return;
 
-		m_mSpawnAt_S.Set(playerId, GetGame().GetWorld().GetWorldTime());
-
 		// EVERY spawn, not just a kitted one: a mutation queued against the previous body must
 		// not find itself still current and dress the new one.
 		BumpApplyGen(playerId);
 
-		bool willApply = false;
-		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
-		if (sel)
-		{
-			RK29_KitStruct kit = m_mKits.Get(sel.m_sKitName);
-			SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(entity);
-			string current = CurrentLoadoutName(playerId);
-			// "Current Kit" is the ONLY entry that dresses from the stash - and it now does so
-			// in OnLoadoutSpawned, on a bare body. Picking any other entry is a request for
-			// that loadout as authored, including the stock entry for the very class the stash
-			// came from; stock spawns are NEVER mutated.
-			//
-			// OnLoadoutSpawned already dressed this body the moment it existed - no strip, no
-			// settle window, nothing to redo. The deferred path below survives only for a
-			// Current Kit spawn that somehow missed the hook.
-			int appliedGen;
-			bool alreadyDressed = m_mSpawnApplied_S.Find(playerId, appliedGen);
-			m_mSpawnApplied_S.Remove(playerId);
-
-			bool wantsApply = !alreadyDressed
-				&& IsCurrentKitLoadoutName(current) && EffectiveKitName(playerId) == sel.m_sKitName;
-			if (alreadyDressed)
-				willApply = true;
-			if (kit && character && wantsApply)
-			{
-				willApply = true;
-				RK29_ClassSetup cls = m_Setup.FindClass(sel.m_sKitName);
-				RK29_KitStruct edited;
-				ResourceName applyOptic;
-				array<ResourceName> mounts;
-				ResolveSelection(kit, cls, sel, edited, applyOptic, mounts);
-				// deferred: InitialInventoryItems land async on the spawn frame
-				GetGame().GetCallqueue().CallLater(ApplySpawnMutation, SPAWN_SETTLE_MS, false, playerId,
-					BumpApplyGen(playerId), edited, applyOptic, mounts);
-			}
-		}
+		// "Current Kit" is the ONLY entry that dresses from the stash, and it does so in
+		// OnLoadoutSpawned, on a bare body - no strip, no settle window, nothing to redo here.
+		// Picking any other entry is a request for that loadout as authored, including the stock
+		// entry for the very class the stash came from; stock spawns are NEVER mutated.
+		//
+		// There used to be a deferred re-dress here for a Current Kit spawn that somehow missed
+		// the loadout hook. Removed 2026-08-25: it was the original spawn path left behind after
+		// OnLoadoutSpawned superseded it, never once observed firing, and it fired silently so a
+		// miss would have looked like nothing at all. Its gate read the ASSIGNED loadout rather
+		// than the body's provenance, so the only thing that could reach it was a body the game
+		// mode counts as a spawn but that never came out of the loadout - GM possession, or a
+		// respawn route bypassing SCR_PlayerLoadoutComponent. If that turns up, the body keeps
+		// the gear it spawned with and the player re-kits (preround only) or respawns.
+		int appliedGen;
+		bool willApply = m_mSpawnApplied_S.Find(playerId, appliedGen);
+		m_mSpawnApplied_S.Remove(playerId);
 
 		// A stock spawn keeps its GEAR as authored - that is the rule above and it stands - but a
 		// role's QUALIFICATIONS are config-owned, and selections live in server memory only, so
@@ -810,29 +762,42 @@ class RK29_KitManager
 	}
 
 	//--------------------------------------------------------------------------------------------
-	protected void ApplySpawnMutation(int playerId, int gen, RK29_KitStruct edited, ResourceName optic, array<ResourceName> mounts)
+	//! Network id of the weapon now sitting in `slotIndex`, so the client can wait for THAT
+	//! entity rather than for a slot to look occupied. The slot is a poor readiness test on its
+	//! own: the body's previous weapon may not have been reaped client-side yet, and if the
+	//! re-kit hands back the same prefab the two are indistinguishable by name - the client
+	//! would draw the doomed one. An id cannot be confused that way.
+	//! Invalid when the slot is empty or the index is negative (nothing was in hands).
+	protected static RplId WeaponRplIdInSlot(IEntity character, int slotIndex)
 	{
-		// a newer spawn or a newer apply has happened since this was queued - that one owns the
-		// body now, and this snapshot would dress it with something the player has moved on from
-		int current;
-		if (!m_mApplyGen_S.Find(playerId, current) || current != gen)
-			return;
+		if (!character || slotIndex < 0)
+			return RplId.Invalid();
 
-		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(GetGame().GetPlayerManager().GetPlayerControlledEntity(playerId));
-		if (!character || !character.GetCharacterController() || character.GetCharacterController().IsDead())
-			return;
-		array<ResourceName> droppedItems;
-		RK29_KitApply.Apply(character, edited, optic, mounts, droppedItems);
-		NotifyDropped_S(playerId, droppedItems);
+		ChimeraCharacter chimera = ChimeraCharacter.Cast(character);
+		if (!chimera)
+			return RplId.Invalid();
+		CharacterControllerComponent ctrl = chimera.GetCharacterController();
+		if (!ctrl)
+			return RplId.Invalid();
+		BaseWeaponManagerComponent wm = ctrl.GetWeaponManagerComponent();
+		if (!wm)
+			return RplId.Invalid();
 
-		// A live re-kit remembers what the player was holding and puts it back; a spawn has
-		// nothing to remember, and DressWeapons only fills the slots - it never selects one.
-		// Without this the player lands with the rifle slung. Stance is passed through as it
-		// already is, so only the weapon selection has any effect here.
-		SCR_PlayerController spawnPc = SCR_PlayerController.Cast(GetGame().GetPlayerManager().GetPlayerController(playerId));
-		CharacterControllerComponent spawnCtrl = character.GetCharacterController();
-		if (spawnPc && spawnCtrl)
-			spawnPc.RK29_NotifyRestoreState_S(0, spawnCtrl.GetStance(), spawnCtrl.GetDynamicStance());
+		array<WeaponSlotComponent> slots = {};
+		wm.GetWeaponsSlots(slots);
+		foreach (WeaponSlotComponent slot : slots)
+		{
+			if (!slot || slot.GetWeaponSlotIndex() != slotIndex)
+				continue;
+			IEntity weapon = slot.GetWeaponEntity();
+			if (!weapon)
+				break;
+			RplComponent rpl = RplComponent.Cast(weapon.FindComponent(RplComponent));
+			if (rpl)
+				return rpl.Id();
+			break;
+		}
+		return RplId.Invalid();
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -1050,7 +1015,6 @@ class RK29_KitManager
 
 		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
 		m_mSelections.Remove(playerId);
-		m_mSpawnAt_S.Remove(playerId);
 		m_mApplyGen_S.Remove(playerId);
 		if (sel && sel.m_sIdentityUid != "")
 			m_mParkedSelections.Set(sel.m_sIdentityUid, sel);

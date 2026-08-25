@@ -558,9 +558,12 @@ qualifications are config-owned, so `OnPlayerSpawned_S` calls `ApplyTraits` alon
 keyed on the loadout the player actually spawned with. This is not optional polish: selections
 live in server memory only (§9), so the first spawn of every session is a stock spawn, and
 without it a medic would bandage at rifleman speed until they opened the picker. Labels only,
-no inventory touched, and no `SPAWN_SETTLE_MS` defer - labels do not race the async item-init
-that the apply pass waits out. A loadout that resolves to no kit (vanilla, foreign) is skipped
-so its prefab labels stand.
+nothing touched in the inventory. A loadout that resolves to no kit (vanilla, foreign) is
+skipped so its prefab labels stand.
+
+The settle defer that used to guard the apply pass against async stock item-init is gone as of
+2026-08-25, along with the deferred spawn re-dress it served. `OnLoadoutSpawned` dresses a bare
+body, so there is no stock item-init to race, and every apply is now synchronous.
 
 `RK29_ETrait` is a curated vocabulary, not the raw 150-entry `EEditableEntityLabel`:
 
