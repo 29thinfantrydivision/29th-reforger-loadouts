@@ -1,0 +1,168 @@
+FrameWidgetClass {
+ Name "RK29_KitHud"
+ {
+  SizeLayoutWidgetClass "{AB29C0FFEE292001}" {
+   Name "HudBand"
+   Slot FrameWidgetSlot "{AB29C0FFEE292002}" {
+    Anchor 0.015 0.5 0.015 0.5
+    PositionX 0
+    OffsetLeft 0
+    PositionY 0
+    OffsetTop 0
+    Alignment 0 0.5
+    SizeToContent 1
+   }
+   AllowWidthOverride 1
+   WidthOverride 250
+   {
+    VerticalLayoutWidgetClass "{AB29C0FFEE292014}" {
+     Name "HudStack"
+     Slot AlignableSlot "{AB29C0FFEE292015}" {
+      HorizontalAlign 3
+      VerticalAlign 3
+     }
+     {
+      SizeLayoutWidgetClass "{AB29C0FFEE292016}" {
+       Name "HudTitleBand"
+       Slot LayoutSlot "{AB29C0FFEE292017}" {
+       }
+       AllowHeightOverride 1
+       HeightOverride 30
+       {
+        OverlayWidgetClass "{AB29C0FFEE292018}" {
+         Name "HudTitleOverlay"
+         Slot AlignableSlot "{AB29C0FFEE292019}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+         }
+         {
+          ImageWidgetClass "{AB29C0FFEE292003}" {
+           Name "HudTitleBg"
+           Slot OverlayWidgetSlot "{AB29C0FFEE292004}" {
+            HorizontalAlign 3
+            VerticalAlign 3
+           }
+           Opacity 0.55
+           Color 0.007 0.012 0.014 1
+          }
+          RichTextWidgetClass "{AB29C0FFEE292005}" {
+           Name "HudTitle"
+           Slot OverlayWidgetSlot "{AB29C0FFEE292006}" {
+            HorizontalAlign 3
+            VerticalAlign 3
+            Padding 8 0 8 0
+           }
+           Color 1 1 1 1
+           Text "KITS FIELDED"
+           "Font Size" 18
+           "Min Font Size" 14
+           FontProperties FontProperties "{AB29C0FFEE292010}" {
+            Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+           }
+           "Horizontal Alignment" Left
+           "Vertical Alignment" Center
+          }
+         }
+        }
+       }
+      }
+      SizeLayoutWidgetClass "{AB29C0FFEE29201A}" {
+       Name "HudAccentBand"
+       Slot LayoutSlot "{AB29C0FFEE29201B}" {
+       }
+       AllowHeightOverride 1
+       HeightOverride 3
+       {
+        ImageWidgetClass "{AB29C0FFEE292011}" {
+         Name "HudTitleAccent"
+         Slot AlignableSlot "{AB29C0FFEE292012}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+         }
+         Opacity 0.85
+         Color 0.761 0.392 0.078 1
+        }
+       }
+      }
+      SizeLayoutWidgetClass "{AB29C0FFEE292026}" {
+       Name "HudHeaderBand"
+       Slot LayoutSlot "{AB29C0FFEE292027}" {
+       }
+       AllowHeightOverride 1
+       HeightOverride 28
+       {
+        VerticalLayoutWidgetClass "{AB29C0FFEE292028}" {
+         Name "HudHeaderRow"
+         Slot AlignableSlot "{AB29C0FFEE292029}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+          Padding 4 0 4 0
+         }
+        }
+       }
+      }
+      OverlayWidgetClass "{AB29C0FFEE29201C}" {
+       Name "HudRowsOverlay"
+       Slot LayoutSlot "{AB29C0FFEE29201D}" {
+       }
+       {
+        ImageWidgetClass "{AB29C0FFEE292007}" {
+         Name "HudRowsBg"
+         Slot OverlayWidgetSlot "{AB29C0FFEE292008}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+         }
+         Opacity 0.35
+         Color 0 0 0 1
+        }
+        VerticalLayoutWidgetClass "{AB29C0FFEE292009}" {
+         Name "HudRows"
+         Slot OverlayWidgetSlot "{AB29C0FFEE29200A}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+          Padding 4 4 4 4
+         }
+        }
+       }
+      }
+      SizeLayoutWidgetClass "{AB29C0FFEE29201E}" {
+       Name "HudFooterBand"
+       Slot LayoutSlot "{AB29C0FFEE29201F}" {
+       }
+       AllowHeightOverride 1
+       HeightOverride 46
+       {
+        OverlayWidgetClass "{AB29C0FFEE292020}" {
+         Name "HudFooterOverlay"
+         Slot AlignableSlot "{AB29C0FFEE292021}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+         }
+         {
+          ImageWidgetClass "{AB29C0FFEE29200B}" {
+           Name "HudFooterBg"
+           Slot OverlayWidgetSlot "{AB29C0FFEE29200C}" {
+            HorizontalAlign 3
+            VerticalAlign 3
+           }
+           Opacity 0.55
+           Color 0.007 0.012 0.014 1
+          }
+          VerticalLayoutWidgetClass "{AB29C0FFEE292022}" {
+           Name "HudFooterRow"
+           Slot OverlayWidgetSlot "{AB29C0FFEE29200E}" {
+            HorizontalAlign 3
+            VerticalAlign 3
+            Padding 4 0 4 0
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}
