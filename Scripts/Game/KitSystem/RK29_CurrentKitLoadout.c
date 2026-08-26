@@ -1,5 +1,11 @@
 //------------------------------------------------------------------------------------------------
-//! "Current Kit" deploy-menu entry - respawns the player's stashed picker selection.
+//! "Current Kit" deploy-menu entry - respawns the player's stashed picker selection, and the
+//! side's default kit (Rifleman) for a player who has not picked one yet.
+//!
+//! With the per-role deploy rows dropped this is how almost everybody spawns, so it is always
+//! offered rather than gated on having used the picker: a squad with kits always has a row, and
+//! that row always resolves to a real kit. The row's icon and label follow the kit it will
+//! actually spawn, not the literal loadout name - see RK29_LoadoutRowIcon.c.
 //!
 //! The body it spawns is the side's BARE base: no dress, no weapons, no stock inventory. The kit
 //! is applied in OnLoadoutSpawned, the same hook vanilla's arsenal uses. That is what makes this
@@ -11,28 +17,34 @@
 class RK29_CurrentKitLoadout : SCR_FactionPlayerLoadout
 {
 	//--------------------------------------------------------------------------------------------
+	//! Available whenever this side's squad has any kit to give - which, with the per-role
+	//! deploy rows gone, is the whole point: Current Kit is how a player deploys at all, so it
+	//! cannot be gated on having already used the picker. EffectiveKitFor() resolves the side
+	//! default (Rifleman) for a player with no stash, and "" only for a squad offered nothing.
+	//!
+	//! Still faction-scoped. The row is per faction and the caller already filters by faction,
+	//! but a stash belongs to the side it was applied on, so asking with our own key keeps the
+	//! OTHER side's row from answering with a kit it cannot spawn.
 	override bool IsLoadoutAvailable(int playerId)
 	{
 		RK29_KitManager mgr = RK29_KitManager.GetInstance();
-		return mgr && mgr.StashOfferedKit(playerId, GetFactionKey()) != "";
+		return mgr && mgr.EffectiveKitFor(playerId, GetFactionKey()) != "";
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! Faction-scoped, like the server's own gate: a stash is for the faction it was applied
-	//! on, so the OTHER faction's Current Kit entry must not offer it. Without this the entry
-	//! appears for a side the player has never kitted on, previewing a placeholder body.
+	//! Client mirror of the gate above, resolved the same way so the row the player sees and the
+	//! row the server honours cannot disagree.
 	override bool IsLoadoutAvailableClient()
 	{
-		string kitName = RK29_KitPicker.LocalStashKit();
-		if (kitName == "")
-			return false;
-
 		RK29_KitManager mgr = RK29_KitManager.GetInstance();
 		if (!mgr)
 			return false;
 
-		RK29_KitStruct kit = mgr.m_mKits.Get(kitName);
-		return kit && kit.m_sFactionKey == GetFactionKey();
+		PlayerController pc = GetGame().GetPlayerController();
+		if (!pc)
+			return false;
+
+		return mgr.EffectiveKitFor(pc.GetPlayerId(), GetFactionKey()) != "";
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -63,7 +75,9 @@ class RK29_CurrentKitLoadout : SCR_FactionPlayerLoadout
 		if (!mgr)
 			return;
 
-		if (!mgr.ApplyStashOnSpawn_S(playerId, pOwner))
+		// Hand our own faction over: a first-deploy player has no stash to read a side off, and
+		// the row that was clicked is the only thing that knows which side they picked.
+		if (!mgr.ApplyStashOnSpawn_S(playerId, pOwner, GetFactionKey()))
 			Print("[RK29] Current Kit spawned with no usable stash - body stays bare (player "
 				+ playerId.ToString() + ")", LogLevel.WARNING);
 	}

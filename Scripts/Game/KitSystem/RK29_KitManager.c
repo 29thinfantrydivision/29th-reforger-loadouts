@@ -34,13 +34,13 @@ class RK29_KitManager
 	//! copy of that weapon's blocks (its grenade set would double).
 	ref map<string, ref RK29_KitStruct> m_mKitsBase = new map<string, ref RK29_KitStruct>();
 
-	//! The raw prefab capture, kept beside the composed kit so /kitdump can export prefab
-	//! truth. Re-deriving it later by loadout name resolves to the wrong loadout object.
-	ref map<string, ref RK29_KitStruct> m_mCaptured = new map<string, ref RK29_KitStruct>();
-
-	//! Last group name that fell through to the default squad list - so the warning is printed
-	//! once per group rather than on every picker rebuild.
+	//! Last group identity that fell through to the default squad list - so the warning is
+	//! printed once per group rather than on every picker rebuild. Keyed on name+role, since an
+	//! unnamed group is the common case and every one of those would otherwise share a key.
 	protected string m_sLastUnmatchedGroup;
+
+	//! Same one-shot-per-subject throttle for the "default kit not offered here" note.
+	protected string m_sLastDefaultlessFaction;
 
 	//! Same index space as SCR_LoadoutManager's list; the count arrays use it too.
 	ref array<string> m_aIndexToKit = {};
@@ -90,7 +90,7 @@ class RK29_KitManager
 			if (!kitName.StartsWith("29th"))
 				continue;
 
-			RK29_KitStruct kit = BuildKit(kitName, fl.GetFactionKey(), loadout.GetLoadoutResource(), true);
+			RK29_KitStruct kit = BuildKit(kitName, fl.GetFactionKey(), loadout.GetLoadoutResource());
 			if (!kit)
 				continue;
 
@@ -116,7 +116,7 @@ class RK29_KitManager
 				continue;
 			}
 
-			RK29_KitStruct standalone = BuildKit(cls2.m_sKitName, cls2.m_sSideFactionKey, body, false);
+			RK29_KitStruct standalone = BuildKit(cls2.m_sKitName, cls2.m_sSideFactionKey, body);
 			if (!standalone)
 				continue;
 
@@ -186,6 +186,7 @@ class RK29_KitManager
 					// boot pass needs both to build a kit that has no loadout entry
 					c.m_sSideFactionKey = side.m_sFactionKey;
 					c.m_sSideBodyPrefab = side.m_sBodyPrefab;
+					c.m_sSideDefaultKit = side.m_sDefaultKitName;
 					m_Setup.m_aClasses.Insert(c);
 				}
 			}
@@ -311,16 +312,6 @@ class RK29_KitManager
 		}
 
 		Print("[RK29] setup loaded - " + m_Setup.m_aClasses.Count().ToString() + " class(es), " + m_Setup.m_aOpticCategories.Count().ToString() + " optic categorie(s), " + m_Setup.m_aAliases.Count().ToString() + " alias(es)", LogLevel.NORMAL);
-	}
-
-	//--------------------------------------------------------------------------------------------
-	//! Re-capture straight from the prefab, bypassing any config composition.
-	RK29_KitStruct RK29_CaptureFresh(string kitName)
-	{
-		SCR_FactionPlayerLoadout fl = SCR_FactionPlayerLoadout.Cast(FindLoadoutByName(kitName));
-		if (!fl)
-			return null;
-		return RK29_KitCapture.Capture(kitName, fl.GetFactionKey(), fl.GetLoadoutResource());
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -453,11 +444,13 @@ class RK29_KitManager
 			int heldSlot = -1;
 			int stance = 0;
 			float dynStance = 1.0;
+			bool wasDown = false;
 			CharacterControllerComponent charCtrl = character.GetCharacterController();
 			if (charCtrl)
 			{
 				stance = charCtrl.GetStance();
 				dynStance = charCtrl.GetDynamicStance();
+				wasDown = charCtrl.GetLifeState() == ECharacterLifeState.INCAPACITATED;
 				BaseWeaponManagerComponent wm = charCtrl.GetWeaponManagerComponent();
 				if (wm && wm.GetCurrentWeapon())
 				{
@@ -467,31 +460,34 @@ class RK29_KitManager
 				}
 			}
 
-			// stock item-init spawns land async on the spawn frame - applying to a body
-			// younger than that window strips an empty body, then the stock items land on
-			// top of the dressed kit (mass duplicates; log-proven at 21:40). Same defer
-			// the spawn path uses.
-			float spawnAt;
-			float bodyAge = 999999;
-			if (m_mSpawnAt_S.Find(playerId, spawnAt))
-				bodyAge = GetGame().GetWorld().GetWorldTime() - spawnAt;
-			int gen = BumpApplyGen(playerId);
-			if (bodyAge < SPAWN_SETTLE_MS)
+			// A re-kit hands out a clean loadout; hand out the clean body to go with it.
+			// Preround only - the guards above see to that - so this is scratch damage from
+			// the staging area, never a round the player is meant to live with. Immediate
+			// even when the apply below waits: healing does not touch the hands.
+			RK29_KitHeal.Heal(character);
+
+			// an incapacitated player was lying down; the heal just stood them back up, so
+			// the stance we captured a moment ago is a stance they no longer have. Restoring
+			// it would drop the freshly revived player straight back onto their face.
+			if (wasDown)
 			{
-				Print("[RK29] apply deferred - body is " + bodyAge.ToString() + "ms old (item-init race)", LogLevel.NORMAL);
-				GetGame().GetCallqueue().CallLater(ApplySpawnMutation, SPAWN_SETTLE_MS - bodyAge, false, playerId, gen, edited, applyOptic, mounts);
+				stance = ECharacterStance.STAND;
+				dynStance = 1.0;
 			}
-			else
-			{
-				array<ResourceName> droppedItems;
-				RK29_KitApply.Apply(character, edited, applyOptic, mounts, droppedItems);
-				NotifyDropped_S(playerId, droppedItems);
-			}
+
+			// The generation bump no longer guards anything - every apply is synchronous again -
+			// but it keeps the counter moving in step with the applies, ready if deferred work
+			// ever comes back.
+			BumpApplyGen(playerId);
+
+			array<ResourceName> droppedItems;
+			RK29_KitApply.Apply(character, edited, applyOptic, mounts, droppedItems);
+			NotifyDropped_S(playerId, droppedItems);
 			StampBody(character, kit);
 
 			SCR_PlayerController heldPc = SCR_PlayerController.Cast(GetGame().GetPlayerManager().GetPlayerController(playerId));
 			if (heldPc)
-				heldPc.RK29_NotifyRestoreState_S(heldSlot, stance, dynStance);
+				heldPc.RK29_NotifyRestoreState_S(stance, dynStance, WeaponRplIdInSlot(character, heldSlot));
 		}
 
 		// deploy menu shows "Current Kit" selected; spawn re-dresses from the stash
@@ -507,19 +503,6 @@ class RK29_KitManager
 		Recompute_S();
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Applies the stashed customization onto a freshly spawned body.
-	//! Stock loadout items land async after the spawn frame. Dressing a body younger than this
-	//! strips an empty body and the stock items then land on top of the kit - mass duplicates.
-	//! ONE number, used by both the spawn path and the live-apply path; they used to disagree
-	//! (500 vs 700) with the spawn path on the unsafe side.
-	//!
-	//! KNOWN TOO SHORT - the real wait is much longer in practice. Not yet raised because the
-	//! right value is not a guess: see RK29_Log's settle trace before changing this.
-	protected static const int SPAWN_SETTLE_MS = 700;
-
-	protected ref map<int, float> m_mSpawnAt_S = new map<int, float>();
-
 	//! Bumped on every spawn and every apply. A deferred mutation carries the value it was
 	//! scheduled under and abandons itself if it is no longer current - so a stale snapshot
 	//! cannot dress a body that has since respawned, and two applies inside the settle window
@@ -527,16 +510,50 @@ class RK29_KitManager
 	protected ref map<int, int> m_mApplyGen_S = new map<int, int>();
 
 	//--------------------------------------------------------------------------------------------
+	//! Two options in one slot both claiming m_bDefault is an authoring mistake with a silent
+	//! outcome - the earlier one just wins and the other looks ignored. Say so once, at boot.
+	protected void WarnOnDuplicateDefaults(string kitName, array<ref RK29_WeaponSlot> slots)
+	{
+		if (!slots)
+			return;
+
+		foreach (RK29_WeaponSlot slotGroup : slots)
+		{
+			if (!slotGroup || !slotGroup.m_aOptions)
+				continue;
+
+			string flagged;
+			int count = 0;
+			foreach (RK29_WeaponOption opt : slotGroup.m_aOptions)
+			{
+				if (!opt || !opt.m_bDefault)
+					continue;
+				count = count + 1;
+				if (flagged != "")
+					flagged = flagged + ", ";
+				flagged = flagged + opt.m_sWeapon;
+			}
+
+			if (count > 1)
+				Print("[RK29] '" + kitName + "' slot " + slotGroup.m_iSlot.ToString() + " marks "
+					+ count.ToString() + " defaults (" + flagged + ") - the first wins, the rest are"
+					+ " ignored. Leave m_bDefault set on only one", LogLevel.WARNING);
+		}
+	}
+
+	//--------------------------------------------------------------------------------------------
 	//! Capture a body, then compose over it when the class says how. Shared by both boot
 	//! passes so a kit built from a roster class is identical to one built from a loadout -
 	//! only where the body came from differs. Null = the body would not capture.
-	protected RK29_KitStruct BuildKit(string kitName, string factionKey, ResourceName body, bool ownBody)
+	//!
+	//! The capture is a starting point, not a reference: no kit is defined by a role prefab
+	//! any more, so there is nothing to compare config against and no drift to detect. Config
+	//! is the whole truth.
+	protected RK29_KitStruct BuildKit(string kitName, string factionKey, ResourceName body)
 	{
 		RK29_KitStruct kit = RK29_KitCapture.Capture(kitName, factionKey, body);
 		if (!kit)
 			return null;
-
-		m_mCaptured.Set(kitName, kit);
 
 		// hybrid: a class with a composition composes from config, else the capture stands
 		RK29_ClassSetup cls = m_Setup.FindClass(kitName);
@@ -549,25 +566,11 @@ class RK29_KitManager
 			return kit;
 
 		m_mKitOptions.Set(kitName, options);
+		WarnOnDuplicateDefaults(kitName, options);
 		// the base is what weapon choices lay over; m_mKits keeps the
 		// default-weapon kit so every reader still sees a fieldable one
 		m_mKitsBase.Set(kitName, composed);
 		composed = RK29_KitCompose.ApplyWeaponChoices(composed, options, ResourceName.Empty, m_Setup);
-
-		// drift guardrail: only meaningful for a kit whose body is the prefab that used to
-		// DEFINE it - i.e. one built from its own deploy entry. A kit built from a shared side
-		// body is dressed entirely from config, so the body's item count says nothing and the
-		// comparison would fire on every one of them.
-		if (ownBody)
-		{
-			// intended config-vs-prefab deltas are small (grenade fold, bayonet
-			// normalization). A big gap means the prefab was reworked after the dump the
-			// configs were generated from - LAT taught us this.
-			int drift = composed.CountItems() - kit.CountItems();
-			if (drift < -2 || drift > 4)
-				Print(string.Format("[RK29] DRIFT WARNING '%1': composed %2 vs prefab %3 items - regenerate configs from a fresh /kitdump",
-					kitName, composed.CountItems(), kit.CountItems()), LogLevel.WARNING);
-		}
 
 		Print(string.Format("[RK29] kit '%1' from CONFIG (%2 items)",
 			kitName, composed.CountItems()), LogLevel.NORMAL);
@@ -589,16 +592,106 @@ class RK29_KitManager
 	}
 
 	//--------------------------------------------------------------------------------------------
+	//! Create and store this player's first selection from the side default. Returns null when
+	//! the squad is offered nothing on that side, or when the resolved kit has no definition.
+	protected RK29_PlayerSelection SeedDefaultSelection_S(int playerId, string factionKey)
+	{
+		if (factionKey == "")
+			return null;
+
+		string kitName = DefaultKit(playerId, factionKey);
+		if (kitName == "" || !m_mKits.Contains(kitName))
+			return null;
+
+		RK29_PlayerSelection sel = new RK29_PlayerSelection();
+		sel.m_sKitName = kitName;
+		// empty weapon = the composition's authored default, same as an untouched picker row
+		sel.m_sWeapon = ResourceName.Empty;
+
+		RK29_ClassSetup cls = m_Setup.FindClass(kitName);
+		if (cls)
+			sel.m_sOptic = cls.m_sDefaultOptic;
+
+		sel.m_sIdentityUid = SCR_PlayerIdentityUtils.GetPlayerIdentityId(playerId);
+
+		m_mSelections.Set(playerId, sel);
+
+		// Tell the client, exactly like an apply or a rejoin does. Without this the seed is the
+		// one selection change the client never hears about: its stash stays empty, the deploy
+		// row keeps whatever icon and label it was built with, and the mannequin falls back to
+		// composing the kit locally instead of showing the loadout the server actually resolved.
+		// On a listen host those two happen to agree; on a dedicated server the resolved wire is
+		// the only thing that carries the server's own fit decisions.
+		SCR_PlayerController spc = SCR_PlayerController.Cast(GetGame().GetPlayerManager().GetPlayerController(playerId));
+		if (spc)
+		{
+			RK29_KitStruct seedKit = m_mKits.Get(kitName);
+			RK29_KitStruct seedEdited;
+			ResourceName seedOptic;
+			array<ResourceName> seedMounts;
+			if (seedKit)
+				ResolveSelection(seedKit, cls, sel, seedEdited, seedOptic, seedMounts);
+			spc.RK29_NotifyKitSaved_S(kitName, sel.m_sOptic, RK29_KitWire.Pack(seedEdited));
+		}
+
+		Print("[RK29] player " + playerId.ToString() + " had no kit - started on '" + kitName + "'", LogLevel.NORMAL);
+		return sel;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! The stash the spawn may actually dress from, re-seeded when it no longer fits.
+	//!
+	//! A selection belongs to the side and the squad it was applied on, and NOTHING clears it
+	//! when either changes - a faction swap or a group change just leaves the old one sitting in
+	//! m_mSelections. Every other reader already filters it (EffectiveKitFor for the deploy row
+	//! and its mannequin, EffectiveKitName for the counts), so an unfiltered spawn was the one
+	//! place the two disagreed: the row honestly advertised the new side's Rifleman and the body
+	//! came up wearing last life's kit from the side the player just left.
+	//!
+	//! Same order EffectiveKitFor resolves in, so the row and the body cannot part ways: keep the
+	//! stash only while it is this faction's AND still offered to this squad, otherwise drop it
+	//! and seed the side default. Dropping (not just ignoring) is what re-runs the confirmation
+	//! RPC, which is how the client's own copy of the stash gets corrected too.
+	protected RK29_PlayerSelection UsableSelection_S(int playerId, string factionKey)
+	{
+		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
+
+		// No faction to judge against - the caller could not name a side, so leave the stash
+		// alone rather than throwing away a good one on a missing argument. There is nothing to
+		// seed from either; SeedDefaultSelection_S would only refuse.
+		if (factionKey == "")
+			return sel;
+
+		if (sel)
+		{
+			if (EffectiveKitFor(playerId, factionKey) == sel.m_sKitName)
+				return sel;
+
+			Print("[RK29] player " + playerId.ToString() + " stash '" + sel.m_sKitName + "' does not"
+				+ " belong to side '" + factionKey + "' (or is no longer offered to this squad)"
+				+ " - re-seeding", LogLevel.NORMAL);
+
+			m_mSelections.Remove(playerId);
+		}
+
+		return SeedDefaultSelection_S(playerId, factionKey);
+	}
+
+	//--------------------------------------------------------------------------------------------
 	//! Dress a body straight from the stash, called by RK29_CurrentKitLoadout.OnLoadoutSpawned.
 	//! This is the whole spawn path now: the body arrives bare, so there is nothing to strip,
 	//! no async stock-item race to wait out, and no window where the player sees another kit.
 	//! Returns true if the kit was applied - the spawn handler then leaves the body alone.
-	bool ApplyStashOnSpawn_S(int playerId, IEntity body)
+	bool ApplyStashOnSpawn_S(int playerId, IEntity body, string factionKey = "")
 	{
 		if (!Replication.IsServer() || !body)
 			return false;
 
-		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
+		// First deploy of the session lands here with nothing stashed. Seed the side's starting
+		// kit rather than refusing - Current Kit is the only row most squads have, so refusing
+		// spawns a bare body. Seeding a real selection (not just dressing one) keeps the HUD
+		// count, the picker's pre-selection and the respawn identity agreeing from the first life.
+		RK29_PlayerSelection sel = UsableSelection_S(playerId, factionKey);
 		if (!sel)
 			return false;
 
@@ -626,7 +719,7 @@ class RK29_KitManager
 		if (spawnChar)
 			ctrl = spawnChar.GetCharacterController();
 		if (pc && ctrl)
-			pc.RK29_NotifyRestoreState_S(0, ctrl.GetStance(), ctrl.GetDynamicStance());
+			pc.RK29_NotifyRestoreState_S(ctrl.GetStance(), ctrl.GetDynamicStance(), WeaponRplIdInSlot(body, 0));
 
 		m_mSpawnApplied_S.Set(playerId, BumpApplyGen(playerId));
 		return true;
@@ -651,48 +744,26 @@ class RK29_KitManager
 		if (!Replication.IsServer())
 			return;
 
-		m_mSpawnAt_S.Set(playerId, GetGame().GetWorld().GetWorldTime());
-
 		// EVERY spawn, not just a kitted one: a mutation queued against the previous body must
 		// not find itself still current and dress the new one.
 		BumpApplyGen(playerId);
 
-		bool willApply = false;
-		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
-		if (sel)
-		{
-			RK29_KitStruct kit = m_mKits.Get(sel.m_sKitName);
-			SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(entity);
-			string current = CurrentLoadoutName(playerId);
-			// "Current Kit" is the ONLY entry that dresses from the stash - and it now does so
-			// in OnLoadoutSpawned, on a bare body. Picking any other entry is a request for
-			// that loadout as authored, including the stock entry for the very class the stash
-			// came from; stock spawns are NEVER mutated.
-			//
-			// OnLoadoutSpawned already dressed this body the moment it existed - no strip, no
-			// settle window, nothing to redo. The deferred path below survives only for a
-			// Current Kit spawn that somehow missed the hook.
-			int appliedGen;
-			bool alreadyDressed = m_mSpawnApplied_S.Find(playerId, appliedGen);
-			m_mSpawnApplied_S.Remove(playerId);
-
-			bool wantsApply = !alreadyDressed
-				&& IsCurrentKitLoadoutName(current) && EffectiveKitName(playerId) == sel.m_sKitName;
-			if (alreadyDressed)
-				willApply = true;
-			if (kit && character && wantsApply)
-			{
-				willApply = true;
-				RK29_ClassSetup cls = m_Setup.FindClass(sel.m_sKitName);
-				RK29_KitStruct edited;
-				ResourceName applyOptic;
-				array<ResourceName> mounts;
-				ResolveSelection(kit, cls, sel, edited, applyOptic, mounts);
-				// deferred: InitialInventoryItems land async on the spawn frame
-				GetGame().GetCallqueue().CallLater(ApplySpawnMutation, SPAWN_SETTLE_MS, false, playerId,
-					BumpApplyGen(playerId), edited, applyOptic, mounts);
-			}
-		}
+		// "Current Kit" is the ONLY entry that dresses from the stash, and it does so in
+		// OnLoadoutSpawned, on a bare body - no strip, no settle window, nothing to redo here.
+		// Picking any other entry is a request for that loadout as authored, including the stock
+		// entry for the very class the stash came from; stock spawns are NEVER mutated.
+		//
+		// There used to be a deferred re-dress here for a Current Kit spawn that somehow missed
+		// the loadout hook. Removed 2026-08-25: it was the original spawn path left behind after
+		// OnLoadoutSpawned superseded it, never once observed firing, and it fired silently so a
+		// miss would have looked like nothing at all. Its gate read the ASSIGNED loadout rather
+		// than the body's provenance, so the only thing that could reach it was a body the game
+		// mode counts as a spawn but that never came out of the loadout - GM possession, or a
+		// respawn route bypassing SCR_PlayerLoadoutComponent. If that turns up, the body keeps
+		// the gear it spawned with and the player re-kits (preround only) or respawns.
+		int appliedGen;
+		bool willApply = m_mSpawnApplied_S.Find(playerId, appliedGen);
+		m_mSpawnApplied_S.Remove(playerId);
 
 		// A stock spawn keeps its GEAR as authored - that is the rule above and it stands - but a
 		// role's QUALIFICATIONS are config-owned, and selections live in server memory only, so
@@ -711,29 +782,42 @@ class RK29_KitManager
 	}
 
 	//--------------------------------------------------------------------------------------------
-	protected void ApplySpawnMutation(int playerId, int gen, RK29_KitStruct edited, ResourceName optic, array<ResourceName> mounts)
+	//! Network id of the weapon now sitting in `slotIndex`, so the client can wait for THAT
+	//! entity rather than for a slot to look occupied. The slot is a poor readiness test on its
+	//! own: the body's previous weapon may not have been reaped client-side yet, and if the
+	//! re-kit hands back the same prefab the two are indistinguishable by name - the client
+	//! would draw the doomed one. An id cannot be confused that way.
+	//! Invalid when the slot is empty or the index is negative (nothing was in hands).
+	protected static RplId WeaponRplIdInSlot(IEntity character, int slotIndex)
 	{
-		// a newer spawn or a newer apply has happened since this was queued - that one owns the
-		// body now, and this snapshot would dress it with something the player has moved on from
-		int current;
-		if (!m_mApplyGen_S.Find(playerId, current) || current != gen)
-			return;
+		if (!character || slotIndex < 0)
+			return RplId.Invalid();
 
-		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(GetGame().GetPlayerManager().GetPlayerControlledEntity(playerId));
-		if (!character || !character.GetCharacterController() || character.GetCharacterController().IsDead())
-			return;
-		array<ResourceName> droppedItems;
-		RK29_KitApply.Apply(character, edited, optic, mounts, droppedItems);
-		NotifyDropped_S(playerId, droppedItems);
+		ChimeraCharacter chimera = ChimeraCharacter.Cast(character);
+		if (!chimera)
+			return RplId.Invalid();
+		CharacterControllerComponent ctrl = chimera.GetCharacterController();
+		if (!ctrl)
+			return RplId.Invalid();
+		BaseWeaponManagerComponent wm = ctrl.GetWeaponManagerComponent();
+		if (!wm)
+			return RplId.Invalid();
 
-		// A live re-kit remembers what the player was holding and puts it back; a spawn has
-		// nothing to remember, and DressWeapons only fills the slots - it never selects one.
-		// Without this the player lands with the rifle slung. Stance is passed through as it
-		// already is, so only the weapon selection has any effect here.
-		SCR_PlayerController spawnPc = SCR_PlayerController.Cast(GetGame().GetPlayerManager().GetPlayerController(playerId));
-		CharacterControllerComponent spawnCtrl = character.GetCharacterController();
-		if (spawnPc && spawnCtrl)
-			spawnPc.RK29_NotifyRestoreState_S(0, spawnCtrl.GetStance(), spawnCtrl.GetDynamicStance());
+		array<WeaponSlotComponent> slots = {};
+		wm.GetWeaponsSlots(slots);
+		foreach (WeaponSlotComponent slot : slots)
+		{
+			if (!slot || slot.GetWeaponSlotIndex() != slotIndex)
+				continue;
+			IEntity weapon = slot.GetWeaponEntity();
+			if (!weapon)
+				break;
+			RplComponent rpl = RplComponent.Cast(weapon.FindComponent(RplComponent));
+			if (rpl)
+				return rpl.Id();
+			break;
+		}
+		return RplId.Invalid();
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -873,23 +957,72 @@ class RK29_KitManager
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! Stashed kit name if it exists, matches the asking faction, and is still offered
-	//! to the player's squad, else "".
-	string StashOfferedKit(int playerId, string factionKey = "")
+	//! The kit Current Kit would spawn for this player on this side, stash or not.
+	//!
+	//! A player who has never opened the picker still deploys through Current Kit - it is the
+	//! only general-purpose row left in the deploy menu - so "no stash" has to resolve to a real
+	//! kit rather than to nothing. Order:
+	//!   1. the stash, when it is this faction's and still offered to the player's squad
+	//!   2. the side's configured default (Rifleman), when the squad is offered it
+	//!   3. the squad's first offered kit - a crew has no rifleman, and an empty row is worse
+	//! Returns "" only when the squad is offered no kits at all on this side.
+	//!
+	//! Readable from either side of the wire. The stash lives in two different places depending
+	//! on who is asking: the authority keeps every player's selection in m_mSelections, a client
+	//! only ever knows its own and learns it from the server's confirmation RPC. Reading
+	//! whichever one this machine has lets the deploy row, its label, its mannequin and the
+	//! server's spawn all resolve the same kit.
+	string EffectiveKitFor(int playerId, string factionKey = "")
 	{
+		string stash;
 		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
-		if (!sel)
+		if (sel)
+			stash = sel.m_sKitName;
+		else
+			stash = RK29_KitPicker.LocalStashKit();
+
+		if (stash != "")
+		{
+			RK29_KitStruct kit = m_mKits.Get(stash);
+			if (kit && (factionKey == "" || kit.m_sFactionKey == factionKey))
+			{
+				array<string> stashOffered = {};
+				GetOfferedKits(playerId, kit.m_sFactionKey, stashOffered);
+				if (stashOffered.Contains(stash))
+					return stash;
+			}
+		}
+
+		// No usable stash. Without a faction there is no side to default ON, so a caller that
+		// wants the fallback has to name one.
+		if (factionKey == "")
 			return "";
-		RK29_KitStruct kit = m_mKits.Get(sel.m_sKitName);
-		if (!kit)
-			return "";
-		if (factionKey != "" && kit.m_sFactionKey != factionKey)
-			return "";
+
+		return DefaultKit(playerId, factionKey);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! The side's starting kit for this player, filtered through their squad's offer list.
+	//! Falls back to the first offered kit so every squad gets a spawnable answer.
+	string DefaultKit(int playerId, string factionKey)
+	{
 		array<string> offered = {};
-		GetOfferedKits(playerId, kit.m_sFactionKey, offered);
-		if (!offered.Contains(sel.m_sKitName))
+		GetOfferedKits(playerId, factionKey, offered);
+		if (offered.IsEmpty())
 			return "";
-		return sel.m_sKitName;
+
+		string configured = m_Setup.DefaultKitName(factionKey);
+		if (configured != "" && offered.Contains(configured))
+			return configured;
+
+		if (configured != "" && factionKey != m_sLastDefaultlessFaction)
+		{
+			m_sLastDefaultlessFaction = factionKey;
+			Print("[RK29] side '" + factionKey + "' default kit '" + configured + "' is not offered to this"
+				+ " squad - Current Kit starts on '" + offered[0] + "' instead", LogLevel.NORMAL);
+		}
+
+		return offered[0];
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -902,7 +1035,6 @@ class RK29_KitManager
 
 		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
 		m_mSelections.Remove(playerId);
-		m_mSpawnAt_S.Remove(playerId);
 		m_mApplyGen_S.Remove(playerId);
 		if (sel && sel.m_sIdentityUid != "")
 			m_mParkedSelections.Set(sel.m_sIdentityUid, sel);
@@ -1112,6 +1244,35 @@ class RK29_KitManager
 	}
 
 	//--------------------------------------------------------------------------------------------
+	//! The name the group's own preset declares - "29th HQ" - or "" when the group has no
+	//! preset behind it. Independent of anything a player typed or renamed.
+	//!
+	//! Role NONE resolves too. The no-role creation path
+	//! (SCR_PlayerControllerGroupComponent.RPC_AskCreateGroup, reached via CreateAndJoinGroup)
+	//! never applies a preset, so such a group has no role AND no name - and vanilla's own
+	//! deploy filter, SCR_AIGroup.IsLoadoutInGroup(), matches presets by role as well, so it
+	//! would hand that player an EMPTY deploy menu, not just the wrong kits. GM29_Groups.conf
+	//! therefore carries a hidden NONE preset mirroring "29th Squad" (m_bCanBeCreatedByPlayer 0
+	//! keeps it out of the create-group dialog, which filters on that flag). Both lookups then
+	//! land on the rifle squad, which is the sane default for an unassigned group.
+	protected string PresetGroupName(notnull SCR_AIGroup group)
+	{
+		SCR_GroupsManagerComponent groups = SCR_GroupsManagerComponent.GetInstance();
+		if (!groups)
+			return "";
+
+		Faction faction = group.GetFaction();
+		if (!faction)
+			return "";
+
+		SCR_GroupRolePresetConfig preset = groups.FindGroupRolePresetConfig(faction, group.GetGroupRole());
+		if (!preset)
+			return "";
+
+		return preset.GetGroupName();
+	}
+
+	//--------------------------------------------------------------------------------------------
 	//! Kits this player may take. Authority order: our squad kit catalog (by group
 	//! name), the legacy vanilla group loadout lists, all faction kits.
 	int GetOfferedKits(int playerId, string factionKey, notnull array<string> outKitNames)
@@ -1125,18 +1286,40 @@ class RK29_KitManager
 
 		if (group)
 		{
-			// Squads are matched on the group's CUSTOM NAME - which is what the preset sets
-			// ("29th Squad"), but also what a squad leader can rename in the group menu. A
-			// renamed or ad-hoc group silently drops to the "*" default, so say which entry
-			// answered when it is not the group's own.
-			string groupName = group.GetCustomName();
+			// Squads are matched on the name their PRESET declares, with the group's runtime
+			// custom name as an override.
+			//
+			// The runtime name is not identity. Vanilla's create-group dialog opens with an
+			// empty name box and then overwrites whatever the preset set with the typed text
+			// (SCR_PlayerControllerGroupComponent.SetCustomNameAndDescription), so a group
+			// created as "29th HQ" reports an EMPTY name and every squad collapses onto the "*"
+			// default. It also crosses an async profanity filter, so even a named group reads
+			// back empty on clients for a while.
+			//
+			// The preset behind the group is stable: role is a plain replicated int set at
+			// creation and carried in RplSave/RplLoad, and FindGroupRolePresetConfig() maps it
+			// back to the authored config - the same call vanilla makes in
+			// SCR_PlayerControllerGroupComponent to rank-check a group. So GM29_Groups.conf
+			// stays the single source of the role-to-name mapping and RK29_Squads.conf keeps
+			// keying on readable names.
+			string groupName = PresetGroupName(group);
+			if (groupName == "")
+				groupName = group.GetCustomName();
+
 			RK29_SquadKits sq = m_Setup.FindSquadKits(groupName);
-			if (sq && sq.m_sGroupName != groupName && groupName != m_sLastUnmatchedGroup)
+
+			// Only the "*" fallback is worth a warning - a preset hit is the normal path.
+			if (sq && sq.m_sGroupName == "*")
 			{
-				m_sLastUnmatchedGroup = groupName;
-				Print("[RK29] group '" + groupName + "' has no squad entry - using the '"
-					+ sq.m_sGroupName + "' list. Rename it to a squad in RK29_Squads.conf, or add"
-					+ " an entry for this name, if it should get its own kits", LogLevel.WARNING);
+				string groupKey = groupName + "/" + SCR_Enum.GetEnumName(SCR_EGroupRole, group.GetGroupRole());
+				if (groupKey != m_sLastUnmatchedGroup)
+				{
+					m_sLastUnmatchedGroup = groupKey;
+					Print("[RK29] group '" + groupName + "' (role "
+						+ SCR_Enum.GetEnumName(SCR_EGroupRole, group.GetGroupRole())
+						+ ") has no squad entry - using the '*' default list. Add an entry under that"
+						+ " name in RK29_Squads.conf if it should get its own kits", LogLevel.WARNING);
+				}
 			}
 			if (sq && sq.m_aKitNames && !sq.m_aKitNames.IsEmpty())
 			{
@@ -1211,12 +1394,4 @@ class RK29_KitManager
 		return loadout.GetLoadoutName();
 	}
 
-	//--------------------------------------------------------------------------------------------
-	int CurrentLoadoutIndex(int playerId)
-	{
-		SCR_LoadoutManager lm = GetGame().GetLoadoutManager();
-		if (!lm)
-			return -1;
-		return lm.RK29_IndexOfLoadout(lm.GetPlayerLoadout(playerId));
-	}
 }

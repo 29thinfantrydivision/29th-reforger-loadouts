@@ -4,9 +4,13 @@
 //! Same shape as GM29_KitLoadouts.c:
 //!   1. GM29_GroupPresetHolder - the config root that Configs/Groups/GM29_Groups.conf
 //!      deserialises into. We own this class, so its field name (m_aGroupPresets) is stable.
-//!   2. modded SCR_Faction - appends the presets in that holder to m_aGroupRolePresetConfigs
+//!   2. modded SCR_Faction - merges the presets in that holder into m_aGroupRolePresetConfigs
 //!      on every faction instance (US and USSR both pick these up, since each faction's
 //!      Init() runs this independently). No per-faction editing of the base BLUFOR/OPFOR conf.
+//!      Merge means REPLACE-BY-ROLE, not append: a role is served by the first preset that
+//!      declares it, and the campaign faction confs already claim ASSAULT, MECHANIZED,
+//!      COMMANDER and RESERVES - so an appended 29th preset never applies. Roles the 29th does
+//!      not define (RECON, MEDIC, MORTAR, ...) keep their vanilla presets untouched.
 //!
 //! Revised from the plain SCR_GroupPreset version: SCR_GroupRolePresetConfig extends
 //! SCR_GroupPreset and adds m_aLoadoutResources, so a single preset both defines the joinable
@@ -74,34 +78,51 @@ modded class SCR_Faction
 			m_aGroupRolePresetConfigs = {};
 
 		int added = 0;
+		int replaced = 0;
 		foreach (SCR_GroupRolePresetConfig preset : holder.m_aGroupPresets)
 		{
 			if (!preset)
 				continue;
 
-			if (!IsAlreadyRegisteredGroup(preset))
+			// REPLACE by role, do not append. Every consumer of this array resolves a role by
+			// taking the FIRST preset that declares it - group creation
+			// (SCR_PlayerControllerGroupComponent.CreateNewGroup), the role label
+			// (SCR_AIGroup.GetGroupRoleName) and the deploy-menu loadout filter
+			// (SCR_AIGroup.IsLoadoutInGroup) all break on the first match. A campaign faction
+			// conf already ships presets for ASSAULT/MECHANIZED/COMMANDER/RESERVES, so an
+			// appended 29th preset is dead config: creating "29th HQ" would apply vanilla's
+			// Commander preset - vanilla name, vanilla size, vanilla loadout list.
+			int existingIdx = FindGroupPresetIndexByRole(preset.GetGroupRole());
+			if (existingIdx < 0)
 			{
 				m_aGroupRolePresetConfigs.Insert(preset);
 				added = added + 1;
+				continue;
 			}
+
+			// Re-running (mode/round restart) lands here and overwrites our own entry with an
+			// identical one, so injection stays idempotent instead of stacking duplicates.
+			m_aGroupRolePresetConfigs.Set(existingIdx, preset);
+			replaced = replaced + 1;
 		}
 
 		// Plain concatenation - no ternary inside Print(), per your guardrails.
-		Print("[GM29Groups] injected " + added.ToString() + " group role presets into " + GetFactionKey(), LogLevel.NORMAL);
+		Print("[GM29Groups] " + GetFactionKey() + ": added " + added.ToString()
+			+ " group role presets, replaced " + replaced.ToString(), LogLevel.NORMAL);
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! Dedup guard, same reasoning as SCR_LoadoutManager's IsAlreadyRegistered - repeated
-	//! mode/round restarts should not stack duplicate group entries. Matches on group name
-	//! since SCR_GroupPreset does not expose a resource/GUID accessor to match on.
-	protected bool IsAlreadyRegisteredGroup(notnull SCR_GroupRolePresetConfig candidate)
+	//! Index of the first registered preset serving this role, -1 when the role is unclaimed.
+	//! Role is the key rather than the group name: the name is what the 29th preset is trying to
+	//! set, so matching on it would never find the vanilla entry it needs to displace.
+	protected int FindGroupPresetIndexByRole(SCR_EGroupRole role)
 	{
-		string candidateName = candidate.GetGroupName();
-		foreach (SCR_GroupRolePresetConfig existing : m_aGroupRolePresetConfigs)
+		for (int i = 0, count = m_aGroupRolePresetConfigs.Count(); i < count; i++)
 		{
-			if (existing && existing.GetGroupName() == candidateName)
-				return true;
+			SCR_GroupRolePresetConfig existing = m_aGroupRolePresetConfigs[i];
+			if (existing && existing.GetGroupRole() == role)
+				return i;
 		}
-		return false;
+		return -1;
 	}
 }

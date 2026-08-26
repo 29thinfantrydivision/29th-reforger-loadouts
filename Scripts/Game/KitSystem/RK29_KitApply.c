@@ -509,36 +509,40 @@ class RK29_KitApply
 			if (IsInsideWeapon(item))
 				continue; // a weapon owns its loaded mags/attachments
 
-			string where = "no-slot";
 			InventoryItemComponent iic = InventoryItemComponent.Cast(item.FindComponent(InventoryItemComponent));
-			InventoryStorageSlot slot;
-			if (iic)
+			// no InventoryItemComponent = not gear at all, but cosmetic cloth hung on a
+			// garment's LoadoutSlotInfo - the ALICE AR vest's e-tool carrier is the one on the
+			// roster. It has no parent slot to test, so every keep rule below is unreachable for
+			// it and it fell through to the delete: the MG lost the shovel pouch off the vest on
+			// every apply. Same rule as the !slot case - not something the inventory owns.
+			if (!iic)
+				continue;
+
+			InventoryStorageSlot slot = iic.GetParentSlot();
+			if (!slot)
+				continue; // not slotted anywhere the inventory owns - leave it
+			// same keep rule as the strip: authored AND structural
+			if (IsSlotAuthored(slot, item)
+				&& (item.FindComponent(BaseInventoryStorageComponent)
+					|| item.FindComponent(BaseLoadoutClothComponent)))
+				continue;
+			BaseInventoryStorageComponent slotStorage = slot.GetStorage();
+			if (slotStorage)
 			{
-				slot = iic.GetParentSlot();
-				if (!slot)
-					continue; // not slotted anywhere the inventory owns - leave it
-				// same keep rule as the strip: authored AND structural
-				if (IsSlotAuthored(slot, item)
-					&& (item.FindComponent(BaseInventoryStorageComponent)
-						|| item.FindComponent(BaseLoadoutClothComponent)))
-					continue;
-				BaseInventoryStorageComponent slotStorage = slot.GetStorage();
-				if (slotStorage)
-				{
-					if (EquipedLoadoutStorageComponent.Cast(slotStorage))
-						continue; // worn garment
-					if (IsManagedEquipmentStorage(slotStorage, character))
-						continue; // DressEquipment's delta domain
-					if (SCR_IdentityItemStorageComponent.Cast(slotStorage)
-						|| SCR_SalineStorageComponent.Cast(slotStorage)
-						|| SCR_TourniquetStorageComponent.Cast(slotStorage))
-						continue; // body state
-				}
-				if (slot && slot.GetStorage())
-					where = slot.GetStorage().ClassName() + " on " + OwnerFileName(slot.GetStorage()) + "/" + slot.GetSourceName();
-				else if (slot)
-					where = "slot-without-storage/" + slot.GetSourceName();
+				if (EquipedLoadoutStorageComponent.Cast(slotStorage))
+					continue; // worn garment
+				if (IsManagedEquipmentStorage(slotStorage, character))
+					continue; // DressEquipment's delta domain
+				if (SCR_IdentityItemStorageComponent.Cast(slotStorage)
+					|| SCR_SalineStorageComponent.Cast(slotStorage)
+					|| SCR_TourniquetStorageComponent.Cast(slotStorage))
+					continue; // body state
 			}
+			string where;
+			if (slotStorage)
+				where = slotStorage.ClassName() + " on " + OwnerFileName(slotStorage) + "/" + slot.GetSourceName();
+			else
+				where = "slot-without-storage/" + slot.GetSourceName();
 			string parentName = "none";
 			if (item.GetParent())
 				parentName = FileNameOf(item.GetParent());
@@ -546,7 +550,7 @@ class RK29_KitApply
 
 			if (!manager.TryDeleteItem(item))
 			{
-				if (slot && slot.GetAttachedEntity() == item)
+				if (slot.GetAttachedEntity() == item)
 					slot.DetachEntity();
 				SCR_EntityHelper.DeleteEntityAndChildren(item);
 			}
@@ -578,16 +582,6 @@ class RK29_KitApply
 			return false;
 		EntityPrefabData epd = occupant.GetPrefabData();
 		return epd && epd.GetPrefabName() == tmpl;
-	}
-
-	//--------------------------------------------------------------------------------------------
-	protected static bool IsInManagedEquipmentStorageSlot(IEntity item, IEntity character)
-	{
-		InventoryItemComponent iic = InventoryItemComponent.Cast(item.FindComponent(InventoryItemComponent));
-		if (!iic)
-			return false;
-		InventoryStorageSlot slot = iic.GetParentSlot();
-		return slot && IsManagedEquipmentStorage(slot.GetStorage(), character);
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -978,6 +972,12 @@ class RK29_KitApply
 		array<BaseInventoryStorageComponent> all = {};
 		CollectBodyStorages(character, all, 0);
 
+		array<BaseInventoryStorageComponent> rawContainers = {};
+		array<int> rawSlotIds = {};
+		array<string> rawKeys = {};
+		array<string> rawKinds = {};
+		array<int> rawPrios = {};
+
 		map<string, int> seen = new map<string, int>();
 		foreach (BaseInventoryStorageComponent storage : all)
 		{
@@ -1021,18 +1021,51 @@ class RK29_KitApply
 					if (!namedSlot)
 						continue;
 
-					outContainers.Insert(storage);
-					outSlotIds.Insert(namedSlot.GetID());
-					outKeys.Insert(owner + "#" + ordinal.ToString() + "/" + namedSlot.GetSourceName());
-					outKinds.Insert(kind);
+					rawContainers.Insert(storage);
+					rawSlotIds.Insert(namedSlot.GetID());
+					rawKeys.Insert(owner + "#" + ordinal.ToString() + "/" + namedSlot.GetSourceName());
+					rawKinds.Insert(kind);
+					rawPrios.Insert(storage.GetPriority());
 				}
 				continue;
 			}
 
-			outContainers.Insert(storage);
-			outSlotIds.Insert(-1);
-			outKeys.Insert(owner + "#" + ordinal.ToString());
-			outKinds.Insert(kind);
+			rawContainers.Insert(storage);
+			rawSlotIds.Insert(-1);
+			rawKeys.Insert(owner + "#" + ordinal.ToString());
+			rawKinds.Insert(kind);
+			rawPrios.Insert(storage.GetPriority());
+		}
+
+		// Highest engine storage Priority first, body-traversal order among equals. Pressing R
+		// walks the body the same way and takes the FIRST compatible magazine it finds, so a
+		// container early in this list is a container the weapon reaches for early. The solver
+		// fills the list in order, which is what leaves the last-declared magazines - the
+		// tracers - in the containers the reload search reaches last.
+		int nRaw = rawContainers.Count();
+		array<bool> emitted = {};
+		for (int i = 0; i < nRaw; i++)
+			emitted.Insert(false);
+
+		for (int e = 0; e < nRaw; e++)
+		{
+			int pick = -1;
+			for (int i = 0; i < nRaw; i++)
+			{
+				if (emitted[i])
+					continue;
+				if (pick == -1 || rawPrios[i] > rawPrios[pick])
+					pick = i;
+			}
+			if (pick == -1)
+				break;
+
+			emitted[pick] = true;
+			outContainers.Insert(rawContainers[pick]);
+			outSlotIds.Insert(rawSlotIds[pick]);
+			outKeys.Insert(rawKeys[pick]);
+			outKinds.Insert(rawKinds[pick]);
+			RK29_Log.Trace(string.Format("[RK29] container %1 priority=%2 %3", e, rawPrios[pick], rawKeys[pick]));
 		}
 	}
 
@@ -1254,6 +1287,9 @@ class RK29_KitApply
 		// for each other and end up in the pack
 		bool itemIsScarce = eligible[idx].Count() <= 2;
 
+		// magazines pack strictly best-container-first instead of clumping - see StacksTogether()
+		bool stacks = StacksTogether(items[idx]);
+
 		int best = -1;
 		int bestPenalty = int.MAX;
 		int bestTier = int.MAX;
@@ -1298,16 +1334,17 @@ class RK29_KitApply
 			// keep a stack together when nothing more important disagrees: first join the
 			// container the stack already lives in, else favour one that can swallow what
 			// is left of it. Both sit below scarcity, mounts and preference, so neither can
-			// push an item somewhere it should not go.
+			// push an item somewhere it should not go. Magazines sit both rules out.
 			int cohesion = 1;
-			if (home == c)
+			if (stacks && home == c)
 				cohesion = 0;
 
 			// keeping a stack whole only outranks preference for SMALL stacks - a pair of
 			// tourniquets belongs in one pocket, but seven magazines belong in the mag
 			// pouches even when that splits them across two.
 			int whole = 1;
-			if (remaining <= COHESION_MAX_STACK
+			if (stacks
+				&& remaining <= COHESION_MAX_STACK
 				&& containers[c].GetEstimatedCountFitForResource(items[idx]) >= remaining)
 				whole = 0;
 
@@ -1315,10 +1352,13 @@ class RK29_KitApply
 			//   penalty  - never strand a scarce item
 			//   tier     - a mount is free capacity
 			//   listed   - stay somewhere the item was said to belong
-			//   cohesion - join the rest of your stack
+			//   cohesion - join the rest of your stack (magazines: never)
 			//   whole    - start a stack where all of it fits (this is what stops two
-			//              tourniquets splitting when the trousers could hold both)
+			//              tourniquets splitting when the trousers could hold both;
+			//              magazines: never)
 			//   detail   - only then the fine order: uniform before trouser, outer mounts
+			// Everything below that is a tie, and a tie goes to the earliest container in the
+			// list - which CollectCargoContainers ordered by storage priority.
 			bool better = false;
 			if (best == -1)
 				better = true;
@@ -1347,6 +1387,19 @@ class RK29_KitApply
 			}
 		}
 		return best;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Whether a stack of this item wants to live in one container. Magazines are the one
+	//! item class whose ORDER survives the apply and matters afterwards: pressing R walks the
+	//! body by storage priority and loads the first compatible magazine it finds, so the kit
+	//! has to fill containers strictly best-first in declaration order. Cohesion would break
+	//! that - a small last-declared stack (the two tracers) would claim a fresh high-priority
+	//! pouch of its own while the ball ahead of it sat in a lower one, and the tracers would
+	//! be first up the spout. Medical, gadgets and papers still stack.
+	protected static bool StacksTogether(ResourceName item)
+	{
+		return !("" + item).Contains("/Magazines/");
 	}
 
 	//--------------------------------------------------------------------------------------------

@@ -1,8 +1,10 @@
 //------------------------------------------------------------------------------------------------
 //! Deploy-menu preview for "Current Kit": the mannequin spawns as the side's BARE body, then is
 //! dressed here from the loadout the server resolved and sent - the same thing the character
-//! itself will be dressed from. Local entities only, same technique as the vanilla arsenal
-//! branch, which builds its mannequin from m_LocalPlayerLoadoutData rather than from a prefab.
+//! itself will be dressed from - or, before the player has picked anything, from the composed
+//! default kit in the local catalog, which is what the server will dress them with. Local
+//! entities only, same technique as the vanilla arsenal branch, which builds its mannequin from
+//! m_LocalPlayerLoadoutData rather than from a prefab.
 //!
 //! The preview entity is CACHED per prefab, and every Current Kit now shares one bare body, so
 //! whatever the last kit left on it is still there. Every slot is therefore accounted for on
@@ -17,14 +19,19 @@ modded class SCR_LoadoutPreviewComponent
 	override IEntity SetPreviewedLoadout(notnull SCR_BasePlayerLoadout loadout, PreviewRenderAttributes attributes = null)
 	{
 		IEntity ent = super.SetPreviewedLoadout(loadout, attributes);
-		if (!ent || !RK29_CurrentKitLoadout.Cast(loadout) || !RK29_KitPicker.HasLocalStash())
+		if (!ent)
 			return ent;
 
-		// Everything below comes from the loadout the SERVER resolved and sent - never
-		// re-derived here. That is the whole point: the client used to guess which weapon a
-		// class with two options had ended up with, and guessed wrong.
-		map<string, ResourceName> dress = RK29_KitPicker.LocalStashDress();
-		map<int, ResourceName> weapons = RK29_KitPicker.LocalStashWeapons();
+		// While the player's stash still names the kit this row resolves to, this is the loadout
+		// the SERVER resolved and sent - never re-derived here. That is the whole point: the client used to guess which weapon a
+		// class with two options had ended up with, and guessed wrong. Before a first pick
+		// there is nothing to send yet, so the resolver falls back to the composed default kit
+		// - without it a first-time player hovers Current Kit and sees the bare body.
+		map<string, ResourceName> dress = new map<string, ResourceName>();
+		map<int, ResourceName> weapons = new map<int, ResourceName>();
+		ResourceName optic;
+		if (!RK29_StashedLoadoutUIInfo.ResolvePreviewLoadout(loadout, dress, weapons, optic))
+			return ent;
 
 		string unresolved;
 		int dressed = RK29_DressPreview(ent, dress, unresolved);
@@ -91,7 +98,7 @@ modded class SCR_LoadoutPreviewComponent
 
 		if (primary)
 		{
-			RK29_SwapPreviewOptic(primary, RK29_KitPicker.LocalStashOptic(), 0);
+			RK29_SwapPreviewOptic(primary, optic, 0);
 
 			// nothing selects a weapon on a freshly built mannequin, so it stands there with
 			// the rifle slung. Vanilla's arsenal branch does this off its Active flag.
@@ -118,7 +125,7 @@ modded class SCR_LoadoutPreviewComponent
 		if (m_PreviewManager && m_wPreview)
 			m_PreviewManager.SetPreviewItem(m_wPreview, ent, attributes, true);
 
-		string report = "[RK29] preview '" + RK29_KitPicker.LocalStashKit() + "': " + dressed.ToString() + "/" + dress.Count().ToString()
+		string report = "[RK29] preview '" + RK29_StashedLoadoutUIInfo.ResolveName(loadout) + "': " + dressed.ToString() + "/" + dress.Count().ToString()
 			+ " garment(s), " + armed.ToString() + "/" + weapons.Count().ToString() + " weapon(s)";
 		if (unresolved != "")
 			report = report + " | UNRESOLVED:" + unresolved;
@@ -194,7 +201,12 @@ modded class SCR_LoadoutPreviewComponent
 			{
 				EntityPrefabData epd = current.GetPrefabData();
 				if (epd && epd.GetPrefabName() == wanted)
+				{
+					// already right from a previous pass on this cached body - still dressed,
+					// so it counts. Skipping it made a fully-correct re-hover report 0/7.
+					dressed++;
 					continue;
+				}
 
 				delete current;
 			}

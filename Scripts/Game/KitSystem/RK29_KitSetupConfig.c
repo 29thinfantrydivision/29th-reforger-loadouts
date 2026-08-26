@@ -155,7 +155,7 @@ class RK29_WeaponSlot
 	[Attribute("0", desc: "0 primary, 1 launcher, 2 sidearm", category: "29th")]
 	int m_iSlot;
 
-	[Attribute(desc: "What may fill this slot. One entry = a fixed weapon; several = a picker column, first is the default", category: "29th")]
+	[Attribute(desc: "What may fill this slot. One entry = a fixed weapon; several = a picker column. The default is whichever option sets m_bDefault, else the first", category: "29th")]
 	ref array<ref RK29_WeaponOption> m_aOptions;
 }
 
@@ -196,6 +196,9 @@ class RK29_WeaponOption
 
 	[Attribute(desc: "Overrides the catalog's display name", category: "29th")]
 	string m_sDisplayName;
+
+	[Attribute("0", desc: "Make this the slot's default - what the kit composes with and what the picker pre-selects - regardless of where it sits in the list. Unset on every option = the first one is the default, as before", category: "29th")]
+	bool m_bDefault;
 }
 
 //------------------------------------------------------------------------------------------------
@@ -223,9 +226,6 @@ class RK29_ClassSetup
 	[Attribute(desc: "Specific optics allowed on top of the categories. Must be defined in some library category (badge/mounts come from there)", params: "et", category: "29th")]
 	ref array<ResourceName> m_aOpticInclude;
 
-	[Attribute("0", desc: "Legacy kit: deploy-menu selectable, hidden in the picker, HUD-counted under its display name", category: "29th")]
-	bool m_bLegacyHidden;
-
 	[Attribute(desc: "This kit's composition. Empty = capture the kit prefab", params: "conf class=RK29_KitComposition", category: "29th")]
 	ResourceName m_sComposition;
 
@@ -240,6 +240,9 @@ class RK29_ClassSetup
 
 	//! Stamped at load from the owning side config's default body.
 	ResourceName m_sSideBodyPrefab;
+
+	//! Stamped at load from the owning side config's default kit name.
+	string m_sSideDefaultKit;
 
 	//--------------------------------------------------------------------------------------------
 	//! The body to spawn and capture: this class's own, else its side's default.
@@ -262,16 +265,31 @@ class RK29_SideSetup
 	[Attribute(desc: "Body every class on this side spawns as unless it names its own. Faction identity - affiliation, voices, identity - lives here and config cannot dress it, which is the one thing that genuinely needs a prefab per side", params: "et", category: "29th")]
 	ResourceName m_sBodyPrefab;
 
+	[Attribute(desc: "Kit a player of this side gets before they have ever picked one - what Current Kit spawns on a first deploy. Must be a kit name from m_aClasses. Ignored for a squad that is not offered it (a crew takes its first offered kit instead)", category: "29th")]
+	string m_sDefaultKitName;
+
 	[Attribute(desc: "This side's classes", category: "29th")]
 	ref array<ref RK29_ClassSetup> m_aClasses;
 }
 
 //------------------------------------------------------------------------------------------------
-//! Kits offered to one squad, keyed by the squad's group name ("29th Squad" etc.).
+//! Kits offered to one squad, keyed by the m_sGroupName its PRESET declares in GM29_Groups.conf.
+//!
+//! Note "its preset declares", not "the group is currently called". A group's runtime custom
+//! name is not its identity: vanilla's create-group dialog opens with an empty name box and then
+//! overwrites whatever the preset set with the typed text
+//! (SCR_PlayerControllerGroupComponent.SetCustomNameAndDescription), so a player-created
+//! "29th HQ" group carries an EMPTY custom name unless somebody typed one - and the name also
+//! crosses an async profanity filter that leaves it empty on clients for a while.
+//!
+//! The manager resolves the preset behind the group instead (RK29_KitManager.PresetGroupName)
+//! and matches on the name IT authored, so these entries stay readable and GM29_Groups.conf
+//! remains the one place the role-to-name mapping lives. A runtime rename still matches as an
+//! override, so a squad can be pointed at a specific list by name if you ever want that.
 [BaseContainerProps(), BaseContainerCustomTitleField("m_sGroupName")]
 class RK29_SquadKits
 {
-	[Attribute(desc: "Squad group name from the group presets, e.g. '29th Squad'. '*' = default for squads without an entry", category: "29th")]
+	[Attribute(desc: "m_sGroupName of the matching preset in GM29_Groups.conf, e.g. '29th Squad'. '*' = default for squads without an entry", category: "29th")]
 	string m_sGroupName;
 
 	[Attribute(desc: "Kit names offered to this squad. Empty = all faction kits", category: "29th")]
@@ -356,21 +374,44 @@ class RK29_KitSetup
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! Squad entry by group name; falls back to the "*" default entry, else null.
+	//! The side's configured starting kit, "" when that side never declared one.
+	string DefaultKitName(string factionKey)
+	{
+		if (!m_aClasses)
+			return "";
+		foreach (RK29_ClassSetup c : m_aClasses)
+		{
+			if (c && c.m_sSideFactionKey == factionKey && c.m_sSideDefaultKit != "")
+				return c.m_sSideDefaultKit;
+		}
+		return "";
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Squad entry by authored group name; falls back to the "*" default entry, else null.
 	RK29_SquadKits FindSquadKits(string groupName)
 	{
 		if (!m_aSquads)
 			return null;
+
 		RK29_SquadKits fallback;
 		foreach (RK29_SquadKits sq : m_aSquads)
 		{
 			if (!sq)
 				continue;
-			if (sq.m_sGroupName == groupName)
-				return sq;
+
+			// "*" is the default marker, never a real group name - a group we could not resolve a
+			// preset for must not match it here and skip a legitimate rename below.
 			if (sq.m_sGroupName == "*")
+			{
 				fallback = sq;
+				continue;
+			}
+
+			if (groupName != "" && sq.m_sGroupName == groupName)
+				return sq;
 		}
+
 		return fallback;
 	}
 
@@ -665,11 +706,21 @@ class RK29_KitSetup
 
 	//--------------------------------------------------------------------------------------------
 	//! First option in a slot - its default, and what boot composes.
+	//! The option a slot composes with and the picker pre-selects: the one flagged m_bDefault,
+	//! else the first. Listing order is presentation, so a kit can show a rifle second and still
+	//! issue it by default. First flagged wins if several are (see RK29_KitManager's boot check).
 	RK29_WeaponOption DefaultWeapon(array<ref RK29_WeaponSlot> slots, int slot = 0)
 	{
 		RK29_WeaponSlot group = FindSlot(slots, slot);
 		if (!group || !group.m_aOptions || group.m_aOptions.IsEmpty())
 			return null;
+
+		foreach (RK29_WeaponOption opt : group.m_aOptions)
+		{
+			if (opt && opt.m_bDefault)
+				return opt;
+		}
+
 		return group.m_aOptions[0];
 	}
 

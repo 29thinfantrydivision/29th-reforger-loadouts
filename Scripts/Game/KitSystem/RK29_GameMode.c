@@ -118,10 +118,6 @@ modded class SCR_GameModeEditor
 		if (inv)
 			inv.Insert(RK29_OnChatKitDigest);
 
-		inv = chatMgr.GetCommandInvoker("kitdump");
-		if (inv)
-			inv.Insert(RK29_OnChatKitDump);
-
 		inv = chatMgr.GetCommandInvoker("kitvalidate");
 		if (inv)
 			inv.Insert(RK29_OnChatKitValidate);
@@ -160,15 +156,6 @@ modded class SCR_GameModeEditor
 
 		data.TrimInPlace();
 		RK29_KitCompose.Digest(data);
-	}
-
-	//--------------------------------------------------------------------------------------------
-	protected void RK29_OnChatKitDump(SCR_ChatPanel panel, string data)
-	{
-		if (!RK29_DiagAllowed())
-			return;
-
-		RK29_KitCompose.Dump();
 	}
 
 }

@@ -33,7 +33,7 @@ class GM29_KitLoadoutHolder
 modded class SCR_LoadoutManager
 {
 	//! Log the full loadout list after injection. Turn off for deployment.
-	protected static const bool GM29_DUMP_LOADOUTS = true;
+	protected static const bool GM29_DUMP_LOADOUTS = false;
 
 	//! Remove faction loadouts the 29th did not author.
 	//! NOTE: this removes the '#AR-Loadout_Editor_NewArsenalLoadout_Name' entries, which are
@@ -152,21 +152,6 @@ modded class SCR_LoadoutManager
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! Pulls the bare GUID out of a ResourceName of the form {ABCDEF0123456789}Path/To/File.et
-	//! Returns the input unchanged if it is not in that form.
-	protected string ExtractGuid(ResourceName resource)
-	{
-		// Force ResourceName -> string via concatenation.
-		string raw = "" + resource;
-
-		int close = raw.IndexOf("}");
-		if (raw.IndexOf("{") != 0 || close < 2)
-			return raw;
-
-		return raw.Substring(1, close - 1);
-	}
-
-	//--------------------------------------------------------------------------------------------
 	protected void BuildOwnedNameCache(notnull GM29_KitLoadoutHolder holder)
 	{
 		m_aGM29OwnedNames = {};
@@ -199,19 +184,6 @@ modded class SCR_LoadoutManager
 		}
 
 		return false;
-	}
-
-	//--------------------------------------------------------------------------------------------
-	//! Counts how many registered entries we recognise as 29th-authored.
-	protected int CountOwnedEntries()
-	{
-		int ownedCount = 0;
-		foreach (SCR_BasePlayerLoadout entry : m_aPlayerLoadouts)
-		{
-			if (entry && IsGM29Loadout(entry))
-				ownedCount = ownedCount + 1;
-		}
-		return ownedCount;
 	}
 
 	//--------------------------------------------------------------------------------------------

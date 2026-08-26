@@ -454,9 +454,11 @@ class RK29_KitPicker
 			if (!offered.Contains(kitName))
 				continue;
 
-			// legacy kits (deploy-menu only) never show here
-			RK29_ClassSetup kitCls = mgr.m_Setup.FindClass(kitName);
-			if (kitCls && kitCls.m_bLegacyHidden)
+			// Current Kit is a deploy-menu ROW, not a kit - it spawns whatever the player last
+			// picked. Offering it here would let someone "pick" the thing that replays their
+			// pick. Asked of the loadout type rather than a config flag so it cannot drift:
+			// the squad lists never name it, but the no-group fallback offers every faction kit.
+			if (mgr.IsCurrentKitLoadoutName(kitName))
 				continue;
 
 			if (m_sSelectedKit == "")

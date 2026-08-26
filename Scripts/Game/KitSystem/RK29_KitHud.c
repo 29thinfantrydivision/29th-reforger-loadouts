@@ -58,7 +58,7 @@ class RK29_KitHud
 			s_bShownReported = true;
 			float x, y;
 			m_wRows.GetScreenPos(x, y);
-			Print(string.Format("[RK29] HUD visible at screen %1,%2 | rows parent ok", x, y), LogLevel.NORMAL);
+			RK29_Log.Trace(string.Format("[RK29] HUD visible at screen %1,%2 | rows parent ok", x, y));
 		}
 	}
 
@@ -157,7 +157,7 @@ class RK29_KitHud
 			if (!s_bHiddenReported)
 			{
 				s_bHiddenReported = true;
-				Print("[RK29] HUD hidden - local player has no faction yet", LogLevel.NORMAL);
+				RK29_Log.Trace("[RK29] HUD hidden - local player has no faction yet");
 			}
 			m_wRoot.SetVisible(false);
 			return;
@@ -198,7 +198,7 @@ class RK29_KitHud
 		}
 
 		// row order follows the side config's class order, leftovers append in loadout order;
-		// kits sharing a display label (AR + legacy MG under "Machine Gunner") sum into one row
+		// kits sharing a display label sum into one row
 		array<string> labels = {};
 		map<string, RK29_KitStruct> labelKits = new map<string, RK29_KitStruct>();
 		if (mgr.m_Setup && mgr.m_Setup.m_aClasses)

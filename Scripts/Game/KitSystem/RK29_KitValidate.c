@@ -382,7 +382,8 @@ class RK29_KitValidate
 		string line;
 		foreach (BaseInventoryStorageComponent storage : storages)
 		{
-			float max = storage.GetMaxVolumeCapacity();
+			float occupied, max;
+			StorageVolume(storage, occupied, max);
 			if (max <= 1)
 				continue;
 
@@ -403,9 +404,40 @@ class RK29_KitValidate
 
 			if (line != string.Empty)
 				line += " ";
-			line += string.Format("%1(%2/%3)", name, Math.Round(storage.GetOccupiedSpace()), Math.Round(max));
+			line += string.Format("%1(%2/%3)", name, Math.Round(occupied), Math.Round(max));
 		}
 		return line;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Volume the way the vanilla inventory UI measures it. A ClothNodeStorageComponent - every
+	//! vest and belt rig - is not itself one pocket: its own occupied figure counts the ITEM
+	//! volume of whatever is strapped to it (suspenders, pouches, buttpack), while its capacity
+	//! governs only the internal compartment. Reading the two directly is apples to oranges and
+	//! reported an ALICE vest as 19055/3300 on a kit the validator had just passed. Vanilla sums
+	//! BOTH sides across the owned universal sub-storages instead - see
+	//! SCR_InventoryStorageBaseUI.GetOccupiedVolume() / GetMaxVolumeCapacity() - so mirror that.
+	protected static void StorageVolume(notnull BaseInventoryStorageComponent storage, out float occupied, out float max)
+	{
+		occupied = 0;
+		max = 0;
+
+		if (!ClothNodeStorageComponent.Cast(storage))
+		{
+			occupied = storage.GetOccupiedSpace();
+			max = storage.GetMaxVolumeCapacity();
+			return;
+		}
+
+		array<BaseInventoryStorageComponent> subStorages = {};
+		storage.GetOwnedStorages(subStorages, 1, false);
+		foreach (BaseInventoryStorageComponent sub : subStorages)
+		{
+			if (!SCR_UniversalInventoryStorageComponent.Cast(sub))
+				continue;
+			occupied += sub.GetOccupiedSpace();
+			max += sub.GetMaxVolumeCapacity();
+		}
 	}
 
 	//--------------------------------------------------------------------------------------------
