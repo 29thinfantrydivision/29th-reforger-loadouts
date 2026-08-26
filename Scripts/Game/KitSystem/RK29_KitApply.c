@@ -100,6 +100,22 @@ class RK29_KitApply
 		array<ResourceName> quickSlotPrefabs = {};
 		CaptureQuickSlots(character, quickSlotPrefabs);
 
+		// Hands empty FIRST, without animation. Vanilla refuses plain storage ops against the
+		// weapon in hands - "it may fail and cause desync" is its own comment in
+		// SCR_InventoryStorageManagerComponent.EquipWeapon, worked around there with a whole
+		// alternate API - and it force-empties the hands before anything that takes over the
+		// body (the surrender disarm, emotes, loitering). Same move here, so the strip below
+		// never deletes the weapon the animation graph is holding. Deliberate, not Contextual:
+		// Contextual re-equips "when possible", which would chase an entity the strip is about
+		// to delete. The restore owns the re-draw.
+		SCR_ChimeraCharacter handsChar = SCR_ChimeraCharacter.Cast(character);
+		if (handsChar)
+		{
+			CharacterControllerComponent handsCtrl = handsChar.GetCharacterController();
+			if (handsCtrl)
+				handsCtrl.TryEquipRightHandItem(null, EEquipItemType.EEquipTypeUnarmedDeliberate, true);
+		}
+
 		// weapons are replaced wholesale, like garments. Carrying one over would carry its
 		// state over too: a part-used magazine, and worse, an empty chamber - the engine
 		// exposes IsCurrentBarrelChambered and ClearChamber but no way to SEAT a round, so
@@ -121,7 +137,7 @@ class RK29_KitApply
 		CensusRemaining(manager, character);
 		DressEquipment(manager, character, kit);
 
-		IEntity primaryWeapon = DressWeapons(manager, weaponStorage, kit);
+		IEntity primaryWeapon = DressWeapons(manager, weaponStorage, character, kit);
 		DressItems(manager, weaponStorage, character, kit, droppedItems);
 
 		// optic last - weapon must be fully spawned
@@ -805,7 +821,18 @@ class RK29_KitApply
 
 	//--------------------------------------------------------------------------------------------
 	//! Returns the spawned primary weapon for the optic pass.
-	protected static IEntity DressWeapons(SCR_InventoryStorageManagerComponent manager, EquipedWeaponStorageComponent weaponStorage, RK29_KitStruct kit)
+	//!
+	//! Exact slot or nothing. There used to be a retry that re-spawned a refused weapon with
+	//! slotId -1, letting the engine route it anywhere in the weapon storage - which is how a
+	//! bad apply could come out with the rifle and the launcher in each other's slots (whoever
+	//! spawned first won the reroute). Vanilla never blind-routes into weapon storage: it
+	//! inserts by explicit GetWeaponSlotIndex, and when the target slot is occupied it detaches
+	//! the occupant first (SCR_EquipWeaponAction, "Target slot has weapon, first detach it");
+	//! its lone -1 insert is pre-checked by CanInsertItemInStorage for a genuinely free slot.
+	//! A refused slot now means the weapon is skipped and the log says why - a missing weapon
+	//! is diagnosable, a scrambled loadout is not. The grenade slot keeps -1 by design: kit
+	//! space calls it GRENADE_SLOT and the engine routes throwables to their own slot type.
+	protected static IEntity DressWeapons(SCR_InventoryStorageManagerComponent manager, EquipedWeaponStorageComponent weaponStorage, IEntity character, RK29_KitStruct kit)
 	{
 		if (!weaponStorage)
 		{
@@ -822,21 +849,47 @@ class RK29_KitApply
 
 			RK29_SpawnCallback cb = new RK29_SpawnCallback();
 			bool ok = manager.TrySpawnPrefabToStorage(prefab, weaponStorage, targetSlot, cb: cb);
-			if (!ok && targetSlot != -1)
-			{
-				// retry auto-routed on slot mismatch
-				cb = new RK29_SpawnCallback();
-				ok = manager.TrySpawnPrefabToStorage(prefab, weaponStorage, -1, cb: cb);
-			}
 			if (!ok)
 			{
-				Print("[RK29] weapon did not equip: " + prefab, LogLevel.WARNING);
+				if (targetSlot != -1)
+					Print("[RK29] weapon slot " + targetSlot.ToString() + " refused " + FileOf29(prefab)
+						+ " (" + SlotOccupancy(character, targetSlot) + ") - weapon skipped, not rerouted", LogLevel.WARNING);
+				else
+					Print("[RK29] weapon did not equip: " + prefab, LogLevel.WARNING);
 				continue;
 			}
 			if (slotIdx == 0)
 				primary = cb.RK29_GetSpawned();
 		}
 		return primary;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Occupancy of the weapon slot with this id, for the refusal log - an occupied slot means
+	//! the strip failed, an empty one means the weapon cannot go in that slot. Resolved through
+	//! the weapon manager, NOT weaponStorage.GetSlot(id): that call takes a position in the slot
+	//! list, and every number that NAMES a weapon slot means GetWeaponSlotIndex().
+	protected static string SlotOccupancy(IEntity character, int slotId)
+	{
+		ChimeraCharacter chimera = ChimeraCharacter.Cast(character);
+		if (!chimera || !chimera.GetCharacterController())
+			return "occupancy unknown";
+		BaseWeaponManagerComponent wm = chimera.GetCharacterController().GetWeaponManagerComponent();
+		if (!wm)
+			return "occupancy unknown";
+
+		array<WeaponSlotComponent> slots = {};
+		wm.GetWeaponsSlots(slots);
+		foreach (WeaponSlotComponent ws : slots)
+		{
+			if (!ws || ws.GetWeaponSlotIndex() != slotId)
+				continue;
+			IEntity occupant = ws.GetWeaponEntity();
+			if (occupant)
+				return "still occupied by " + FileNameOf(occupant);
+			return "slot is empty - the weapon does not fit it";
+		}
+		return "no slot with that id on this body";
 	}
 
 	//--------------------------------------------------------------------------------------------

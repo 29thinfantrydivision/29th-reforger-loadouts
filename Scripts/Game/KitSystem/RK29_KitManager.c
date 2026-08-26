@@ -12,6 +12,24 @@ class RK29_PlayerSelection
 }
 
 //------------------------------------------------------------------------------------------------
+//! A live re-kit, resolved and waiting for the body's hands to come free. One object rather
+//! than a pile of CallLater arguments, and it keeps everything the apply needs pinned for as
+//! long as the wait lasts.
+class RK29_PendingApply
+{
+	int m_iPlayerId;
+	int m_iGen;             // apply generation this was queued under; stale = abandon
+	ref RK29_KitStruct m_Kit;     // unedited, for StampBody
+	ref RK29_KitStruct m_Edited;  // what actually gets applied
+	ResourceName m_sOptic;
+	ref array<ResourceName> m_aMounts;
+	int m_iStance;
+	float m_fDynStance;
+	int m_iHeldSlot;        // weapon slot that was drawn, resolved to an RplId after the apply
+	float m_fDeadline;
+}
+
+//------------------------------------------------------------------------------------------------
 class RK29_KitManager
 {
 	protected static const int RECOMPUTE_MS = 2000;
@@ -336,6 +354,15 @@ class RK29_KitManager
 		return m_Probe.IsBriefing(noTimerOpen);
 	}
 
+	//--------------------------------------------------------------------------------------------
+	//! Seconds left in the current Round Timer phase; -1 without the timer, so the HUD
+	//! countdown hides instead of guessing in config-fallback mode.
+	int GetPhaseRemainingSeconds()
+	{
+		m_Probe.EnsureProbed();
+		return m_Probe.GetRemainingSeconds();
+	}
+
 	// ======================================================================== server chokepoint
 
 	//--------------------------------------------------------------------------------------------
@@ -491,20 +518,24 @@ class RK29_KitManager
 				dynStance = 1.0;
 			}
 
-			// The generation bump no longer guards anything - every apply is synchronous again -
-			// but it keeps the counter moving in step with the applies, ready if deferred work
-			// ever comes back.
-			BumpApplyGen(playerId);
-
-			array<ResourceName> droppedItems;
-			RK29_KitApply.Apply(character, edited, applyOptic, mounts, droppedItems);
-			NotifyDropped_S(playerId, droppedItems);
-			StampBody(character, kit);
-
-			SCR_PlayerController heldPc = SCR_PlayerController.Cast(GetGame().GetPlayerManager().GetPlayerController(playerId));
-			if (heldPc)
-				heldPc.RK29_NotifyRestoreState_S(stance, dynStance, WeaponRplIdInSlot(character, heldSlot),
-					RplIdOf(character));
+			// Hand the apply to the hands-free wait rather than running it inline. In the
+			// common case the hands are already free and it applies on this same tick - the
+			// wait only engages mid-item-change. The rest of this method (identity, stash,
+			// recompute) carries on immediately either way, so the picker's confirmation is
+			// never held up.
+			RK29_PendingApply pending = new RK29_PendingApply();
+			pending.m_iPlayerId = playerId;
+			pending.m_iGen = BumpApplyGen(playerId);
+			pending.m_Kit = kit;
+			pending.m_Edited = edited;
+			pending.m_sOptic = applyOptic;
+			pending.m_aMounts = mounts;
+			pending.m_iStance = stance;
+			pending.m_fDynStance = dynStance;
+			pending.m_iHeldSlot = heldSlot;
+			pending.m_fDeadline = GetGame().GetWorld().GetWorldTime() + HANDS_SETTLE_TIMEOUT_MS;
+			m_mPendingApply_S.Set(playerId, pending);
+			ApplyWhenHandsFree_S(pending);
 		}
 
 		// deploy menu shows "Current Kit" selected; spawn re-dresses from the stash
@@ -786,6 +817,94 @@ class RK29_KitManager
 	//! Apply generation the loadout hook dressed this player under, so the spawn handler can
 	//! tell "already done" from "needs the old deferred path".
 	protected ref map<int, int> m_mSpawnApplied_S = new map<int, int>();
+
+	//! Ceiling on the hands-free wait. Not the sequencer - the wait ends on the condition; this
+	//! is only the point where we stop believing the condition and apply anyway, logged. Vanilla
+	//! uses the same shape for the same reason: its item-insertion callbacks complete on a slot
+	//! event, and the 1100ms ITEM_INSERTION_CALLBACK_CLEANUP_TIME exists only to detect the
+	//! insertions that "fail silently". 3s covers the longest hand action (a launcher draw).
+	protected static const float HANDS_SETTLE_TIMEOUT_MS = 3000;
+
+	//! Owns the queued apply while it waits. The call queue is handed the same object, but
+	//! holding the only reference there is not something to bet on. At most one per player: a
+	//! newer request bumps the generation, so an older pending abandons on its next tick.
+	protected ref map<int, ref RK29_PendingApply> m_mPendingApply_S = new map<int, ref RK29_PendingApply>();
+
+	//--------------------------------------------------------------------------------------------
+	//! Strip a body only once its hands are free. Every vanilla script path that mutates a
+	//! character's inventory refuses while an item action is in flight - CanMoveItem, InsertItem
+	//! and CanInsertItemInActualStorage all gate on IsAnimationReady()/IsInventoryLocked(), the
+	//! equip/drop/unequip actions all bail on IsChangingItem() - and the loiter system waits the
+	//! change out by retrying every control tick, because an item change cannot be interrupted
+	//! (CharacterCommandItemChange exposes no cancel; the other hand commands all have one).
+	//! This is the apply's version of the same precondition, checked HERE because the owner
+	//! drives its own character's commands and the server learns of them late - a client-side
+	//! check alone races the replication of the very command it is checking for.
+	//!
+	//! Re-schedules itself one frame at a time instead of a repeating CallLater: Remove() is
+	//! keyed by function and this manager serves every player, so a repeating call cancelled
+	//! for one player would cancel the others with it.
+	protected void ApplyWhenHandsFree_S(RK29_PendingApply pending)
+	{
+		if (!pending)
+			return;
+
+		// a newer apply or a respawn has claimed this body - that one owns it, and owns the
+		// pending-map entry too, so leave the entry alone on the way out
+		int current;
+		if (!m_mApplyGen_S.Find(pending.m_iPlayerId, current) || current != pending.m_iGen)
+			return;
+
+		// past here we ARE the current pending for this player; the map entry is ours to drop
+		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(
+			GetGame().GetPlayerManager().GetPlayerControlledEntity(pending.m_iPlayerId));
+		CharacterControllerComponent ctrl;
+		if (character)
+			ctrl = character.GetCharacterController();
+		if (!ctrl || ctrl.IsDead())
+		{
+			m_mPendingApply_S.Remove(pending.m_iPlayerId);
+			return;
+		}
+
+		// The preround and vehicle guards ran at request time, but the wait can separate them
+		// from the apply by up to the ceiling - re-check at the moment that matters. In the
+		// common case this runs on the request's own tick and trivially passes. Abandoning
+		// leaves the stash updated and the body in old gear - the same state as picking a kit
+		// while dead - and the next spawn dresses correctly.
+		if (character.IsInVehicle() || !IsPreround())
+		{
+			m_mPendingApply_S.Remove(pending.m_iPlayerId);
+			Print("[RK29] queued re-kit abandoned - conditions changed during the hands-free wait (player "
+				+ pending.m_iPlayerId.ToString() + ")", LogLevel.NORMAL);
+			return;
+		}
+
+		bool busy = ctrl.IsChangingItem() || ctrl.IsPlayingGesture() || ctrl.IsUsingItem();
+		if (busy && GetGame().GetWorld().GetWorldTime() < pending.m_fDeadline)
+		{
+			GetGame().GetCallqueue().CallLater(ApplyWhenHandsFree_S, 0, false, pending);
+			return;
+		}
+
+		m_mPendingApply_S.Remove(pending.m_iPlayerId);
+		if (busy)
+			Print("[RK29] hands never came free on the server - applying anyway (player "
+				+ pending.m_iPlayerId.ToString() + ")", LogLevel.WARNING);
+
+		array<ResourceName> droppedItems;
+		RK29_KitApply.Apply(character, pending.m_Edited, pending.m_sOptic, pending.m_aMounts, droppedItems);
+		NotifyDropped_S(pending.m_iPlayerId, droppedItems);
+		StampBody(character, pending.m_Kit);
+
+		// after the apply, never beside it - the notify racing ahead of a deferred apply is
+		// the ordering bug the old settle defer had
+		SCR_PlayerController pc = SCR_PlayerController.Cast(
+			GetGame().GetPlayerManager().GetPlayerController(pending.m_iPlayerId));
+		if (pc)
+			pc.RK29_NotifyRestoreState_S(pending.m_iStance, pending.m_fDynStance,
+				WeaponRplIdInSlot(character, pending.m_iHeldSlot), RplIdOf(character));
+	}
 
 	//--------------------------------------------------------------------------------------------
 	protected int BumpApplyGen(int playerId)
@@ -1163,6 +1282,7 @@ class RK29_KitManager
 		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
 		m_mSelections.Remove(playerId);
 		m_mApplyGen_S.Remove(playerId);
+		m_mPendingApply_S.Remove(playerId);
 		m_mSpawnApplied_S.Remove(playerId);
 		if (sel && sel.m_sIdentityUid != "")
 			m_mParkedSelections.Set(sel.m_sIdentityUid, sel);
