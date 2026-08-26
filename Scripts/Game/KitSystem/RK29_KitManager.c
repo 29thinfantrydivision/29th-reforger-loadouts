@@ -487,7 +487,8 @@ class RK29_KitManager
 
 			SCR_PlayerController heldPc = SCR_PlayerController.Cast(GetGame().GetPlayerManager().GetPlayerController(playerId));
 			if (heldPc)
-				heldPc.RK29_NotifyRestoreState_S(stance, dynStance, WeaponRplIdInSlot(character, heldSlot));
+				heldPc.RK29_NotifyRestoreState_S(stance, dynStance, WeaponRplIdInSlot(character, heldSlot),
+					RplIdOf(character));
 		}
 
 		// deploy menu shows "Current Kit" selected; spawn re-dresses from the stash
@@ -709,20 +710,61 @@ class RK29_KitManager
 		NotifyDropped_S(playerId, droppedItems);
 		StampBody(body, kit);
 
-		// Draw the primary. Holding a weapon is character-controller STATE, not inventory, so
-		// it cannot be baked into the saved loadout - somebody has to ask for it. Same request
-		// the live re-kit makes, so a spawned player and a re-kitted one end up identical:
-		// primary in hand, low ready.
-		SCR_PlayerController pc = SCR_PlayerController.Cast(GetGame().GetPlayerManager().GetPlayerController(playerId));
+		// Draw the primary HERE, on the server, in the same pass that built the inventory. This
+		// is vanilla's own mechanism: SCR_PlayerArsenalLoadout.ApplyCharacterDataLoadoutString
+		// equips the saved active-weapon slot server-side inside this very hook (OnLoadoutSpawned
+		// runs on the authority, from SCR_BaseGameMode.OnPlayerSpawnFinalize_S). Done this early
+		// the in-hands state is simply part of the body's initial replicated state - the owning
+		// client streams in a character that is ALREADY holding the rifle, and there is no
+		// request, no wait, and no race for it to lose.
+		//
+		// The owner-side draw machinery in RK29_PlayerController is deliberately NOT used on this
+		// path any more: asking the client to draw only works once the client can act, and on a
+		// dedicated server "when the client can act" is exactly the window a first spawn spends
+		// still streaming the world in. That machinery now serves the live re-kit (where the
+		// OWNER holds authority over its own item commands and server-side equips cannot be
+		// trusted) and the VerifyDrawn_S backstop below.
 		SCR_ChimeraCharacter spawnChar = SCR_ChimeraCharacter.Cast(body);
 		CharacterControllerComponent ctrl;
 		if (spawnChar)
 			ctrl = spawnChar.GetCharacterController();
-		if (pc && ctrl)
-			pc.RK29_NotifyRestoreState_S(ctrl.GetStance(), ctrl.GetDynamicStance(), WeaponRplIdInSlot(body, 0));
+		if (ctrl)
+			EquipPrimary_S(ctrl);
 
 		m_mSpawnApplied_S.Set(playerId, BumpApplyGen(playerId));
 		return true;
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Put the primary into a freshly spawned body's hands, server-side. Slot 0 is the primary
+	//! by kit-config convention; a kit that carries only a sidearm still gets its sidearm out.
+	//! Same slot fallback vanilla's ApplyCharacterDataLoadoutString uses when the saved slot is
+	//! gone. Swap = no animation: the body is new, there is nothing to transition from.
+	protected void EquipPrimary_S(CharacterControllerComponent ctrl)
+	{
+		BaseWeaponManagerComponent wm = ctrl.GetWeaponManagerComponent();
+		if (!wm)
+			return;
+
+		array<WeaponSlotComponent> slots = {};
+		wm.GetWeaponsSlots(slots);
+
+		IEntity weapon;
+		foreach (WeaponSlotComponent slot : slots)
+		{
+			if (!slot || !slot.GetWeaponEntity())
+				continue;
+			if (slot.GetWeaponSlotIndex() == 0)
+			{
+				weapon = slot.GetWeaponEntity();
+				break;
+			}
+			if (!weapon)
+				weapon = slot.GetWeaponEntity();
+		}
+
+		if (weapon)
+			ctrl.TryEquipRightHandItem(weapon, EEquipItemType.EEquipTypeWeapon, true);
 	}
 
 	//! Apply generation the loadout hook dressed this player under, so the spawn handler can
@@ -746,7 +788,7 @@ class RK29_KitManager
 
 		// EVERY spawn, not just a kitted one: a mutation queued against the previous body must
 		// not find itself still current and dress the new one.
-		BumpApplyGen(playerId);
+		int spawnGen = BumpApplyGen(playerId);
 
 		// "Current Kit" is the ONLY entry that dresses from the stash, and it does so in
 		// OnLoadoutSpawned, on a bare body - no strip, no settle window, nothing to redo here.
@@ -765,6 +807,15 @@ class RK29_KitManager
 		bool willApply = m_mSpawnApplied_S.Find(playerId, appliedGen);
 		m_mSpawnApplied_S.Remove(playerId);
 
+		// Diagnostic check on the server-side equip ApplyStashOnSpawn_S already did - a LOG, not
+		// a fix. A corrective draw this long after the spawn is worthless: the player sees their
+		// weapon on their back within the first second or the feature failed, and by the time any
+		// backstop could land they have drawn it themselves. What a late check IS good for is
+		// evidence - this path failed silently once before and cost a whole session of guessing,
+		// so if the equip did not hold, say so in the server log and leave the hands alone.
+		if (willApply)
+			GetGame().GetCallqueue().CallLater(VerifyDrawn_S, DRAW_VERIFY_MS, false, playerId, spawnGen);
+
 		// A stock spawn keeps its GEAR as authored - that is the rule above and it stands - but a
 		// role's QUALIFICATIONS are config-owned, and selections live in server memory only, so
 		// the first spawn of every session is a stock one. Without this a medic would bandage at
@@ -779,6 +830,61 @@ class RK29_KitManager
 		}
 
 		Recompute_S();
+	}
+
+	//! How long after a spawn to check that the equip held. Long enough for the owner's view to
+	//! have replicated back; the timing is loose because nothing corrective hangs on it.
+	protected static const int DRAW_VERIFY_MS = 3000;
+
+	//--------------------------------------------------------------------------------------------
+	//! Did the spawn equip actually hold? Log-only: empty hands here mean the server-side equip
+	//! was lost - refused on the fresh body, or undone somewhere in the ownership handover - and
+	//! that is worth a warning with enough detail to act on. Deliberately NOT a re-send: a draw
+	//! that reaches the player seconds after they spawned fixes nothing they have not already
+	//! fixed themselves.
+	//!
+	//! Gated on the apply generation, so a respawn or a re-kit since this was scheduled silently
+	//! retires it. A player who died or dismounted into a vehicle in the window is skipped too -
+	//! empty hands are legitimate there.
+	protected void VerifyDrawn_S(int playerId, int gen)
+	{
+		if (!Replication.IsServer())
+			return;
+
+		int currentGen;
+		if (!m_mApplyGen_S.Find(playerId, currentGen) || currentGen != gen)
+			return;
+
+		IEntity body = GetGame().GetPlayerManager().GetPlayerControlledEntity(playerId);
+		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(body);
+		if (!character || character.IsInVehicle())
+			return;
+
+		CharacterControllerComponent ctrl = character.GetCharacterController();
+		if (!ctrl || ctrl.IsDead() || ctrl.IsUnconscious())
+			return;
+
+		BaseWeaponManagerComponent wm = ctrl.GetWeaponManagerComponent();
+		if (wm && wm.GetCurrentWeapon())
+			return;
+
+		Print("[RK29] spawn equip did not hold for player " + playerId.ToString()
+			+ " - hands still empty " + (DRAW_VERIFY_MS / 1000).ToString() + "s after spawning."
+			+ " Not correcting (too late to matter); investigate the equip path", LogLevel.WARNING);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Network id of an entity, or invalid when it has none.
+	protected static RplId RplIdOf(IEntity entity)
+	{
+		if (!entity)
+			return RplId.Invalid();
+
+		RplComponent rpl = RplComponent.Cast(entity.FindComponent(RplComponent));
+		if (!rpl)
+			return RplId.Invalid();
+
+		return rpl.Id();
 	}
 
 	//--------------------------------------------------------------------------------------------
