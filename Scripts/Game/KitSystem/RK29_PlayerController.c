@@ -77,7 +77,9 @@ modded class SCR_PlayerController
 
 	//! How long to keep trying. The body is already here and the player is standing in the
 	//! staging area, so this only has to outlast the re-dressed weapon's trip over the wire.
-	protected static const float RK29_RESTORE_TIMEOUT_MS = 3000;
+	//! One second is the ceiling on that being worth doing at all: a draw that lands later
+	//! than this is one the player has already made themselves.
+	protected static const float RK29_RESTORE_TIMEOUT_MS = 1000;
 
 	//! Gap between equip attempts once the weapon is here. TryEquipRightHandItem can refuse -
 	//! an item change already running, a graph still settling - and it says so in a return value
@@ -171,8 +173,10 @@ modded class SCR_PlayerController
 		// Ran out of patience: the weapon the player was holding was deleted by the strip, so
 		// the animation graph is still pointing at a destroyed entity. Re-seat the hand empty
 		// rather than leaving it there - it is the difference between "empty-handed" and
-		// "empty-handed and stuck".
-		if (ctrl)
+		// "empty-handed and stuck". ONLY when the hand really is empty though: if a weapon is
+		// in hand at this point (the player drew one themselves mid-wait), stripping it here
+		// would be this machinery causing the very symptom it exists to fix.
+		if (ctrl && !RK29_HeldWeapon(ctrl))
 			ctrl.TryEquipRightHandItem(null, EEquipItemType.EEquipTypeUnarmedDeliberate, true);
 
 		// Giving up is not a failure to recover from: re-drawing is a convenience, re-kits are
@@ -192,6 +196,27 @@ modded class SCR_PlayerController
 	protected void RK29_StopDraw()
 	{
 		GetGame().GetCallqueue().Remove(RK29_PollRestore);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! The weapon entity currently in hands, or null. GetCurrentWeapon() returns the SLOT
+	//! component for a slotted weapon (WeaponSlotComponent extends BaseWeaponComponent), whose
+	//! owner is the character - unwrap to the weapon entity before comparing.
+	protected static IEntity RK29_HeldWeapon(CharacterControllerComponent ctrl)
+	{
+		BaseWeaponManagerComponent wm = ctrl.GetWeaponManagerComponent();
+		if (!wm)
+			return null;
+
+		BaseWeaponComponent current = wm.GetCurrentWeapon();
+		if (!current)
+			return null;
+
+		WeaponSlotComponent slot = WeaponSlotComponent.Cast(current);
+		if (slot)
+			return slot.GetWeaponEntity();
+
+		return current.GetOwner();
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -237,8 +262,10 @@ modded class SCR_PlayerController
 		{
 			// Nothing was in hands to restore. Still not a no-op: the strip may have deleted the
 			// throwable the player was holding, so the graph is left on a stale item state that
-			// has to be re-seated empty.
-			ctrl.TryEquipRightHandItem(null, EEquipItemType.EEquipTypeUnarmedDeliberate, true);
+			// has to be re-seated empty. Unless a weapon made it into the hand meanwhile - then
+			// the graph is fine and re-seating would strip it.
+			if (!RK29_HeldWeapon(ctrl))
+				ctrl.TryEquipRightHandItem(null, EEquipItemType.EEquipTypeUnarmedDeliberate, true);
 			return true;
 		}
 
@@ -253,7 +280,12 @@ modded class SCR_PlayerController
 		if (!weapon)
 			return false; // still streaming in - keep waiting
 
-		if (ctrl.GetRightHandItem() == weapon)
+		// The in-hand check has to go through the weapon manager: GetRightHandItem() is for
+		// generic items and documents itself null WHILE THE ACTIVE ITEM IS A WEAPON, so
+		// comparing it against the weapon reads "not drawn" forever even when the draw took
+		// on the first attempt - and the timeout then rips the drawn weapon back out of the
+		// player's hands.
+		if (RK29_HeldWeapon(ctrl) == weapon)
 			return true;
 
 		float now = GetGame().GetWorld().GetWorldTime();

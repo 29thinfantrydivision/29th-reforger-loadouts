@@ -54,7 +54,7 @@ class RK29_KitStruct
 	//--------------------------------------------------------------------------------------------
 	//! Deep copy. Weapon, mag and optic choices are all laid over the clone by the caller
 	//! (RK29_KitCompose) - this used to take them as parameters, but no caller ever did.
-	RK29_KitStruct Clone()
+	RK29_KitStruct DeepCopy()
 	{
 		RK29_KitStruct c = new RK29_KitStruct();
 		c.m_sKitName      = m_sKitName;

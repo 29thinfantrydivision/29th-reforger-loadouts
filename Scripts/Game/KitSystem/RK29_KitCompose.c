@@ -180,7 +180,7 @@ class RK29_KitCompose
 	static RK29_KitStruct ApplyWeaponOption(notnull RK29_KitStruct base,
 		notnull RK29_WeaponOption option, int slot, notnull RK29_KitSetup setup)
 	{
-		RK29_KitStruct kit = base.Clone();
+		RK29_KitStruct kit = base.DeepCopy();
 
 		ResourceName weapon = setup.WeaponPrefabOf(option, base.m_sFactionKey);
 		if (weapon == ResourceName.Empty)
@@ -279,7 +279,7 @@ class RK29_KitCompose
 
 		// classes without options keep their composition's own weapons untouched
 		if (!applied)
-			kit = base.Clone();
+			kit = base.DeepCopy();
 
 		ResolveAttachmentGates(kit);
 		return kit;
