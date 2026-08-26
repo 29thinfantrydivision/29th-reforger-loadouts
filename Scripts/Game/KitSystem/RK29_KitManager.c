@@ -352,6 +352,15 @@ class RK29_KitManager
 			return;
 		}
 
+		// The Current Kit rows are spawn plumbing, not kits - they re-dress from the stash, and
+		// the "kit" behind each is a capture of the side's bare body. The picker filters them
+		// from its own list, but a stale or crafted request must not get to stash one.
+		if (IsCurrentKitLoadoutName(kitName))
+		{
+			Print("[RK29] request rejected - '" + kitName + "' is not a requestable kit (player " + playerId.ToString() + ")", LogLevel.WARNING);
+			return;
+		}
+
 		Faction playerFaction = SCR_FactionManager.SGetPlayerFaction(playerId);
 		if (!playerFaction || playerFaction.GetFactionKey() != kit.m_sFactionKey)
 		{
@@ -408,25 +417,14 @@ class RK29_KitManager
 			}
 		}
 
-		RK29_PlayerSelection sel = new RK29_PlayerSelection();
-		sel.m_sKitName = kitName;
-		sel.m_sWeapon  = weapon;
-		sel.m_sOptic   = optic;
-		sel.m_sIdentityUid = SCR_PlayerIdentityUtils.GetPlayerIdentityId(playerId);
-		m_mSelections.Set(playerId, sel);
-
 		IEntity body = GetGame().GetPlayerManager().GetPlayerControlledEntity(playerId);
 		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(body);
 		bool alive = character && character.GetCharacterController() && !character.GetCharacterController().IsDead();
 
-		// Resolve once. The same resolved kit is what gets applied to a living body AND what the
-		// client is handed for its preview, so the two can never disagree about which weapon,
-		// optic or garment the player ended up with.
-		RK29_KitStruct edited;
-		ResourceName applyOptic;
-		array<ResourceName> mounts;
-		ResolveSelection(kit, cls, sel, edited, applyOptic, mounts);
-
+		// Refuse a live re-kit BEFORE anything is committed. A refusal that has already
+		// overwritten m_mSelections leaves the server remembering a kit the client was never
+		// confirmed on - the local stash, deploy row and mannequin keep the old kit while the
+		// next respawn dresses the new one.
 		if (alive)
 		{
 			if (!IsPreround())
@@ -439,7 +437,25 @@ class RK29_KitManager
 				Print("[RK29] live re-kit refused - player in vehicle (player " + playerId.ToString() + ")", LogLevel.NORMAL);
 				return;
 			}
+		}
 
+		RK29_PlayerSelection sel = new RK29_PlayerSelection();
+		sel.m_sKitName = kitName;
+		sel.m_sWeapon  = weapon;
+		sel.m_sOptic   = optic;
+		sel.m_sIdentityUid = SCR_PlayerIdentityUtils.GetPlayerIdentityId(playerId);
+		m_mSelections.Set(playerId, sel);
+
+		// Resolve once. The same resolved kit is what gets applied to a living body AND what the
+		// client is handed for its preview, so the two can never disagree about which weapon,
+		// optic or garment the player ended up with.
+		RK29_KitStruct edited;
+		ResourceName applyOptic;
+		array<ResourceName> mounts;
+		ResolveSelection(kit, cls, sel, edited, applyOptic, mounts);
+
+		if (alive)
+		{
 			// remember drawn-weapon slot + stance so the client can restore both after
 			int heldSlot = -1;
 			int stance = 0;
@@ -1084,8 +1100,13 @@ class RK29_KitManager
 		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
 		if (sel)
 			stash = sel.m_sKitName;
-		else
+		else if (playerId == SCR_PlayerController.GetLocalPlayerId())
+		{
+			// the client-side half of the contract above - and ONLY for the asking machine's own
+			// player: on a listen host the authority also runs this code, and without the id
+			// check the host's local stash would answer for every player m_mSelections misses
 			stash = RK29_KitPicker.LocalStashKit();
+		}
 
 		if (stash != "")
 		{
@@ -1142,6 +1163,7 @@ class RK29_KitManager
 		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
 		m_mSelections.Remove(playerId);
 		m_mApplyGen_S.Remove(playerId);
+		m_mSpawnApplied_S.Remove(playerId);
 		if (sel && sel.m_sIdentityUid != "")
 			m_mParkedSelections.Set(sel.m_sIdentityUid, sel);
 
@@ -1181,12 +1203,17 @@ class RK29_KitManager
 			spc.RK29_NotifyKitSaved_S(sel.m_sKitName, sel.m_sOptic, RK29_KitWire.Pack(rejoinEdited));
 		}
 
-		GetGame().GetCallqueue().CallLater(RestoreRejoinIdentity, 2000, false, playerId);
+		GetGame().GetCallqueue().CallLater(RestoreRejoinIdentity, 2000, false, playerId, uid);
 	}
 
 	//--------------------------------------------------------------------------------------------
-	protected void RestoreRejoinIdentity(int playerId)
+	//! `uid` is who this deferral was scheduled FOR. Player ids recycle, so 2s later the id may
+	//! belong to somebody else entirely - re-check before touching their loadout identity.
+	protected void RestoreRejoinIdentity(int playerId, string uid)
 	{
+		if (SCR_PlayerIdentityUtils.GetPlayerIdentityId(playerId) != uid)
+			return;
+
 		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
 		if (!sel)
 			return;

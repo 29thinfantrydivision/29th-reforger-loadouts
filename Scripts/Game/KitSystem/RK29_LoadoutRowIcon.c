@@ -56,6 +56,13 @@ modded class SCR_LoadoutRequestUIComponent
 	override void HandlerAttached(Widget w)
 	{
 		super.HandlerAttached(w);
+
+		// vanilla's HandlerAttached bails out (with a log) before assigning m_PlyLoadoutComp
+		// when the world has no loadout manager or no player controller yet, and
+		// GetPlayerLoadout() derefs it unguarded - match vanilla's degradation, don't crash
+		if (!m_PlyLoadoutComp)
+			return;
+
 		RK29_StampRowName(GetPlayerLoadout());
 	}
 

@@ -336,7 +336,8 @@ class RK29_KitApply
 	// ============================================================================ strip
 
 	//--------------------------------------------------------------------------------------------
-	//! Deletes weapons the kit doesn't reuse; same-prefab ones stay, keyed by kit slot.
+	//! Deletes EVERY weapon-slot occupant - the kit respawns its own, so same-prefab weapons
+	//! are replaced too, never reused (wholesale-replace rationale at the top of Apply).
 	protected static void StripWeapons(SCR_InventoryStorageManagerComponent manager, EquipedWeaponStorageComponent weaponStorage)
 	{
 		if (!weaponStorage)
@@ -1519,7 +1520,12 @@ class RK29_KitApply
 
 			RK29_SpawnCallback cb = new RK29_SpawnCallback();
 			if (manager.TrySpawnPrefabToStorage(entry.m_sPrefab, containers[c], slotIds[c], cb: cb))
+			{
 				pending.RemoveItem(idx);
+				// same record SolvePlacement keeps - without it, every apply served from the
+				// plan cache leaves LastSent() empty and the kitvalidate audit goes blind
+				s_aLastSent.Insert(FileOf29(items[idx]) + " -> " + entry.m_sContainerKey);
+			}
 		}
 
 		foreach (int leftover : pending)
@@ -1540,8 +1546,8 @@ class RK29_KitApply
 
 	//--------------------------------------------------------------------------------------------
 	//! Largest authored side, in cm. Containers gate on this (MaxItemSize), not on volume,
-	//! so it is what decides how scarce an item's eligible space is. Variant prefabs inherit
-	//! their dimensions from a base - walk ancestors until found.
+	//! so it is what decides how scarce an item's eligible space is. The entity source is the
+	//! fully merged view, inherited dimensions included - one read, no ancestry walk.
 	protected static float ItemMaxDimension(ResourceName prefab)
 	{
 		float dim;
@@ -1552,7 +1558,7 @@ class RK29_KitApply
 		if (res.IsValid())
 		{
 			IEntitySource src = res.GetResource().ToEntitySource();
-			while (src && dim == 0)
+			if (src)
 			{
 				for (int i = 0, n = src.GetComponentCount(); i < n; i++)
 				{
@@ -1573,7 +1579,6 @@ class RK29_KitApply
 					}
 					break;
 				}
-				src = src.GetAncestor();
 			}
 		}
 

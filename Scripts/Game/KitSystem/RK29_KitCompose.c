@@ -5,9 +5,6 @@
 //------------------------------------------------------------------------------------------------
 class RK29_KitCompose
 {
-	protected static const int LAUNCHER_SLOT = 1;
-	protected static const int SIDEARM_SLOT = 2;
-
 	protected static ref map<ResourceName, ResourceName> s_mDefaultMagCache = new map<ResourceName, ResourceName>();
 	protected static ref map<ResourceName, ref array<string>> s_mWellsCache = new map<ResourceName, ref array<string>>();
 
@@ -183,7 +180,7 @@ class RK29_KitCompose
 	static RK29_KitStruct ApplyWeaponOption(notnull RK29_KitStruct base,
 		notnull RK29_WeaponOption option, int slot, notnull RK29_KitSetup setup)
 	{
-		RK29_KitStruct kit = base.CloneWithChoices(ResourceName.Empty, ResourceName.Empty, null, 0);
+		RK29_KitStruct kit = base.Clone();
 
 		ResourceName weapon = setup.WeaponPrefabOf(option, base.m_sFactionKey);
 		if (weapon == ResourceName.Empty)
@@ -282,7 +279,7 @@ class RK29_KitCompose
 
 		// classes without options keep their composition's own weapons untouched
 		if (!applied)
-			kit = base.CloneWithChoices(ResourceName.Empty, ResourceName.Empty, null, 0);
+			kit = base.Clone();
 
 		ResolveAttachmentGates(kit);
 		return kit;
@@ -854,7 +851,7 @@ class RK29_KitCompose
 
 
 	//--------------------------------------------------------------------------------------------
-	//! Literal-identity override: same source plus same alias/variant/prefab. -1 = none.
+	//! Literal-identity override: same source plus same alias/prefab. -1 = none.
 	protected static int OverrideCountFor(RK29_BlockRef bref, RK29_BlockItemEntry entry)
 	{
 		if (!bref.m_aItemOverrides)
@@ -866,9 +863,6 @@ class RK29_KitCompose
 			if (entry.m_eSource == RK29_EItemSource.PREFAB && ov.m_sPrefab != entry.m_sPrefab)
 				continue;
 			if (entry.m_eSource == RK29_EItemSource.ALIAS && ov.m_sAlias != entry.m_sAlias)
-				continue;
-			if (entry.m_eSource != RK29_EItemSource.PREFAB && entry.m_eSource != RK29_EItemSource.ALIAS
-				&& ov.m_sVariant != entry.m_sVariant)
 				continue;
 			return ov.m_iCount;
 		}
