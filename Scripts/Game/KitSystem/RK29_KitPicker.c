@@ -324,6 +324,11 @@ class RK29_KitPicker
 	//! Covers three exits with one check: deploying (body arrives), dropping into the spectator
 	//! camera (deploy menu goes away), and dying while it is open (body goes away). The
 	//! controlled-entity hook only catches the first of those.
+	//!
+	//! While open WITH a live body, the round going LIVE is what invalidates the menu: an
+	//! alive open is preround-only, so a phase flip mid-browse leaves a menu up that Open()
+	//! would now refuse. Dead stays exempt - a dead pick is a stash for the NEXT body and is
+	//! legal at any point in the round.
 	protected void WatchDeployMenu()
 	{
 		if (!m_Dialog)
@@ -331,6 +336,16 @@ class RK29_KitPicker
 		if (!IsLocalAlive() && !IsDeployMenuOpen())
 		{
 			Print("[RK29] kit menu closed - no live body and no deploy menu", LogLevel.NORMAL);
+			CloseMenu();
+			return;
+		}
+		RK29_KitManager mgr = RK29_KitManager.GetInstance();
+		if (IsLocalAlive() && mgr && !mgr.IsPreround())
+		{
+			Print("[RK29] kit menu closed - round went live", LogLevel.NORMAL);
+			SCR_PopUpNotification popup = SCR_PopUpNotification.GetInstance();
+			if (popup)
+				popup.PopupMsg("Kit Menu closed", 3, "Reason: the round is now live");
 			CloseMenu();
 			return;
 		}
