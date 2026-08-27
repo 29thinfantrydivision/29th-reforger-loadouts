@@ -143,7 +143,11 @@ modded class SCR_PlayerController
 
 		if (ctrl)
 		{
-			if (!m_RK29_DrawStanceDone)
+			// A seated body keeps the seat's pose. The stance the server captured from a
+			// seated character is a pre-boarding relic, and the seat refuses stance commands
+			// anyway. Skipped rather than deferred: TryDraw below finishes the whole request
+			// on the same in-vehicle condition, so this never runs late on a dismount.
+			if (!m_RK29_DrawStanceDone && !character.IsInVehicle())
 			{
 				m_RK29_DrawStanceDone = true;
 				RK29_RestoreStance(ctrl);
@@ -254,7 +258,9 @@ modded class SCR_PlayerController
 	//! a reason that will not change, or overtaken by the player.
 	protected bool RK29_TryDraw(SCR_ChimeraCharacter character, CharacterControllerComponent ctrl)
 	{
-		// Nothing to draw for, and none of these un-become true while the request is alive.
+		// Nothing to draw for. Dead and unconscious do not un-become true while the request
+		// is alive; a vehicle CAN be dismounted, but an in-vehicle apply deliberately ends
+		// the draw here - the new primary rides holstered and the player draws it themselves.
 		if (ctrl.IsDead() || ctrl.IsUnconscious() || character.IsInVehicle())
 			return true;
 

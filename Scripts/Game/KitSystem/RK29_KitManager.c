@@ -452,18 +452,15 @@ class RK29_KitManager
 		// overwritten m_mSelections leaves the server remembering a kit the client was never
 		// confirmed on - the local stash, deploy row and mannequin keep the old kit while the
 		// next respawn dresses the new one.
-		if (alive)
+		//
+		// A vehicle seat is NOT refused: the apply is pure storage work (the hands are
+		// force-emptied without animation first, overflow items are left out rather than
+		// spilled), so it is as safe seated as standing. The owner-side draw bails in a
+		// vehicle on its own - the new primary rides holstered until the player gets out.
+		if (alive && !IsPreround())
 		{
-			if (!IsPreround())
-			{
-				Print("[RK29] live re-kit refused - not preround (player " + playerId.ToString() + ")", LogLevel.NORMAL);
-				return;
-			}
-			if (character.IsInVehicle())
-			{
-				Print("[RK29] live re-kit refused - player in vehicle (player " + playerId.ToString() + ")", LogLevel.NORMAL);
-				return;
-			}
+			Print("[RK29] live re-kit refused - not preround (player " + playerId.ToString() + ")", LogLevel.NORMAL);
+			return;
 		}
 
 		RK29_PlayerSelection sel = new RK29_PlayerSelection();
@@ -867,12 +864,13 @@ class RK29_KitManager
 			return;
 		}
 
-		// The preround and vehicle guards ran at request time, but the wait can separate them
-		// from the apply by up to the ceiling - re-check at the moment that matters. In the
+		// The preround guard ran at request time, but the wait can separate it from the
+		// apply by up to the ceiling - re-check at the moment that matters. In the
 		// common case this runs on the request's own tick and trivially passes. Abandoning
 		// leaves the stash updated and the body in old gear - the same state as picking a kit
-		// while dead - and the next spawn dresses correctly.
-		if (character.IsInVehicle() || !IsPreround())
+		// while dead - and the next spawn dresses correctly. Boarding a vehicle during the
+		// wait does not abandon: an in-vehicle apply is allowed at request time too.
+		if (!IsPreround())
 		{
 			m_mPendingApply_S.Remove(pending.m_iPlayerId);
 			Print("[RK29] queued re-kit abandoned - conditions changed during the hands-free wait (player "
