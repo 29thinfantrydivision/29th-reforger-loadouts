@@ -13,6 +13,9 @@ class RK29_KitHud
 	protected Widget m_wRoot;
 	protected Widget m_wRows;
 	protected TextWidget m_wTitle;
+	protected Widget m_wTimerCell;
+	protected TextWidget m_wTimerMin;
+	protected TextWidget m_wTimerSec;
 	protected Widget m_wFooterRow;
 	protected Widget m_wHeaderRow;
 	protected bool m_bSubscribed;
@@ -51,6 +54,7 @@ class RK29_KitHud
 
 		SubscribeCounts();
 		m_wRoot.SetVisible(true);
+		UpdateTimer(mgr);
 		Rebuild();
 
 		if (!s_bShownReported && m_wRows)
@@ -60,6 +64,42 @@ class RK29_KitHud
 			m_wRows.GetScreenPos(x, y);
 			RK29_Log.Trace(string.Format("[RK29] HUD visible at screen %1,%2 | rows parent ok", x, y));
 		}
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! Briefing countdown in the title band, ticking with the HUD. Rendered only while the
+	//! Round Timer addon is loaded - in config-fallback mode there is no clock to show.
+	//! Split at the colon into two fixed half-cells so the colon rides the centerline of the
+	//! count column below, whatever the digits measure - minutes grow leftward, seconds stay put.
+	protected void UpdateTimer(RK29_KitManager mgr)
+	{
+		if (!m_wTimerCell || !m_wTimerMin || !m_wTimerSec)
+			return;
+
+		int remaining = mgr.GetPhaseRemainingSeconds();
+		if (remaining < 0)
+		{
+			m_wTimerCell.SetVisible(false);
+			return;
+		}
+
+		int m = remaining / 60;
+		int s = remaining % 60;
+		m_wTimerMin.SetText(string.Format("%1:", m));
+		if (s < 10)
+			m_wTimerSec.SetText(string.Format("0%1", s));
+		else
+			m_wTimerSec.SetText(s.ToString());
+
+		Color c = Color.White;
+		if (remaining < 10)
+			c = UIColors.WARNING;
+		else if (remaining < 30)
+			c = UIColors.SLIGHT_WARNING;
+		m_wTimerMin.SetColor(c);
+		m_wTimerSec.SetColor(c);
+
+		m_wTimerCell.SetVisible(true);
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -80,6 +120,9 @@ class RK29_KitHud
 		}
 		m_wRows   = m_wRoot.FindAnyWidget("HudRows");
 		m_wTitle  = TextWidget.Cast(m_wRoot.FindAnyWidget("HudTitle"));
+		m_wTimerCell = m_wRoot.FindAnyWidget("HudTimerCell");
+		m_wTimerMin  = TextWidget.Cast(m_wRoot.FindAnyWidget("HudTimerMin"));
+		m_wTimerSec  = TextWidget.Cast(m_wRoot.FindAnyWidget("HudTimerSec"));
 		m_wFooterRow = m_wRoot.FindAnyWidget("HudFooterRow");
 		m_wHeaderRow = m_wRoot.FindAnyWidget("HudHeaderRow");
 		BuildHeaderRow();

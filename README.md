@@ -6,7 +6,9 @@ from config. Kits are authored as **config compositions**, not character prefabs
 here requires opening a body prefab to change what a rifleman carries.
 
 - **Addon GUID:** `69730206FA071FE2` · **ID:** `29thInfantryDivisionLoadouts`
-- **Picker keybind:** `F4` (rebindable, category *Kits - 29th ID*)
+- **Picker keybind:** `F4` · **Apply kit:** `Space` (both rebindable, category *Kits - 29th ID*;
+  rebinds are backed up to `$profile:RK29_Keybinds.json` and restored if a session without the
+  mod wipes them from the engine's input settings)
 - **Factions:** US, USSR · **Classes:** 12 US, 11 USSR
 
 ## Dependencies

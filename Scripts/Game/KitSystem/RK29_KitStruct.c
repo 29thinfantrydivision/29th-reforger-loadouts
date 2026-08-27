@@ -52,9 +52,9 @@ class RK29_KitStruct
 	ref SCR_UIInfo m_UIInfo;
 
 	//--------------------------------------------------------------------------------------------
-	//! Deep copy with weapon choice + mag auto-swap applied. Optic is handled at apply, not here.
-	//! magCount > 0 replaces the kit's captured mag load with exactly that many of chosenMag.
-	RK29_KitStruct CloneWithChoices(ResourceName chosenWeapon, ResourceName chosenMag, array<ResourceName> classMags, int magCount = 0)
+	//! Deep copy. Weapon, mag and optic choices are all laid over the clone by the caller
+	//! (RK29_KitCompose) - this used to take them as parameters, but no caller ever did.
+	RK29_KitStruct DeepCopy()
 	{
 		RK29_KitStruct c = new RK29_KitStruct();
 		c.m_sKitName      = m_sKitName;
@@ -73,48 +73,18 @@ class RK29_KitStruct
 			c.m_mEquipment.Set(eqSlot, eqRes);
 
 		foreach (int idx, ResourceName res : m_mWeapons)
-		{
-			if (idx == 0 && chosenWeapon != ResourceName.Empty)
-			{
-				c.m_mWeapons.Set(idx, chosenWeapon);
-				c.m_sPrimaryWeapon = chosenWeapon;
-			}
-			else
-				c.m_mWeapons.Set(idx, res);
-		}
-
-		bool swapMags = chosenMag != ResourceName.Empty && classMags != null && !classMags.IsEmpty();
-		bool fixedCount = swapMags && magCount > 0;
+			c.m_mWeapons.Set(idx, res);
 
 		foreach (RK29_KitItemBatch batch : m_aItems)
 		{
 			RK29_KitItemBatch nb = new RK29_KitItemBatch();
 			nb.m_sTargetHint = batch.m_sTargetHint;
-			nb.m_aPreferred  = batch.m_aPreferred;          // placement prefs survive a swap
+			nb.m_aPreferred  = batch.m_aPreferred;
 			nb.m_bPrimaryAttachment = batch.m_bPrimaryAttachment;
 			foreach (ResourceName item : batch.m_aPrefabs)
-			{
-				if (swapMags && classMags.Contains(item))
-				{
-					if (!fixedCount)
-						nb.m_aPrefabs.Insert(chosenMag);
-					// fixedCount: captured mags dropped here, re-added as one batch below
-				}
-				else
-				{
-					nb.m_aPrefabs.Insert(item);
-				}
-			}
+				nb.m_aPrefabs.Insert(item);
 			if (!nb.m_aPrefabs.IsEmpty())
 				c.m_aItems.Insert(nb);
-		}
-
-		if (fixedCount)
-		{
-			RK29_KitItemBatch mags = new RK29_KitItemBatch();
-			for (int i = 0; i < magCount; i++)
-				mags.m_aPrefabs.Insert(chosenMag);
-			c.m_aItems.Insert(mags);
 		}
 
 		return c;

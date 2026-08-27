@@ -79,10 +79,6 @@ class RK29_BlockItemTitle : BaseContainerCustomTitle
 		else
 		{
 			label = typename.EnumToString(RK29_EItemSource, src);
-			string variant;
-			source.Get("m_sVariant", variant);
-			if (variant != "")
-				label = label + ":" + variant;
 		}
 
 		title = count.ToString() + "x " + label;
@@ -102,9 +98,6 @@ class RK29_BlockItemEntry
 
 	[Attribute(desc: "Catalog alias name (source ALIAS), e.g. bandage", category: "29th")]
 	string m_sAlias;
-
-	[Attribute(desc: "Magazine variant name (MAG_* sources), e.g. tracer. Empty = the weapon's default", category: "29th")]
-	string m_sVariant;
 
 	[Attribute("1", desc: "How many. On a block-ref override this SETS the final count (0 = remove)", category: "29th")]
 	int m_iCount;

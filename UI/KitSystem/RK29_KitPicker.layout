@@ -45,7 +45,7 @@ SizeLayoutWidgetClass {
      Text "CLASS"
      "Font Size" 16
      "Min Font Size" 14
-     FontProperties FontProperties "{AB29C0FFEE293022}" {
+     FontProperties FontProperties "{AB29C0FFEE293122}" {
       Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
      }
      "Horizontal Alignment" Left
@@ -68,7 +68,7 @@ SizeLayoutWidgetClass {
      Text "WEAPON"
      "Font Size" 16
      "Min Font Size" 14
-     FontProperties FontProperties "{AB29C0FFEE293023}" {
+     FontProperties FontProperties "{AB29C0FFEE293123}" {
       Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
      }
      "Horizontal Alignment" Left
@@ -91,7 +91,7 @@ SizeLayoutWidgetClass {
      Text "OPTIC"
      "Font Size" 16
      "Min Font Size" 14
-     FontProperties FontProperties "{AB29C0FFEE293024}" {
+     FontProperties FontProperties "{AB29C0FFEE293124}" {
       Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
      }
      "Horizontal Alignment" Left

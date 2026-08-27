@@ -62,6 +62,79 @@ FrameWidgetClass {
            "Horizontal Alignment" Left
            "Vertical Alignment" Center
           }
+          SizeLayoutWidgetClass "{AB29C0FFEE29202A}" {
+           Name "HudTimerCell"
+           Slot OverlayWidgetSlot "{AB29C0FFEE29202B}" {
+            HorizontalAlign 2
+            VerticalAlign 3
+           }
+           "Is Visible" 0
+           AllowWidthOverride 1
+           WidthOverride 58
+           {
+            HorizontalLayoutWidgetClass "{AB29C0FFEE29202D}" {
+             Name "HudTimerRow"
+             Slot AlignableSlot "{AB29C0FFEE29202E}" {
+              HorizontalAlign 3
+              VerticalAlign 3
+             }
+             {
+              SizeLayoutWidgetClass "{AB29C0FFEE29202F}" {
+               Name "HudTimerMinCell"
+               Slot LayoutSlot "{AB29C0FFEE292030}" {
+                VerticalAlign 3
+               }
+               AllowWidthOverride 1
+               WidthOverride 29
+               {
+                RichTextWidgetClass "{AB29C0FFEE292031}" {
+                 Name "HudTimerMin"
+                 Slot AlignableSlot "{AB29C0FFEE292032}" {
+                  HorizontalAlign 3
+                  VerticalAlign 3
+                 }
+                 Color 1 1 1 1
+                 Text ""
+                 "Font Size" 18
+                 "Min Font Size" 14
+                 FontProperties FontProperties "{AB29C0FFEE29202C}" {
+                  Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+                 }
+                 "Horizontal Alignment" Right
+                 "Vertical Alignment" Center
+                }
+               }
+              }
+              SizeLayoutWidgetClass "{AB29C0FFEE292033}" {
+               Name "HudTimerSecCell"
+               Slot LayoutSlot "{AB29C0FFEE292034}" {
+                VerticalAlign 3
+               }
+               AllowWidthOverride 1
+               WidthOverride 29
+               {
+                RichTextWidgetClass "{AB29C0FFEE292035}" {
+                 Name "HudTimerSec"
+                 Slot AlignableSlot "{AB29C0FFEE292036}" {
+                  HorizontalAlign 3
+                  VerticalAlign 3
+                 }
+                 Color 1 1 1 1
+                 Text ""
+                 "Font Size" 18
+                 "Min Font Size" 14
+                 FontProperties FontProperties "{AB29C0FFEE292037}" {
+                  Font "{EABA4FE9D014CCEF}UI/Fonts/RobotoCondensed/RobotoCondensed_Bold.fnt"
+                 }
+                 "Horizontal Alignment" Left
+                 "Vertical Alignment" Center
+                }
+               }
+              }
+             }
+            }
+           }
+          }
          }
         }
        }

@@ -261,21 +261,28 @@ apply.
 ## 9. Round phase
 
 "Preround" means the 29th Round Timer's phase is **not LIVE** — briefing, no round set up,
-and post-round all count as open. The HUD is stricter and shows during BRIEFING only.
+and post-round all count as open. The HUD is stricter and shows during BRIEFING only,
+with the briefing countdown in its title band.
 
-Integration is soft and one-directional. An `RK29_` probe locates the timer's `m_eRTPhase`
-RplProp on the game mode by name through Enforce reflection
+Integration is soft and one-directional. An `RK29_` probe locates the timer's RplProps on
+the game mode by name through Enforce reflection
 (`typename.GetVariableName` / `GetVariableValue`). All vanilla types, no compile-time
-reference either way, and the Round Timer is never modified.
+reference either way, and the Round Timer is never modified. `m_eRTPhase` drives the
+gates; `m_RTPhaseStartTs` / `m_iRTPhaseDurationS` / `m_bRTPaused` / `m_iRTPausedRemainingS`
+feed the HUD countdown, whose math mirrors the timer's own clamped display
+(pause-aware, computed against `ChimeraWorld.GetServerTimestamp()`).
 
-The field is type-level, so one look at a live game mode settles it for the world. With
+The fields are type-level, so one look at a live game mode settles it for the world. With
 the addon absent the probe stays inactive and `m_bNoTimerOpen` in `RK29_KitSetup.conf`
 governs — default **closed**: no HUD, no live re-kit, kit choice at deploy only. Flip it
-open for dev or casual sessions.
+open for dev or casual sessions. The countdown is timer-only either way: without the
+addon (or if any timer field fails to resolve) `GetRemainingSeconds()` returns -1 and the
+HUD hides the clock rather than guessing.
 
 The phase is checked **server-side in the apply chokepoint** as well; the client probe
-only drives UI. The field name is mirrored from the Round Timer's source, so a rename
-there degrades silently to fallback mode — re-verify after Round Timer updates.
+only drives UI. The field names are mirrored from the Round Timer's source, so a rename
+there degrades silently — the phase field to fallback mode, a timer field to a hidden
+countdown — re-verify after Round Timer updates.
 
 ---
 

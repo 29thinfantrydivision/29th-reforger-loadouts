@@ -25,6 +25,7 @@ class RK29_KitPicker
 	//! weapon/optic rows: stacked big item preview above the name
 	protected static const ResourceName ROW_BIG_LAYOUT = "{AB29C0FFEE291100}UI/KitSystem/RK29_RowBig.layout";
 	protected static const ResourceName DIALOGS_CONF = "{AB29C0FFEE296000}Configs/UI/RK29_Dialogs.conf";
+	protected static const int NOTIFY_HOLD_SECONDS = 3;
 
 	protected static ref RK29_KitPicker s_Instance;
 	protected static bool s_bLocalStash;
@@ -36,6 +37,7 @@ class RK29_KitPicker
 	protected static ref map<int, ResourceName> s_mLocalStashWeapons = new map<int, ResourceName>();
 
 	protected SCR_ConfigurableDialogUi m_Dialog;
+	protected float m_fNextNotifyTime;
 
 	protected Widget m_wRoot;
 	protected Widget m_wColClasses;
@@ -265,11 +267,19 @@ class RK29_KitPicker
 	//! log: that feed is keyed on ENotification values whose text lives in
 	//! Configs/Notifications/Notifications.conf and only arrives by RPC from the server,
 	//! while this refusal is decided entirely on the client and never leaves the machine.
+	//!
+	//! Rate-limited to the popup's own hold time: PopupMsg queues, so hammering the open key
+	//! would otherwise bank a popup per press and replay them long after the player stopped.
 	protected void NotifyDisabled(string reason)
 	{
+		float now = GetGame().GetWorld().GetWorldTime();
+		if (now < m_fNextNotifyTime)
+			return;
+		m_fNextNotifyTime = now + NOTIFY_HOLD_SECONDS * 1000;
+
 		SCR_PopUpNotification popup = SCR_PopUpNotification.GetInstance();
 		if (popup)
-			popup.PopupMsg("Kit Menu currently disabled", 3, "Reason: " + reason);
+			popup.PopupMsg("Kit Menu currently disabled", NOTIFY_HOLD_SECONDS, "Reason: " + reason);
 	}
 
 	//--------------------------------------------------------------------------------------------
@@ -324,6 +334,11 @@ class RK29_KitPicker
 	//! Covers three exits with one check: deploying (body arrives), dropping into the spectator
 	//! camera (deploy menu goes away), and dying while it is open (body goes away). The
 	//! controlled-entity hook only catches the first of those.
+	//!
+	//! While open WITH a live body, the round going LIVE is what invalidates the menu: an
+	//! alive open is preround-only, so a phase flip mid-browse leaves a menu up that Open()
+	//! would now refuse. Dead stays exempt - a dead pick is a stash for the NEXT body and is
+	//! legal at any point in the round.
 	protected void WatchDeployMenu()
 	{
 		if (!m_Dialog)
@@ -331,6 +346,16 @@ class RK29_KitPicker
 		if (!IsLocalAlive() && !IsDeployMenuOpen())
 		{
 			Print("[RK29] kit menu closed - no live body and no deploy menu", LogLevel.NORMAL);
+			CloseMenu();
+			return;
+		}
+		RK29_KitManager mgr = RK29_KitManager.GetInstance();
+		if (IsLocalAlive() && mgr && !mgr.IsPreround())
+		{
+			Print("[RK29] kit menu closed - round went live", LogLevel.NORMAL);
+			SCR_PopUpNotification popup = SCR_PopUpNotification.GetInstance();
+			if (popup)
+				popup.PopupMsg("Kit Menu closed", 3, "Reason: the round is now live");
 			CloseMenu();
 			return;
 		}
@@ -361,7 +386,7 @@ class RK29_KitPicker
 			if (!mgr.IsPreround())
 			{
 				Print("[RK29] kit menu refused - not preround", LogLevel.NORMAL);
-				NotifyDisabled("kit selection is briefing only");
+				NotifyDisabled("kit selection while alive is briefing only");
 				return;
 			}
 		}
