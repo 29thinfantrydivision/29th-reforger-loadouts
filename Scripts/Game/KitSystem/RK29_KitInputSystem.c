@@ -17,6 +17,8 @@ class RK29_KitInputSystem extends WorldSystem
 	//--------------------------------------------------------------------------------------------
 	override void OnInit()
 	{
+		// before any listener fires: put back user rebinds a mod-less session may have wiped
+		RK29_KeybindPrefs.RestoreOnce();
 		RK29_KitPicker.RegisterListeners();
 	}
 }
