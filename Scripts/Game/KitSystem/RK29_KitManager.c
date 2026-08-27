@@ -754,41 +754,50 @@ class RK29_KitManager
 		NotifyDropped_S(playerId, droppedItems);
 		StampBody(body, kit);
 
-		// Draw the primary HERE, on the server, in the same pass that built the inventory. This
-		// is vanilla's own mechanism: SCR_PlayerArsenalLoadout.ApplyCharacterDataLoadoutString
-		// equips the saved active-weapon slot server-side inside this very hook (OnLoadoutSpawned
-		// runs on the authority, from SCR_BaseGameMode.OnPlayerSpawnFinalize_S). Done this early
-		// the in-hands state is simply part of the body's initial replicated state - the owning
-		// client streams in a character that is ALREADY holding the rifle, and there is no
-		// request, no wait, and no race for it to lose.
-		//
-		// The owner-side draw machinery in RK29_PlayerController is deliberately NOT used on this
-		// path any more: asking the client to draw only works once the client can act, and on a
-		// dedicated server "when the client can act" is exactly the window a first spawn spends
-		// still streaming the world in. That machinery now serves the live re-kit (where the
-		// OWNER holds authority over its own item commands and server-side equips cannot be
-		// trusted) and the VerifyDrawn_S backstop below.
+		// Equip the primary server-side in the same pass that built the inventory (vanilla's
+		// arsenal shape) AND ask the owner to draw it again at possession. The server-side equip
+		// alone is NOT enough on a dedicated server - log-proven 2026-08-26: "spawn equip did
+		// not hold", hands empty 3s after spawn, while the identical path is clean in Workbench.
+		// Vanilla survives the same silent loss because its character prefabs carry an authored
+		// weapon in slot 0 plus DefaultWeaponIndex 0, so every machine's ENGINE arms the body
+		// locally at entity init and the script equip only ever switches slots. Our body spawns
+		// BARE - slot 0 is empty at init, the engine draw is a no-op, and in-hands is controller
+		// state the owner rebuilds from scratch when it takes possession - so the owner is the
+		// only machine whose draw actually sticks. The server equip stays for the server/proxy
+		// view; the owner draw (RK29_RpcSpawnDraw, anchored at possession) is what puts the
+		// rifle in the player's hands.
 		SCR_ChimeraCharacter spawnChar = SCR_ChimeraCharacter.Cast(body);
 		CharacterControllerComponent ctrl;
 		if (spawnChar)
 			ctrl = spawnChar.GetCharacterController();
 		if (ctrl)
-			EquipPrimary_S(ctrl);
+		{
+			IEntity primary = PrimaryWeaponOf(ctrl);
+			if (primary)
+			{
+				ctrl.TryEquipRightHandItem(primary, EEquipItemType.EEquipTypeWeapon, true);
+
+				SCR_PlayerController pc = SCR_PlayerController.Cast(
+					GetGame().GetPlayerManager().GetPlayerController(playerId));
+				if (pc)
+					pc.RK29_NotifySpawnDraw_S(RplIdOf(primary), RplIdOf(body));
+			}
+		}
 
 		m_mSpawnApplied_S.Set(playerId, BumpApplyGen(playerId));
 		return true;
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! Put the primary into a freshly spawned body's hands, server-side. Slot 0 is the primary
-	//! by kit-config convention; a kit that carries only a sidearm still gets its sidearm out.
+	//! The weapon a freshly spawned body should come out holding. Slot 0 is the primary by
+	//! kit-config convention; a kit that carries only a sidearm still gets its sidearm out.
 	//! Same slot fallback vanilla's ApplyCharacterDataLoadoutString uses when the saved slot is
-	//! gone. Swap = no animation: the body is new, there is nothing to transition from.
-	protected void EquipPrimary_S(CharacterControllerComponent ctrl)
+	//! gone.
+	protected IEntity PrimaryWeaponOf(CharacterControllerComponent ctrl)
 	{
 		BaseWeaponManagerComponent wm = ctrl.GetWeaponManagerComponent();
 		if (!wm)
-			return;
+			return null;
 
 		array<WeaponSlotComponent> slots = {};
 		wm.GetWeaponsSlots(slots);
@@ -799,16 +808,12 @@ class RK29_KitManager
 			if (!slot || !slot.GetWeaponEntity())
 				continue;
 			if (slot.GetWeaponSlotIndex() == 0)
-			{
-				weapon = slot.GetWeaponEntity();
-				break;
-			}
+				return slot.GetWeaponEntity();
 			if (!weapon)
 				weapon = slot.GetWeaponEntity();
 		}
 
-		if (weapon)
-			ctrl.TryEquipRightHandItem(weapon, EEquipItemType.EEquipTypeWeapon, true);
+		return weapon;
 	}
 
 	//! Apply generation the loadout hook dressed this player under, so the spawn handler can
@@ -965,15 +970,19 @@ class RK29_KitManager
 		Recompute_S();
 	}
 
-	//! How long after a spawn to check that the equip held. Long enough for the owner's view to
-	//! have replicated back; the timing is loose because nothing corrective hangs on it.
-	protected static const int DRAW_VERIFY_MS = 3000;
+	//! How long after a spawn to check that the draw held. Strictly LONGER than the owner draw's
+	//! outer cap (RK29_PlayerController.RK29_SPAWN_DRAW_CAP_MS): the owner draw is anchored at
+	//! possession, which on a first spawn can trail the server spawn by many seconds, and the
+	//! old 3s check fired on exactly the spawns the owner draw exists for. Timing stays loose;
+	//! nothing corrective hangs on it.
+	protected static const int DRAW_VERIFY_MS = 35000;
 
 	//--------------------------------------------------------------------------------------------
-	//! Did the spawn equip actually hold? Log-only: empty hands here mean the server-side equip
-	//! was lost - refused on the fresh body, or undone somewhere in the ownership handover - and
-	//! that is worth a warning with enough detail to act on. Deliberately NOT a re-send: a draw
-	//! that reaches the player seconds after they spawned fixes nothing they have not already
+	//! Did the spawn draw actually hold? Log-only: empty hands here mean BOTH halves failed -
+	//! the server-side equip was lost (2026-08-26 logs proved it does not survive on a
+	//! dedicated server) AND the owner-side possession draw gave up or never ran - and that is
+	//! worth a warning with enough detail to act on. Deliberately NOT a re-send: a draw that
+	//! reaches the player this long after they spawned fixes nothing they have not already
 	//! fixed themselves.
 	//!
 	//! Gated on the apply generation, so a respawn or a re-kit since this was scheduled silently

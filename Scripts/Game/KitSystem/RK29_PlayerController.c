@@ -61,11 +61,10 @@ modded class SCR_PlayerController
 
 	//--------------------------------------------------------------------------------------------
 	//! Ask the owning client to restore its state after a live re-kit: weapon back in hand,
-	//! stance back where it was. Re-kit ONLY - once the client owns the body it holds authority
-	//! over its own item commands, so this restore has to happen at this end. A spawn never
-	//! sends this: the primary is equipped server-side in the same pass that dressed the body
-	//! (vanilla-style, see RK29_KitManager.EquipPrimary_S) and arrives already in hand, because
-	//! a draw the client only sees seconds after spawning is worthless to the player.
+	//! stance back where it was. Re-kit only - once the client owns the body it holds authority
+	//! over its own item commands, so this restore has to happen at this end. A spawn sends
+	//! RK29_NotifySpawnDraw_S below instead: same machinery, but with its patience anchored at
+	//! possession rather than at the request.
 	//!
 	//! `characterId` is the body the request is ABOUT. The client checks it before touching
 	//! anything: for a few frames after a respawn the client is still driving the previous body,
@@ -75,11 +74,33 @@ modded class SCR_PlayerController
 		Rpc(RK29_RpcRestoreState, stance, dynStance, weaponId, characterId);
 	}
 
-	//! How long to keep trying. The body is already here and the player is standing in the
-	//! staging area, so this only has to outlast the re-dressed weapon's trip over the wire.
-	//! One second is the ceiling on that being worth doing at all: a draw that lands later
-	//! than this is one the player has already made themselves.
+	//--------------------------------------------------------------------------------------------
+	//! Ask the owning client to draw the primary of the body a SPAWN just dressed. The client is
+	//! the only machine whose draw actually sticks: the spawn body is bare at entity init, so
+	//! the engine's DefaultWeaponIndex draw is a no-op everywhere, and the server-side equip the
+	//! kit manager makes in the same pass does not survive to the owner (log-proven 2026-08-26:
+	//! hands empty 3s after every dedicated-server spawn while the same path is clean in
+	//! Workbench - in-hands is controller state the owner rebuilds from scratch on possession).
+	//!
+	//! Unlike the re-kit restore, the give-up window is NOT measured from this request: on a
+	//! first spawn the RPC precedes the client's world stream by many seconds, and until the
+	//! named body is ours the player is still on the deploy fade, where waiting costs nothing
+	//! visible. The poll anchors the short window at possession instead.
+	void RK29_NotifySpawnDraw_S(RplId weaponId, RplId characterId)
+	{
+		Rpc(RK29_RpcSpawnDraw, weaponId, characterId);
+	}
+
+	//! How long to keep trying once the draw is actionable - for a re-kit that is immediately
+	//! (the body is already here), for a spawn it is the moment the body is ours and the weapon
+	//! has replicated in. One second is the ceiling on the draw being worth doing at all: one
+	//! that lands later than this is one the player has already made themselves.
 	protected static const float RK29_RESTORE_TIMEOUT_MS = 1000;
+
+	//! Outer cap on a SPAWN draw waiting to become actionable. Before possession the player is
+	//! on the deploy fade so patience is free, but a request that never becomes actionable (the
+	//! spawn was aborted, the body reaped) must not leave the poll running forever.
+	protected static const float RK29_SPAWN_DRAW_CAP_MS = 30000;
 
 	//! Gap between equip attempts once the weapon is here. TryEquipRightHandItem can refuse -
 	//! an item change already running, a graph still settling - and it says so in a return value
@@ -98,6 +119,19 @@ modded class SCR_PlayerController
 	protected float m_RK29_DrawDeadline;
 	protected float m_RK29_DrawNextTry;
 
+	//! Spawn draw vs re-kit restore: a spawn draw skips the stance restore, skips the stale-graph
+	//! re-seat on give-up (a fresh body's graph never held anything), and anchors its deadline
+	//! at possession instead of at the request.
+	protected bool  m_RK29_DrawIsSpawn;
+
+	//! Whether m_RK29_DrawDeadline has been anchored yet. Armed true for re-kits (their deadline
+	//! is fixed at request time); false for spawn draws until the body is ours and the weapon
+	//! has replicated in, at which point the poll sets the real deadline.
+	protected bool  m_RK29_DrawAnchored;
+
+	//! Absolute give-up for a spawn draw that never becomes actionable.
+	protected float m_RK29_DrawHardDeadline;
+
 	//! Equip attempts made for the live request, and when it was armed. Only ever read to log a
 	//! draw that needed more than the first try - which is the evidence to look at if this comes
 	//! back, rather than another theory about why it did not happen.
@@ -115,12 +149,35 @@ modded class SCR_PlayerController
 		m_RK29_DrawStanceDone  = false;
 		m_RK29_DrawNextTry     = 0;
 		m_RK29_DrawAttempts    = 0;
+		m_RK29_DrawIsSpawn     = false;
+		m_RK29_DrawAnchored    = true;
 
-		m_RK29_DrawArmedAt  = GetGame().GetWorld().GetWorldTime();
-		m_RK29_DrawDeadline = m_RK29_DrawArmedAt + RK29_RESTORE_TIMEOUT_MS;
+		m_RK29_DrawArmedAt      = GetGame().GetWorld().GetWorldTime();
+		m_RK29_DrawDeadline     = m_RK29_DrawArmedAt + RK29_RESTORE_TIMEOUT_MS;
+		m_RK29_DrawHardDeadline = m_RK29_DrawDeadline;
 
 		// State lives on the controller rather than in the callqueue arguments, so a second
 		// request supersedes the first instead of leaving two polls racing each other.
+		GetGame().GetCallqueue().Remove(RK29_PollRestore);
+		GetGame().GetCallqueue().CallLater(RK29_PollRestore, RK29_POLL_MS, true);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
+	protected void RK29_RpcSpawnDraw(RplId weaponId, RplId characterId)
+	{
+		m_RK29_DrawWeaponId    = weaponId;
+		m_RK29_DrawCharacterId = characterId;
+		m_RK29_DrawStanceDone  = true; // a fresh body spawns erect - nothing to restore
+		m_RK29_DrawNextTry     = 0;
+		m_RK29_DrawAttempts    = 0;
+		m_RK29_DrawIsSpawn     = true;
+		m_RK29_DrawAnchored    = false;
+
+		m_RK29_DrawArmedAt      = GetGame().GetWorld().GetWorldTime();
+		m_RK29_DrawHardDeadline = m_RK29_DrawArmedAt + RK29_SPAWN_DRAW_CAP_MS;
+		m_RK29_DrawDeadline     = m_RK29_DrawHardDeadline;
+
 		GetGame().GetCallqueue().Remove(RK29_PollRestore);
 		GetGame().GetCallqueue().CallLater(RK29_PollRestore, RK29_POLL_MS, true);
 	}
@@ -143,6 +200,24 @@ modded class SCR_PlayerController
 
 		if (ctrl)
 		{
+			// A SPAWN draw anchors its patience HERE, not at the request: the RPC can precede a
+			// first spawn's world stream by many seconds, and until the named body is ours and
+			// the weapon has replicated in, the player is on the deploy fade where waiting costs
+			// nothing visible. Measuring the short window from the request instead is the
+			// mis-anchoring that sank the original owner-side spawn draw ("the body was never
+			// ours on this client").
+			if (!m_RK29_DrawAnchored)
+			{
+				bool weaponHere = Replication.FindItem(m_RK29_DrawWeaponId) != null;
+				if (weaponHere || !m_RK29_DrawWeaponId.IsValid())
+				{
+					m_RK29_DrawAnchored = true;
+					m_RK29_DrawDeadline = Math.Min(
+						GetGame().GetWorld().GetWorldTime() + RK29_RESTORE_TIMEOUT_MS,
+						m_RK29_DrawHardDeadline);
+				}
+			}
+
 			// A seated body keeps the seat's pose. The stance the server captured from a
 			// seated character is a pre-boarding relic, and the seat refuses stance commands
 			// anyway. Skipped rather than deferred: TryDraw below finishes the whole request
@@ -157,14 +232,20 @@ modded class SCR_PlayerController
 			{
 				RK29_StopDraw();
 
-				// Silent when it works first time, which is the normal case. Anything else is
-				// worth a line: it says the draw only landed because the retry was there.
-				if (m_RK29_DrawAttempts > 1)
-				{
-					float took = GetGame().GetWorld().GetWorldTime() - m_RK29_DrawArmedAt;
+				float took = GetGame().GetWorld().GetWorldTime() - m_RK29_DrawArmedAt;
+
+				// A finished spawn draw always logs: this path shipped broken twice, and one
+				// NORMAL line per spawn is what telling the third theory apart cost last time.
+				// 0 attempts means the weapon was already in hand when the body became ours -
+				// the server-side equip held after all on this route.
+				if (m_RK29_DrawIsSpawn)
+					Print("[RK29] spawn draw finished - " + m_RK29_DrawAttempts.ToString()
+						+ " attempt(s), " + took.ToString(-1, 0) + "ms after the request", LogLevel.NORMAL);
+				// Re-kit: silent when it works first time, which is the normal case. Anything
+				// else says the draw only landed because the retry was there.
+				else if (m_RK29_DrawAttempts > 1)
 					Print("[RK29] weapon drawn after " + m_RK29_DrawAttempts.ToString() + " attempts, "
 						+ took.ToString(-1, 0) + "ms after the request", LogLevel.NORMAL);
-				}
 				return;
 			}
 		}
@@ -174,25 +255,30 @@ modded class SCR_PlayerController
 
 		RK29_StopDraw();
 
-		// Ran out of patience: the weapon the player was holding was deleted by the strip, so
-		// the animation graph is still pointing at a destroyed entity. Re-seat the hand empty
-		// rather than leaving it there - it is the difference between "empty-handed" and
-		// "empty-handed and stuck". ONLY when the hand really is empty though: if a weapon is
-		// in hand at this point (the player drew one themselves mid-wait), stripping it here
-		// would be this machinery causing the very symptom it exists to fix.
-		if (ctrl && !RK29_HeldWeapon(ctrl))
+		// Ran out of patience. For a RE-KIT the weapon the player was holding was deleted by
+		// the strip, so the animation graph is still pointing at a destroyed entity - re-seat
+		// the hand empty rather than leaving it there; it is the difference between
+		// "empty-handed" and "empty-handed and stuck". ONLY when the hand really is empty
+		// though: if a weapon is in hand at this point (the player drew one themselves
+		// mid-wait), stripping it here would be this machinery causing the very symptom it
+		// exists to fix. A SPAWN draw skips the re-seat entirely - a fresh body's graph never
+		// held anything, so there is nothing stale to clear.
+		if (!m_RK29_DrawIsSpawn && ctrl && !RK29_HeldWeapon(ctrl))
 			ctrl.TryEquipRightHandItem(null, EEquipItemType.EEquipTypeUnarmedDeliberate, true);
 
-		// Giving up is not a failure to recover from: re-drawing is a convenience, re-kits are
-		// preround-only, and the player can pull the weapon out themselves. Say WHICH half ran
-		// out though - the three of them mean very different things, and guessing between them
-		// from "it did not work" is what made this expensive to chase the first time.
+		// Giving up is not a failure to recover from: the draw is a convenience and the player
+		// can pull the weapon out themselves. Say WHICH half ran out though - the three of them
+		// mean very different things, and guessing between them from "it did not work" is what
+		// made this expensive to chase the first time.
+		string context = "re-kit";
+		if (m_RK29_DrawIsSpawn)
+			context = "spawn";
 		if (!ctrl)
-			Print("[RK29] gave up restoring the weapon - the body was never ours on this client", LogLevel.WARNING);
+			Print("[RK29] gave up on the " + context + " draw - the body was never ours on this client", LogLevel.WARNING);
 		else if (m_RK29_DrawAttempts == 0)
-			Print("[RK29] gave up restoring the weapon - it never replicated in", LogLevel.WARNING);
+			Print("[RK29] gave up on the " + context + " draw - the weapon never replicated in", LogLevel.WARNING);
 		else
-			Print("[RK29] gave up restoring the weapon - " + m_RK29_DrawAttempts.ToString()
+			Print("[RK29] gave up on the " + context + " draw - " + m_RK29_DrawAttempts.ToString()
 				+ " attempts and it never reached the hand", LogLevel.WARNING);
 	}
 
