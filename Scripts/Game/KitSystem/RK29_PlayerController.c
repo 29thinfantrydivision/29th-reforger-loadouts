@@ -3,113 +3,31 @@
 //------------------------------------------------------------------------------------------------
 modded class SCR_PlayerController
 {
-	//--------------------------------------------------------------------------------------------
-	//! Empty weapon = authored weapon; empty optic = irons.
-	void RK29_RequestKit(string kitName, ResourceName weapon, ResourceName optic)
-	{
-		// Put a held gadget away BEFORE asking, rather than after the re-dress. A gadget in the
-		// hand is engine-attached instead of stored, so it is invisible to the server's strip
-		// and survives the re-kit on top of the fresh one the dress pass spawns - two compasses,
-		// since utility.conf gives every kit map/compass/flashlight/radio. Stowed here it is an
-		// ordinary stored item by the time the request lands and the strip treats it like any
-		// other.
-		//
-		// Straight to the controller, not SCR_GadgetManagerComponent.RemoveHeldGadget(): the
-		// manager has no skip-animation entry point at all - SetGadgetMode hardcodes
-		// RemoveGadgetFromHand(false) for anything that is not going to the ground - so going
-		// through it means watching a putaway play out after you already pressed apply. Same
-		// pair vanilla uses to clear the hand before a loiter command
-		// (SCR_CharacterControllerComponent.StartLoitering), which is likewise owner-side.
-		// The manager stays in sync either way: it learns the gadget left the hand from the
-		// controller's own m_OnGadgetStateChangedInvoker, which fires whichever route took it
-		// out. The one thing bypassing it costs is closing a raised/ADS'd gadget, and
-		// SetGadgetRaisedModeWanted covers that half.
-		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(GetControlledEntity());
-		if (character)
-		{
-			CharacterControllerComponent ctrl = character.GetCharacterController();
-			if (ctrl && ctrl.IsGadgetInHands())
-			{
-				ctrl.SetGadgetRaisedModeWanted(false);
-				ctrl.RemoveGadgetFromHand(true);
-			}
-		}
-
-		Rpc(RK29_RpcAskKit, kitName, weapon, optic);
-	}
-
-	//--------------------------------------------------------------------------------------------
-	override void OnControlledEntityChanged(IEntity from, IEntity to)
-	{
-		super.OnControlledEntityChanged(from, to);
-
-		if (to && GetGame().GetPlayerController() == this)
-			RK29_KitPicker.RegisterListeners();
-	}
-
-	//--------------------------------------------------------------------------------------------
-	void RK29_NotifyItemsDropped_S(int count, string itemList)
-	{
-		Rpc(RK29_RpcItemsDropped, count, itemList);
-	}
-
-	//--------------------------------------------------------------------------------------------
-	void RK29_NotifyKitSaved_S(string kitName, ResourceName optic, string loadoutWire)
-	{
-		Rpc(RK29_RpcKitSaved, kitName, optic, loadoutWire);
-	}
-
-	//--------------------------------------------------------------------------------------------
-	//! Ask the owning client to restore its state after a live re-kit: weapon back in hand,
-	//! stance back where it was. Re-kit only - once the client owns the body it holds authority
-	//! over its own item commands, so this restore has to happen at this end. A spawn sends
-	//! RK29_NotifySpawnDraw_S below instead: same machinery, but with its patience anchored at
-	//! possession rather than at the request.
-	//!
-	//! `characterId` is the body the request is ABOUT. The client checks it before touching
-	//! anything: for a few frames after a respawn the client is still driving the previous body,
-	//! and a draw aimed at the wrong body is a draw thrown away.
-	void RK29_NotifyRestoreState_S(int stance, float dynStance, RplId weaponId, RplId characterId)
-	{
-		Rpc(RK29_RpcRestoreState, stance, dynStance, weaponId, characterId);
-	}
-
-	//--------------------------------------------------------------------------------------------
-	//! Ask the owning client to draw the primary of the body a SPAWN just dressed. The client is
-	//! the only machine whose draw actually sticks: the spawn body is bare at entity init, so
-	//! the engine's DefaultWeaponIndex draw is a no-op everywhere, and the server-side equip the
-	//! kit manager makes in the same pass does not survive to the owner (log-proven 2026-08-26:
-	//! hands empty 3s after every dedicated-server spawn while the same path is clean in
-	//! Workbench - in-hands is controller state the owner rebuilds from scratch on possession).
-	//!
-	//! Unlike the re-kit restore, the give-up window is NOT measured from this request: on a
-	//! first spawn the RPC precedes the client's world stream by many seconds, and until the
-	//! named body is ours the player is still on the deploy fade, where waiting costs nothing
-	//! visible. The poll anchors the short window at possession instead.
-	void RK29_NotifySpawnDraw_S(RplId weaponId, RplId characterId)
-	{
-		Rpc(RK29_RpcSpawnDraw, weaponId, characterId);
-	}
-
-	//! How long to keep trying once the draw is actionable - for a re-kit that is immediately
-	//! (the body is already here), for a spawn it is the moment the body is ours and the weapon
-	//! has replicated in. One second is the ceiling on the draw being worth doing at all: one
-	//! that lands later than this is one the player has already made themselves.
+	//! How long to keep trying once the draw is actionable. Later than this and the player has
+	//! drawn it.
 	protected static const float RK29_RESTORE_TIMEOUT_MS = 1000;
 
-	//! Outer cap on a SPAWN draw waiting to become actionable. Before possession the player is
-	//! on the deploy fade so patience is free, but a request that never becomes actionable (the
-	//! spawn was aborted, the body reaped) must not leave the poll running forever.
+	//! Outer cap on a spawn draw waiting to become actionable, so an aborted spawn does not poll
+	//! forever.
 	protected static const float RK29_SPAWN_DRAW_CAP_MS = 30000;
 
-	//! Gap between equip attempts once the weapon is here. TryEquipRightHandItem can refuse -
-	//! an item change already running, a graph still settling - and it says so in a return value
-	//! the old code threw away. Every attempt is checked on the next tick against what is
-	//! actually in the hand, and re-issued if it is not there.
+	//! Gap between equip attempts. TryEquipRightHandItem can refuse and only says so in a return
+	//! value, so every attempt is checked next tick against what is in the hand and re-issued.
 	protected static const float RK29_EQUIP_RETRY_MS = 250;
 
-	//! Poll interval. Fine-grained enough that the draw is not visibly late.
 	protected static const int RK29_POLL_MS = 50;
+
+	//! Longest kit name a request may carry - the longest authored is ~30 characters. Over it the
+	//! request is dropped unread, so a hostile name never reaches a log line.
+	protected static const int RK29_KIT_NAME_MAX_CHARS = 128;
+
+	//! Longest a request waits for the ADS blend-out before going anyway.
+	protected static const float RK29_ADS_OUT_CAP_MS = 1500;
+
+	protected string m_RK29_SendKitName;
+	protected string m_RK29_SendChoices;
+	protected float  m_RK29_SendAfter;
+	protected float  m_RK29_SendDeadline;
 
 	protected int   m_RK29_DrawStance;
 	protected float m_RK29_DrawDynStance;
@@ -119,28 +37,154 @@ modded class SCR_PlayerController
 	protected float m_RK29_DrawDeadline;
 	protected float m_RK29_DrawNextTry;
 
-	//! Spawn draw vs re-kit restore: a spawn draw skips the stance restore, skips the stale-graph
-	//! re-seat on give-up (a fresh body's graph never held anything), and anchors its deadline
-	//! at possession instead of at the request.
+	//! A spawn draw skips the stance restore and the stale-graph re-seat, and anchors at
+	//! possession.
 	protected bool  m_RK29_DrawIsSpawn;
 
-	//! Whether m_RK29_DrawDeadline has been anchored yet. Armed true for re-kits (their deadline
-	//! is fixed at request time); false for spawn draws until the body is ours and the weapon
-	//! has replicated in, at which point the poll sets the real deadline.
+	//! True from the start for re-kits; false for a spawn draw until the body is ours and the
+	//! weapon has replicated in.
 	protected bool  m_RK29_DrawAnchored;
 
 	//! Absolute give-up for a spawn draw that never becomes actionable.
 	protected float m_RK29_DrawHardDeadline;
 
-	//! Equip attempts made for the live request, and when it was armed. Only ever read to log a
-	//! draw that needed more than the first try - which is the evidence to look at if this comes
-	//! back, rather than another theory about why it did not happen.
+	//! Only ever read to log a draw that needed more than the first try.
 	protected int   m_RK29_DrawAttempts;
 	protected float m_RK29_DrawArmedAt;
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
+	//! The kit request: the kit name and the picks as RK29_KitResolve's encoded string
+	//! ("group=entry:count;..."). A held gadget is put away before asking: a gadget in the hand
+	//! is engine-attached rather than stored, so the server's strip cannot see it and the player
+	//! ends up with two compasses. Straight to the controller, not
+	//! SCR_GadgetManagerComponent.RemoveHeldGadget() - the manager has no skip-animation entry
+	//! point, so it would play a putaway after apply. Same pair vanilla uses in StartLoitering;
+	//! the manager stays in sync through m_OnGadgetStateChangedInvoker.
+	void RK29_RequestKit(string kitName, string choices)
+	{
+		GetGame().GetCallqueue().Remove(RK29_PollSendKit);
+
+		m_RK29_SendKitName = kitName;
+		m_RK29_SendChoices = choices;
+		m_RK29_SendAfter   = 0;
+		m_RK29_SendDeadline = GetGame().GetWorld().GetWorldTime() + RK29_ADS_OUT_CAP_MS;
+
+		CharacterControllerComponent ctrl = RK29_ControlledCtrl();
+		if (ctrl && ctrl.IsWeaponADS())
+		{
+			// the ADS camera is anchored to the weapon for the whole blend-out, so the strip must
+			// not delete it until the blend has run: IsWeaponADS() off, then GetADSTime() more
+			ctrl.SetWeaponADSInput(false);
+			ctrl.SetWeaponADS(false);
+			GetGame().GetCallqueue().CallLater(RK29_PollSendKit, RK29_POLL_MS, true);
+			return;
+		}
+
+		RK29_SendKit();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected void RK29_PollSendKit()
+	{
+		float now = GetGame().GetWorld().GetWorldTime();
+		CharacterControllerComponent ctrl = RK29_ControlledCtrl();
+
+		if (ctrl && now < m_RK29_SendDeadline)
+		{
+			if (ctrl.IsWeaponADS())
+				return;
+
+			if (m_RK29_SendAfter <= 0)
+			{
+				m_RK29_SendAfter = now + ctrl.GetADSTime() * 1000;
+				return;
+			}
+
+			if (now < m_RK29_SendAfter)
+				return;
+		}
+
+		GetGame().GetCallqueue().Remove(RK29_PollSendKit);
+		RK29_SendKit();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected void RK29_SendKit()
+	{
+		CharacterControllerComponent ctrl = RK29_ControlledCtrl();
+		if (ctrl)
+		{
+			// still (or again) aiming once the wait is over: drop it instantly and go
+			if (ctrl.IsWeaponADS())
+			{
+				ctrl.SetWeaponADSInput(false);
+				ctrl.SetWeaponADS(false);
+			}
+
+			if (ctrl.IsGadgetInHands())
+			{
+				ctrl.SetGadgetRaisedModeWanted(false);
+				ctrl.RemoveGadgetFromHand(true);
+			}
+		}
+
+		Rpc(RK29_RpcAsk_Kit, m_RK29_SendKitName, m_RK29_SendChoices);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected CharacterControllerComponent RK29_ControlledCtrl()
+	{
+		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(GetControlledEntity());
+		if (!character)
+			return null;
+		return character.GetCharacterController();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	override void OnControlledEntityChanged(IEntity from, IEntity to)
+	{
+		super.OnControlledEntityChanged(from, to);
+
+		if (to && GetGame().GetPlayerController() == this)
+			RK29_LoadoutMenu.RegisterListeners();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	void RK29_NotifyItemsDropped_S(int count, string itemList)
+	{
+		Rpc(RK29_RpcDo_ItemsDropped, count, itemList);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The kit the server settled on and the picks it settled it with, so the deploy row resolves
+	//! the same.
+	void RK29_NotifyKitSaved_S(string kitName, string picksWire)
+	{
+		Rpc(RK29_RpcDo_KitSaved, kitName, picksWire);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Ask the owning client to restore its state after a live re-kit. Re-kit only - once the
+	//! client owns the body it holds authority over its own item commands. `characterId` is the
+	//! body the request is about: for a few frames after a respawn the client still drives the
+	//! previous body.
+	void RK29_NotifyRestoreState_S(int stance, float dynStance, RplId weaponId, RplId characterId)
+	{
+		Rpc(RK29_RpcDo_RestoreState, stance, dynStance, weaponId, characterId);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Ask the owning client to draw the primary of the body a spawn just dressed - the only
+	//! machine whose draw sticks, see RK29_KitManager.RequestSpawnDraw_S. The give-up window is
+	//! anchored at possession, not here.
+	void RK29_NotifySpawnDraw_S(RplId weaponId, RplId characterId)
+	{
+		Rpc(RK29_RpcDo_SpawnDraw, weaponId, characterId);
+	}
+
+	//------------------------------------------------------------------------------------------------
 	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
-	protected void RK29_RpcRestoreState(int stance, float dynStance, RplId weaponId, RplId characterId)
+	protected void RK29_RpcDo_RestoreState(int stance, float dynStance, RplId weaponId, RplId characterId)
 	{
 		m_RK29_DrawStance      = stance;
 		m_RK29_DrawDynStance   = dynStance;
@@ -156,15 +200,15 @@ modded class SCR_PlayerController
 		m_RK29_DrawDeadline     = m_RK29_DrawArmedAt + RK29_RESTORE_TIMEOUT_MS;
 		m_RK29_DrawHardDeadline = m_RK29_DrawDeadline;
 
-		// State lives on the controller rather than in the callqueue arguments, so a second
-		// request supersedes the first instead of leaving two polls racing each other.
+		// state lives on the controller, not in callqueue arguments, so a second request
+		// supersedes the first
 		GetGame().GetCallqueue().Remove(RK29_PollRestore);
 		GetGame().GetCallqueue().CallLater(RK29_PollRestore, RK29_POLL_MS, true);
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
-	protected void RK29_RpcSpawnDraw(RplId weaponId, RplId characterId)
+	protected void RK29_RpcDo_SpawnDraw(RplId weaponId, RplId characterId)
 	{
 		m_RK29_DrawWeaponId    = weaponId;
 		m_RK29_DrawCharacterId = characterId;
@@ -182,15 +226,9 @@ modded class SCR_PlayerController
 		GetGame().GetCallqueue().CallLater(RK29_PollRestore, RK29_POLL_MS, true);
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Wait for the body, then keep asking until the weapon is actually in the hand.
-	//!
-	//! The old version waited on the WEAPON only, for half a second, then called the restore once
-	//! and never looked at the result. Both halves of that failed on a dedicated server: the wait
-	//! ran out long before the client had a character at all, and the single equip attempt was
-	//! unverified. This waits on the named body, restores the stance the moment that body arrives
-	//! (the stance does not depend on the weapon, so a slow weapon must not hold it up), and
-	//! treats the equip as a goal to be re-attempted rather than a call to be made once.
+	//------------------------------------------------------------------------------------------------
+	//! Wait for the named body, then keep asking until the weapon is in the hand. The stance is
+	//! restored as soon as that body arrives, since it does not depend on the weapon.
 	protected void RK29_PollRestore()
 	{
 		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(GetControlledEntity());
@@ -200,12 +238,10 @@ modded class SCR_PlayerController
 
 		if (ctrl)
 		{
-			// A SPAWN draw anchors its patience HERE, not at the request: the RPC can precede a
-			// first spawn's world stream by many seconds, and until the named body is ours and
-			// the weapon has replicated in, the player is on the deploy fade where waiting costs
-			// nothing visible. Measuring the short window from the request instead is the
-			// mis-anchoring that sank the original owner-side spawn draw ("the body was never
-			// ours on this client").
+			// A spawn draw anchors its patience here, not at the request: the RPC can precede a
+			// first spawn's world stream by many seconds, and until then the player is on the
+			// deploy fade. Measuring from the request is what sank the original owner-side spawn
+			// draw.
 			if (!m_RK29_DrawAnchored)
 			{
 				bool weaponHere = Replication.FindItem(m_RK29_DrawWeaponId) != null;
@@ -218,10 +254,8 @@ modded class SCR_PlayerController
 				}
 			}
 
-			// A seated body keeps the seat's pose. The stance the server captured from a
-			// seated character is a pre-boarding relic, and the seat refuses stance commands
-			// anyway. Skipped rather than deferred: TryDraw below finishes the whole request
-			// on the same in-vehicle condition, so this never runs late on a dismount.
+			// a seated body keeps the seat's pose and refuses stance commands; skipped rather
+			// than deferred, since TryDraw ends the whole request on the same condition
 			if (!m_RK29_DrawStanceDone && !character.IsInVehicle())
 			{
 				m_RK29_DrawStanceDone = true;
@@ -234,18 +268,18 @@ modded class SCR_PlayerController
 
 				float took = GetGame().GetWorld().GetWorldTime() - m_RK29_DrawArmedAt;
 
-				// A finished spawn draw always logs: this path shipped broken twice, and one
-				// NORMAL line per spawn is what telling the third theory apart cost last time.
-				// 0 attempts means the weapon was already in hand when the body became ours -
-				// the server-side equip held after all on this route.
+				// a finished spawn draw always logs - this path shipped broken twice. 0 attempts
+				// means the weapon was already in hand when the body became ours
 				if (m_RK29_DrawIsSpawn)
-					Print("[RK29] spawn draw finished - " + m_RK29_DrawAttempts.ToString()
-						+ " attempt(s), " + took.ToString(-1, 0) + "ms after the request", LogLevel.NORMAL);
-				// Re-kit: silent when it works first time, which is the normal case. Anything
-				// else says the draw only landed because the retry was there.
+					Print(string.Format(
+						"[RK29] spawn draw finished - %1 attempt(s), %2ms after the request",
+						m_RK29_DrawAttempts, took.ToString(-1, 0)), LogLevel.NORMAL);
+				// re-kit: silent when it works first time; anything else means the retry carried
+				// it
 				else if (m_RK29_DrawAttempts > 1)
-					Print("[RK29] weapon drawn after " + m_RK29_DrawAttempts.ToString() + " attempts, "
-						+ took.ToString(-1, 0) + "ms after the request", LogLevel.NORMAL);
+					Print(string.Format(
+						"[RK29] weapon drawn after %1 attempts, %2ms after the request",
+						m_RK29_DrawAttempts, took.ToString(-1, 0)), LogLevel.NORMAL);
 				return;
 			}
 		}
@@ -254,44 +288,60 @@ modded class SCR_PlayerController
 			return;
 
 		RK29_StopDraw();
+		RK29_GiveUpDraw(ctrl);
+	}
 
-		// Ran out of patience. For a RE-KIT the weapon the player was holding was deleted by
-		// the strip, so the animation graph is still pointing at a destroyed entity - re-seat
-		// the hand empty rather than leaving it there; it is the difference between
-		// "empty-handed" and "empty-handed and stuck". ONLY when the hand really is empty
-		// though: if a weapon is in hand at this point (the player drew one themselves
-		// mid-wait), stripping it here would be this machinery causing the very symptom it
-		// exists to fix. A SPAWN draw skips the re-seat entirely - a fresh body's graph never
-		// held anything, so there is nothing stale to clear.
+	//------------------------------------------------------------------------------------------------
+	//! Ran out of patience. `ctrl` is null when the named body never became ours on this client -
+	//! one of the three cases the log lines tell apart. A re-kit re-seats the hand empty because
+	//! the strip deleted the weapon the graph still points at, but only while the hand really is
+	//! empty, or this would strip a weapon the player drew themselves. A spawn draw skips it: a
+	//! fresh body's graph never held anything.
+	protected void RK29_GiveUpDraw(CharacterControllerComponent ctrl)
+	{
 		if (!m_RK29_DrawIsSpawn && ctrl && !RK29_HeldWeapon(ctrl))
 			ctrl.TryEquipRightHandItem(null, EEquipItemType.EEquipTypeUnarmedDeliberate, true);
 
-		// Giving up is not a failure to recover from: the draw is a convenience and the player
-		// can pull the weapon out themselves. Say WHICH half ran out though - the three of them
-		// mean very different things, and guessing between them from "it did not work" is what
-		// made this expensive to chase the first time.
 		string context = "re-kit";
 		if (m_RK29_DrawIsSpawn)
 			context = "spawn";
+
 		if (!ctrl)
-			Print("[RK29] gave up on the " + context + " draw - the body was never ours on this client", LogLevel.WARNING);
+			Print(string.Format(
+				"[RK29] gave up on the %1 draw - the body was never ours on this client",
+				context), LogLevel.WARNING);
 		else if (m_RK29_DrawAttempts == 0)
-			Print("[RK29] gave up on the " + context + " draw - the weapon never replicated in", LogLevel.WARNING);
+			Print(string.Format("[RK29] gave up on the %1 draw - the weapon never replicated in",
+				context), LogLevel.WARNING);
 		else
-			Print("[RK29] gave up on the " + context + " draw - " + m_RK29_DrawAttempts.ToString()
-				+ " attempts and it never reached the hand", LogLevel.WARNING);
+			Print(string.Format(
+				"[RK29] gave up on the %1 draw - %2 attempts and it never reached the hand",
+				context, m_RK29_DrawAttempts), LogLevel.WARNING);
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	protected void RK29_StopDraw()
 	{
 		GetGame().GetCallqueue().Remove(RK29_PollRestore);
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! The weapon entity currently in hands, or null. GetCurrentWeapon() returns the SLOT
-	//! component for a slotted weapon (WeaponSlotComponent extends BaseWeaponComponent), whose
-	//! owner is the character - unwrap to the weapon entity before comparing.
+	//------------------------------------------------------------------------------------------------
+	//! A poll still armed when this controller goes away would fire against a dead instance. The
+	//! destructor, as vanilla's task entities do: entities have no OnDelete hook.
+	void ~SCR_PlayerController()
+	{
+		ScriptCallQueue queue = GetGame().GetCallqueue();
+		if (queue)
+		{
+			queue.Remove(RK29_PollRestore);
+			queue.Remove(RK29_PollSendKit);
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The weapon entity in hands, or null. GetCurrentWeapon() returns the slot component for a
+	//! slotted weapon (WeaponSlotComponent extends BaseWeaponComponent) - unwrap before
+	//! comparing.
 	protected static IEntity RK29_HeldWeapon(CharacterControllerComponent ctrl)
 	{
 		BaseWeaponManagerComponent wm = ctrl.GetWeaponManagerComponent();
@@ -309,7 +359,7 @@ modded class SCR_PlayerController
 		return current.GetOwner();
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	//! Is this the body the request named? An invalid id means the server could not name one, in
 	//! which case whatever we are controlling has to do.
 	protected bool RK29_IsRequestedBody(IEntity character)
@@ -321,7 +371,7 @@ modded class SCR_PlayerController
 		return rpl && rpl.Id() == m_RK29_DrawCharacterId;
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	protected void RK29_RestoreStance(CharacterControllerComponent ctrl)
 	{
 		if (ctrl.GetStance() != m_RK29_DrawStance)
@@ -339,32 +389,30 @@ modded class SCR_PlayerController
 			ctrl.SetDynamicStance(m_RK29_DrawDynStance);
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	//! One tick of the draw. Returns true when the request is finished with - drawn, refused for
 	//! a reason that will not change, or overtaken by the player.
+	//! Unconfirmed fix: the animation-free snap (and the give-up re-seat) was written for "weapon
+	//! stuck in a bad animation state after apply" and never watched succeed on a repro.
 	protected bool RK29_TryDraw(SCR_ChimeraCharacter character, CharacterControllerComponent ctrl)
 	{
-		// Nothing to draw for. Dead and unconscious do not un-become true while the request
-		// is alive; a vehicle CAN be dismounted, but an in-vehicle apply deliberately ends
-		// the draw here - the new primary rides holstered and the player draws it themselves.
+		// dead and unconscious do not un-become true while the request is alive; a vehicle can be
+		// dismounted, but an in-vehicle apply deliberately ends the draw
 		if (ctrl.IsDead() || ctrl.IsUnconscious() || character.IsInVehicle())
 			return true;
 
 		if (!m_RK29_DrawWeaponId.IsValid())
 		{
-			// Nothing was in hands to restore. Still not a no-op: the strip may have deleted the
-			// throwable the player was holding, so the graph is left on a stale item state that
-			// has to be re-seated empty. Unless a weapon made it into the hand meanwhile - then
-			// the graph is fine and re-seating would strip it.
+			// not a no-op: the strip may have deleted the throwable that was held, leaving the
+			// graph on a stale item state - unless a weapon reached the hand meanwhile, when
+			// re-seating would strip it
 			if (!RK29_HeldWeapon(ctrl))
 				ctrl.TryEquipRightHandItem(null, EEquipItemType.EEquipTypeUnarmedDeliberate, true);
 			return true;
 		}
 
-		// The id the server named is the only acceptable target. The body's previous weapon may
-		// not have been reaped here yet, and if the re-kit handed back the same prefab the two
-		// are indistinguishable by slot - guessing from the slots would sooner or later hand the
-		// player the doomed one.
+		// the id the server named is the only acceptable target: the previous weapon may not have
+		// been reaped here yet, and the same prefab handed back is indistinguishable by slot
 		IEntity weapon;
 		RplComponent rpl = RplComponent.Cast(Replication.FindItem(m_RK29_DrawWeaponId));
 		if (rpl)
@@ -372,11 +420,9 @@ modded class SCR_PlayerController
 		if (!weapon)
 			return false; // still streaming in - keep waiting
 
-		// The in-hand check has to go through the weapon manager: GetRightHandItem() is for
-		// generic items and documents itself null WHILE THE ACTIVE ITEM IS A WEAPON, so
-		// comparing it against the weapon reads "not drawn" forever even when the draw took
-		// on the first attempt - and the timeout then rips the drawn weapon back out of the
-		// player's hands.
+		// the in-hand check must go through the weapon manager: GetRightHandItem() documents
+		// itself null while the active item is a weapon, so comparing against it reads "not
+		// drawn" forever
 		if (RK29_HeldWeapon(ctrl) == weapon)
 			return true;
 
@@ -384,45 +430,38 @@ modded class SCR_PlayerController
 		if (now < m_RK29_DrawNextTry)
 			return false;
 
-		// Racing an item change already in flight is the competing-change class that jams the
-		// graph in the first place. Let it finish; we are polling anyway.
+		// racing an item change already in flight is the competing-change class that jams the
+		// graph
 		if (ctrl.IsChangingItem())
 			return false;
 
 		m_RK29_DrawNextTry = now + RK29_EQUIP_RETRY_MS;
 		m_RK29_DrawAttempts = m_RK29_DrawAttempts + 1;
 
-		// The weapon that was in hands got deleted out from under the animation graph, so the
-		// item state here is stale whatever we do next. SelectWeapon() re-draws WITH the
-		// switching animation, which is a transition out of that stale state - and it is the
-		// one that sticks (weapon in hands, wrong pose, no ADS, until you swap manually).
-		// TryEquipRightHandItem with swap = no animation at all: the item is snapped into
-		// hands and the graph is re-seated instead of transitioned. Same call vanilla's own
-		// live re-dress uses after it deletes and respawns a character's whole loadout
-		// (SCR_PlayerArsenalLoadout.ApplyCharacterDataLoadoutString).
+		// The weapon in hands was deleted out from under the animation graph. SelectWeapon()
+		// re-draws with the switching animation - a transition out of that stale state - and that
+		// is the one that sticks. TryEquipRightHandItem with swap snaps it in and re-seats the
+		// graph, the call vanilla uses in ApplyCharacterDataLoadoutString.
 		ctrl.TryEquipRightHandItem(weapon, EEquipItemType.EEquipTypeWeapon, true);
 
-		// Always low ready, whatever the player was doing before. The weapon they were holding
-		// no longer exists - re-dressing deletes and respawns it - so "restoring" a raised
-		// weapon means drawing a fresh one already aimed, which is how a re-kit ends with a
-		// round in a teammate.
+		// always low ready: the weapon the player held no longer exists, so "restoring" a raised
+		// one means drawing a fresh one already aimed
 		ctrl.SetWeaponRaised(false);
 
-		// Not done: the return of TryEquipRightHandItem only says the equip was accepted. The
-		// next tick reads the hand and re-issues if it did not take.
+		// not done: the return only says the equip was accepted - the next tick reads the hand
 		return false;
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
-	protected void RK29_RpcKitSaved(string kitName, ResourceName optic, string loadoutWire)
+	protected void RK29_RpcDo_KitSaved(string kitName, string picksWire)
 	{
-		RK29_KitPicker.MarkLocalStash(kitName, optic, loadoutWire);
+		RK29_LocalStash.Mark(kitName, picksWire);
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
-	protected void RK29_RpcItemsDropped(int count, string itemList)
+	protected void RK29_RpcDo_ItemsDropped(int count, string itemList)
 	{
 		string body = count.ToString() + " item(s) did not fit in your inventory and were left out";
 		if (itemList != string.Empty)
@@ -432,16 +471,25 @@ modded class SCR_PlayerController
 		SCR_HintManagerComponent.ShowCustomHint(body, "KIT APPLIED", 10);
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	[RplRpc(RplChannel.Reliable, RplRcver.Server)]
-	protected void RK29_RpcAskKit(string kitName, ResourceName weapon, ResourceName optic)
+	protected void RK29_RpcAsk_Kit(string kitName, string choices)
 	{
+		if (kitName.Length() > RK29_KIT_NAME_MAX_CHARS
+			|| choices.Length() > RK29_KitResolve.WIRE_MAX_CHARS)
+		{
+			Print(string.Format("[RK29] kit request dropped - oversized (player %1: name %2 chars,"
+				+ " picks %3 chars)", GetPlayerId(), kitName.Length(), choices.Length()),
+				LogLevel.WARNING);
+			return;
+		}
+
 		RK29_KitManager mgr = RK29_KitManager.GetInstance();
 		if (!mgr)
 		{
 			Print("[RK29] kit request dropped - manager never booted", LogLevel.ERROR);
 			return;
 		}
-		mgr.HandleKitRequest_S(GetPlayerId(), kitName, weapon, optic);
+		mgr.HandleKitRequest_S(GetPlayerId(), kitName, choices);
 	}
 }

@@ -1,2 +1,2 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Auto detect text files, normalise to LF in the repo, check out as CRLF (the Workbench convention)
+* text=auto eol=crlf

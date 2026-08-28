@@ -1,24 +1,9 @@
 //------------------------------------------------------------------------------------------------
-//! 29th Infantry Division - Game Master loadout registration
-//!
-//! Injection is ADDITIVE. The Game Master scenario's own SCR_LoadoutManager arrives with its
-//! vanilla entries already in m_aPlayerLoadouts:
-//!   - one SCR_FactionPlayerLoadout per faction seeded from '#AR-Loadout_Editor_NewArsenalLoadout_Name'
-//!     (these are the stray "Rifleman" rows in the deploy menu)
-//!   - one SCR_PlayerArsenalLoadout per faction for saved arsenal loadouts
-//!   - the CIV random-civilian entries
-//! Anything RHS adds lands in the same list.
-//!
-//! GM29_DUMP_LOADOUTS  - log the full post-injection table with resource GUIDs.
-//! GM29_PRUNE_FOREIGN  - strip faction loadouts we did not author.
-//!
-//! Ownership is matched on the resource GUID only, never the full ResourceName string. Path
-//! text is not stable (several 29th prefabs have .meta files declaring a different folder than
-//! where the file now lives), so a full-string compare produces false FOREIGN hits.
-//!
-//! The prune refuses to run if the number of entries it recognises as ours is lower than the
-//! number of kits in the config - that mismatch means the match logic is broken and pruning
-//! would delete 29th kits.
+//! 29th Game Master loadout registration. Injection is additive: the scenario's
+//! SCR_LoadoutManager already holds vanilla's '#AR-Loadout_Editor_NewArsenalLoadout_Name' rows,
+//! its arsenal loadouts, the CIV entries and anything RHS adds. PruneForeignKits strips the
+//! faction ones we did not author, and refuses to run when it recognises fewer entries than the
+//! config declares - that means the match logic is broken and pruning would delete 29th kits.
 //------------------------------------------------------------------------------------------------
 
 //! Config root for the authored kit list. Field name is ours -> reliable schema.
@@ -32,43 +17,30 @@ class GM29_KitLoadoutHolder
 //------------------------------------------------------------------------------------------------
 modded class SCR_LoadoutManager
 {
-	//! Log the full loadout list after injection. Turn off for deployment.
-	protected static const bool GM29_DUMP_LOADOUTS = false;
-
-	//! Remove faction loadouts the 29th did not author.
-	//! NOTE: this removes the '#AR-Loadout_Editor_NewArsenalLoadout_Name' entries, which are
-	//! the deploy-menu option for building a custom loadout from scratch. If the 29th wants
-	//! authored kits only, that is the desired outcome. Saved arsenal loadouts
-	//! (SCR_PlayerArsenalLoadout) are always left alone.
-	protected static const bool GM29_PRUNE_FOREIGN = true;
-
 	[Attribute("{DE20AF7D7BBE0D78}Configs/Loadouts/GM29_Kits.conf", desc: "29th kit holder config")]
 	protected ResourceName m_sGM29KitHolder;
 
-	//! Loadout NAMES of every kit declared in GM29_Kits.conf. Built once.
-	//!
-	//! Identity is matched on name, not on resource. GetLoadoutResource() goes through engine
-	//! resource resolution and has repeatedly returned different values for the same object on
-	//! consecutive calls within a single init - including returning a vanilla GUID for a 29th
-	//! kit. m_sLoadoutName is authored config data, read straight off the container, and is
-	//! therefore deterministic. Every 29th kit name begins with "29th"; every vanilla entry is
-	//! a localisation key beginning with "#AR-", so there is no collision risk.
+	//! Loadout names of every kit declared in GM29_Kits.conf, built once. Identity is matched on
+	//! name, never on resource: GetLoadoutResource() goes through engine resolution and has returned
+	//! different values for the same object on consecutive calls within one init, including a vanilla
+	//! GUID for a 29th kit. 29th names start "29th", vanilla's are keys starting "#AR-", so they
+	//! cannot collide.
 	protected ref array<string> m_aGM29OwnedNames;
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	void SCR_LoadoutManager(IEntitySource src, IEntity parent)
 	{
 		SetEventMask(EntityEvent.INIT);
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	override void EOnInit(IEntity owner)
 	{
 		super.EOnInit(owner);
 		InjectGM29Kits();
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	protected void InjectGM29Kits()
 	{
 		GM29_KitLoadoutHolder holder = LoadGM29Holder();
@@ -78,43 +50,54 @@ modded class SCR_LoadoutManager
 		if (!m_aPlayerLoadouts)
 			m_aPlayerLoadouts = {};
 
-		// Cache must exist before injection - the dedup guard uses it.
+		// cache must exist before injection - the dedup guard uses it
 		BuildOwnedNameCache(holder);
 
 		int preExisting = m_aPlayerLoadouts.Count();
 
+		// counted as we go, so VerifyInjection needs no second walk. Dedup matches on the loadout
+		// name, never the resource (see m_aGM29OwnedNames); an unnamed entry is never a
+		// duplicate.
 		int added = 0;
+		int registered = 0;
 		foreach (SCR_BasePlayerLoadout kit : holder.m_aLoadouts)
 		{
 			if (!kit)
 				continue;
 
-			if (!IsAlreadyRegistered(kit))
+			string kitName = kit.GetLoadoutName();
+			if (kitName != string.Empty && RK29_FindLoadoutByName(kitName))
 			{
-				m_aPlayerLoadouts.Insert(kit);
-				added = added + 1;
+				Print(string.Format("[GM29Kits] dedup skip: '%1' already registered", kitName),
+					LogLevel.NORMAL);
+				registered = registered + 1;
+				continue;
 			}
+
+			m_aPlayerLoadouts.Insert(kit);
+			added = added + 1;
+			registered = registered + 1;
 		}
 
-		Print("[GM29Kits] pre-existing entries: " + preExisting.ToString() + " | injected: " + added.ToString(), LogLevel.NORMAL);
+		Print(string.Format("[GM29Kits] pre-existing entries: %1 | injected: %2",
+			preExisting, added), LogLevel.NORMAL);
 
-		VerifyInjection(holder);
+		VerifyInjection(holder, registered);
 
-		if (GM29_PRUNE_FOREIGN)
-			PruneForeignKits();
-
-		if (GM29_DUMP_LOADOUTS)
-			DumpLoadoutTable();
+		PruneForeignKits();
 
 		// kit system boots here - the loadout list is final at this point
 		RK29_KitManager.Boot(m_aPlayerLoadouts);
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
+	//! Registered loadout of this name, or null. not vanilla's GetLoadoutByName, which derefs both
+	//! m_aPlayerLoadouts and every element unguarded - and this list demonstrably holds nulls.
 	SCR_BasePlayerLoadout RK29_FindLoadoutByName(string loadoutName)
 	{
 		if (!m_aPlayerLoadouts)
 			return null;
+
 		foreach (SCR_BasePlayerLoadout entry : m_aPlayerLoadouts)
 		{
 			if (entry && entry.GetLoadoutName() == loadoutName)
@@ -123,15 +106,7 @@ modded class SCR_LoadoutManager
 		return null;
 	}
 
-	//--------------------------------------------------------------------------------------------
-	int RK29_IndexOfLoadout(SCR_BasePlayerLoadout loadout)
-	{
-		if (!loadout || !m_aPlayerLoadouts)
-			return -1;
-		return m_aPlayerLoadouts.Find(loadout);
-	}
-
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	protected GM29_KitLoadoutHolder LoadGM29Holder()
 	{
 		Resource res = Resource.Load(m_sGM29KitHolder);
@@ -151,7 +126,7 @@ modded class SCR_LoadoutManager
 		return holder;
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	protected void BuildOwnedNameCache(notnull GM29_KitLoadoutHolder holder)
 	{
 		m_aGM29OwnedNames = {};
@@ -166,10 +141,11 @@ modded class SCR_LoadoutManager
 				m_aGM29OwnedNames.Insert(kitName);
 		}
 
-		Print("[GM29Kits] ownership cache holds " + m_aGM29OwnedNames.Count().ToString() + " kit name(s)", LogLevel.NORMAL);
+		Print(string.Format("[GM29Kits] ownership cache holds %1 kit name(s)",
+			m_aGM29OwnedNames.Count()), LogLevel.NORMAL);
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	protected bool IsGM29Loadout(SCR_BasePlayerLoadout candidate)
 	{
 		if (!candidate || !m_aGM29OwnedNames)
@@ -186,37 +162,10 @@ modded class SCR_LoadoutManager
 		return false;
 	}
 
-	//--------------------------------------------------------------------------------------------
-	protected void DumpLoadoutTable()
-	{
-		Print("[GM29Kits] ---- registered loadouts (" + m_aPlayerLoadouts.Count().ToString() + ") ----", LogLevel.NORMAL);
-
-		foreach (int i, SCR_BasePlayerLoadout entry : m_aPlayerLoadouts)
-		{
-			if (!entry)
-			{
-				Print("[GM29Kits]   [" + i.ToString() + "] <null entry>", LogLevel.WARNING);
-				continue;
-			}
-
-			string factionKey = "<none>";
-			SCR_FactionPlayerLoadout factionLoadout = SCR_FactionPlayerLoadout.Cast(entry);
-			if (factionLoadout)
-				factionKey = factionLoadout.GetFactionKey();
-
-			string ownership = "FOREIGN";
-			if (IsGM29Loadout(entry))
-				ownership = "29th";
-
-			Print("[GM29Kits]   [" + i.ToString() + "] " + ownership + " | " + factionKey + " | " + entry.Type().ToString() + " | name='" + entry.GetLoadoutName() + "' | res=" + entry.GetLoadoutResource(), LogLevel.NORMAL);
-		}
-
-		Print("[GM29Kits] ---- end of loadout table ----", LogLevel.NORMAL);
-	}
-
-	//--------------------------------------------------------------------------------------------
-	//! Removes SCR_FactionPlayerLoadout entries we did not author. Arsenal loadouts are skipped.
-	//! Aborts entirely if ownership matching looks broken.
+	//------------------------------------------------------------------------------------------------
+	//! Removes SCR_FactionPlayerLoadout entries we did not author - including the
+	//! '#AR-Loadout_Editor_NewArsenalLoadout_Name' rows, the deploy-menu option for building a custom
+	//! loadout. Saved arsenal loadouts are kept. Aborts entirely if ownership matching looks broken.
 	protected void PruneForeignKits()
 	{
 		if (!m_aGM29OwnedNames || m_aGM29OwnedNames.IsEmpty())
@@ -225,11 +174,9 @@ modded class SCR_LoadoutManager
 			return;
 		}
 
-		// SINGLE EVALUATION PASS.
-		// Resource resolution for at least one 29th prefab has proven unstable - the same
-		// entry can classify differently on two calls within one init. So every entry is
-		// classified exactly once here, and both the safety gate and the removals below read
-		// that one result. The gate can no longer pass while a removal decision disagrees.
+		// Single evaluation pass: resource resolution for at least one 29th prefab has proven unstable
+		// within one init, so every entry is classified once and both the gate and the removals read that
+		// result.
 		array<int> foreignIndices = {};
 		int ownedCount = 0;
 
@@ -244,11 +191,9 @@ modded class SCR_LoadoutManager
 				continue;
 			}
 
-			// Only faction-affiliated kits are candidates.
 			if (!SCR_FactionPlayerLoadout.Cast(entry))
 				continue;
 
-			// Never strip saved arsenal loadouts.
 			if (SCR_PlayerArsenalLoadout.Cast(entry))
 				continue;
 
@@ -258,82 +203,42 @@ modded class SCR_LoadoutManager
 		int ownedExpected = m_aGM29OwnedNames.Count();
 		if (ownedCount < ownedExpected)
 		{
-			Print("[GM29Kits] PRUNE ABORTED - recognised only " + ownedCount.ToString() + " of " + ownedExpected.ToString() + " 29th kits. Pruning now would delete 29th content.", LogLevel.ERROR);
+			Print(string.Format("[GM29Kits] PRUNE ABORTED - recognised only %1 of %2 29th kits."
+				+ " Pruning now would delete 29th content.",
+				ownedCount, ownedExpected), LogLevel.ERROR);
 			return;
 		}
 
-		// Remove back-to-front so earlier indices stay valid.
+		// back-to-front so earlier indices stay valid
 		for (int i = foreignIndices.Count() - 1; i >= 0; i--)
 		{
 			int idx = foreignIndices[i];
 			SCR_BasePlayerLoadout entry = m_aPlayerLoadouts[idx];
 
-			Print("[GM29Kits] pruning: name='" + entry.GetLoadoutName() + "' res=" + entry.GetLoadoutResource(), LogLevel.NORMAL);
+			Print(string.Format("[GM29Kits] pruning: name='%1' res=%2",
+				entry.GetLoadoutName(), entry.GetLoadoutResource()), LogLevel.NORMAL);
 			m_aPlayerLoadouts.RemoveOrdered(idx);
 		}
 
-		Print("[GM29Kits] pruned " + foreignIndices.Count().ToString() + " foreign loadouts | " + ownedCount.ToString() + " 29th kits retained", LogLevel.NORMAL);
+		Print(string.Format("[GM29Kits] pruned %1 foreign loadouts | %2 29th kits retained",
+			foreignIndices.Count(), ownedCount), LogLevel.NORMAL);
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Dedup guard so repeated mode/round restarts do not stack duplicate entries.
-	//! Matches on GUID only. Full ResourceName equality is NOT reliable here - it produced
-	//! false positives that silently dropped 29th kits during injection.
-	protected bool IsAlreadyRegistered(notnull SCR_BasePlayerLoadout candidate)
+	//------------------------------------------------------------------------------------------------
+	//! `registered` is what the injection loop counted as it went. The only way to fall short of the
+	//! authored count is a NULL entry in the holder, which has no name to report.
+	protected void VerifyInjection(notnull GM29_KitLoadoutHolder holder, int registered)
 	{
-		string candidateName = candidate.GetLoadoutName();
-		if (candidateName == string.Empty)
-			return false;
-
-		foreach (SCR_BasePlayerLoadout existing : m_aPlayerLoadouts)
+		int authored = holder.m_aLoadouts.Count();
+		if (registered >= authored)
 		{
-			if (!existing)
-				continue;
-
-			if (existing.GetLoadoutName() == candidateName)
-			{
-				Print("[GM29Kits] dedup skip: '" + candidateName + "' already registered", LogLevel.NORMAL);
-				return true;
-			}
+			Print(string.Format("[GM29Kits] verify OK - all %1 kits registered", authored),
+				LogLevel.NORMAL);
+			return;
 		}
 
-		return false;
-	}
-
-	//--------------------------------------------------------------------------------------------
-	//! Confirms every kit in the config actually made it into the registered list. Names any
-	//! that did not, so a silent drop can never go unnoticed again.
-	protected void VerifyInjection(notnull GM29_KitLoadoutHolder holder)
-	{
-		int missing = 0;
-
-		foreach (SCR_BasePlayerLoadout kit : holder.m_aLoadouts)
-		{
-			if (!kit)
-				continue;
-
-			string kitName = kit.GetLoadoutName();
-			bool found = false;
-
-			foreach (SCR_BasePlayerLoadout entry : m_aPlayerLoadouts)
-			{
-				if (entry && entry.GetLoadoutName() == kitName)
-				{
-					found = true;
-					break;
-				}
-			}
-
-			if (!found)
-			{
-				Print("[GM29Kits] MISSING after injection: '" + kit.GetLoadoutName() + "' res=" + kit.GetLoadoutResource(), LogLevel.ERROR);
-				missing = missing + 1;
-			}
-		}
-
-		if (missing == 0)
-			Print("[GM29Kits] verify OK - all " + holder.m_aLoadouts.Count().ToString() + " kits registered", LogLevel.NORMAL);
-		else
-			Print("[GM29Kits] verify FAILED - " + missing.ToString() + " kit(s) missing", LogLevel.ERROR);
+		Print(string.Format("[GM29Kits] verify FAILED - %1 of %2 kit(s) missing; a null entry in"
+			+ " GM29_Kits.conf is the only way this happens",
+			authored - registered, authored), LogLevel.ERROR);
 	}
 }
