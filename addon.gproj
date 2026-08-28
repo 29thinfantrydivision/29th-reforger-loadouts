@@ -3,6 +3,33 @@ GameProject {
  GUID "69730206FA071FE2"
  TITLE "29thInfantryDivision_Loadouts"
  Dependencies {
-  "1337C0DE5DABBEEF" "BADC0DEDABBEDA5E" "595F2BF2F44836FB" "58D0FB3206B6F859"
+  "1337C0DE5DABBEEF" "BADC0DEDABBEDA5E" "595F2BF2F44836FB" "58D0FB3206B6F859" "60C4C12DAE90727B"
+ }
+ Configurations {
+  GameProjectConfig PC {
+   WidgetManagerSettings WidgetManagerSettings "{AC4BE58770485E02}" {
+    StringTables {
+     StringTableDefinition "{6A54A4D3E017B932}" {
+      StringTableSource "{73E85ACCB86B6794}Language/RK29_localization.st"
+      Languages {
+       LanguageDefinition "{6A54A4D3E3BDFC97}" {
+        Code "en_us"
+        StringTableRuntime "{637E857A306C0F02}Language/RK29_localization.en_us.conf"
+       }
+      }
+     }
+    }
+   }
+  }
+  GameProjectConfig XBOX_ONE {
+  }
+  GameProjectConfig XBOX_SERIES {
+  }
+  GameProjectConfig PS4 {
+  }
+  GameProjectConfig PS5 {
+  }
+  GameProjectConfig HEADLESS {
+  }
  }
 }

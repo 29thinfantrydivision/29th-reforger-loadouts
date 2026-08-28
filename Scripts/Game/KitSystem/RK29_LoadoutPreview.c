@@ -1,293 +1,133 @@
 //------------------------------------------------------------------------------------------------
-//! Deploy-menu preview for "Current Kit": the mannequin spawns as the side's BARE body, then is
-//! dressed here from the loadout the server resolved and sent - the same thing the character
-//! itself will be dressed from - or, before the player has picked anything, from the composed
-//! default kit in the local catalog, which is what the server will dress them with. Local
-//! entities only, same technique as the vanilla arsenal branch, which builds its mannequin from
-//! m_LocalPlayerLoadoutData rather than from a prefab.
-//!
-//! The preview entity is CACHED per prefab, and every Current Kit now shares one bare body, so
-//! whatever the last kit left on it is still there. Every slot is therefore accounted for on
-//! each pass - a slot the kit does not name is emptied, not skipped.
-//!
-//! Deliberately Current Kit ONLY. A stock deploy row never runs apply, so its body IS what the
-//! player will wear - previewing that prefab as-authored is correct, not a bug.
+//! Deploy-menu preview for "Current Kit" rows: stands up its own body and runs the same dress the
+//! F4 mannequin runs (RK29_MannequinDress.ApplyLoaded), then hands that body to vanilla's preview
+//! widget. Every other row keeps vanilla's own cached entity, untouched.
 //------------------------------------------------------------------------------------------------
 modded class SCR_LoadoutPreviewComponent
 {
-	//--------------------------------------------------------------------------------------------
+	//! Our own dressed body, or null while a non-Current-Kit row is shown. A fresh one per dress is
+	//! required, not an optimisation to undo - RK29_MannequinDress.ApplyLoaded has the reason.
+	protected IEntity m_RK29PreviewBody;
+
+	//! What m_RK29PreviewBody is already dressed from, empty whenever no body of ours is standing.
+	//! Opening the deploy menu asks for the same preview four times - vanilla's HandlerAttached
+	//! (SCR_LoadoutRequestUIComponent.c:158), the next-frame refresh ShowAvailableLoadouts queues
+	//! (:316), RefreshLoadoutPreview (:618) and our own keyboard top-up - and vanilla dedups none of
+	//! them because its preview is a cached body whose clothes are swapped. Ours stands a new soldier
+	//! up and dresses him from nothing, so those four requests were four full dresses.
+	protected string m_sRK29PreviewSig;
+
+	//------------------------------------------------------------------------------------------------
 	override IEntity SetPreviewedLoadout(notnull SCR_BasePlayerLoadout loadout, PreviewRenderAttributes attributes = null)
 	{
 		IEntity ent = super.SetPreviewedLoadout(loadout, attributes);
+		// vanilla declined this call (m_bReloadLoadout) - leave standing whatever is on screen
 		if (!ent)
 			return ent;
 
-		// While the player's stash still names the kit this row resolves to, this is the loadout
-		// the SERVER resolved and sent - never re-derived here. That is the whole point: the client used to guess which weapon a
-		// class with two options had ended up with, and guessed wrong. Before a first pick
-		// there is nothing to send yet, so the resolver falls back to the composed default kit
-		// - without it a first-time player hovers Current Kit and sees the bare body.
-		map<string, ResourceName> dress = new map<string, ResourceName>();
-		map<int, ResourceName> weapons = new map<int, ResourceName>();
-		ResourceName optic;
-		if (!RK29_StashedLoadoutUIInfo.ResolvePreviewLoadout(loadout, dress, weapons, optic))
+		RK29_KitStruct kit;
+		array<ref RK29_AttachmentOrder> orders;
+		map<int, ref array<ref RK29_LoadedPick>> loadedMags;
+		if (!RK29_StashedLoadoutUIInfo.ResolvePreviewLoadout(loadout, kit, orders, loadedMags)
+			|| !kit)
+		{
+			// not ours: vanilla's body is already presented, so drop the one we were holding
+			RK29_ClearPreviewBody();
+			return ent;
+		}
+
+		if (!m_PreviewManager || !m_wPreview)
 			return ent;
 
-		string unresolved;
-		int dressed = RK29_DressPreview(ent, dress, unresolved);
+		// Already wearing this. super's else-branch has just put an undressed prefab body in the
+		// widget (SCR_LoadoutPreviewComponent.c:179), so ours still has to be handed back - it is the
+		// spawn and the dress that are skipped, never the handover.
+		string sig = RK29_PreviewSignature(loadout, kit);
+		if (sig == m_sRK29PreviewSig && m_RK29PreviewBody && !m_RK29PreviewBody.IsDeleted())
+		{
+			m_PreviewManager.SetPreviewItem(m_wPreview, m_RK29PreviewBody, attributes, true);
+			return m_RK29PreviewBody;
+		}
 
-		EquipedWeaponStorageComponent weaponStorage = EquipedWeaponStorageComponent.Cast(ent.FindComponent(EquipedWeaponStorageComponent));
-		if (!weaponStorage)
+		IEntity body = RK29_SpawnPreviewBody(loadout.GetLoadoutResource());
+		if (!body)
 			return ent;
 
-		// by slot INDEX, the same space apply uses - no "which of these looks like a rifle".
-		// Walk every slot, not just the ones the kit names, or the cached mannequin keeps the
-		// previous kit's weapon wherever this one is silent.
-		IEntity primary;
-		int armed = 0;
-		for (int slotIdx = 0, weaponSlots2 = weaponStorage.GetSlotsCount(); slotIdx < weaponSlots2; slotIdx++)
-		{
-			ResourceName wanted;
-			weapons.Find(slotIdx, wanted);
+		RK29_MannequinDress.ApplyLoaded(body, kit, loadedMags, orders,
+			"deploy preview '" + RK29_StashedLoadoutUIInfo.ResolveName(loadout) + "'");
 
-			InventoryStorageSlot slot = weaponStorage.GetSlot(slotIdx);
-			if (!slot)
-			{
-				if (wanted != ResourceName.Empty)
-					unresolved = unresolved + " no-slot-" + slotIdx.ToString();
-				continue;
-			}
+		// present the new body before dropping the old one, so the render manager is never left
+		// sampling an entity that has just been deleted
+		m_PreviewManager.SetPreviewItem(m_wPreview, body, attributes, true);
 
-			IEntity current = slot.GetAttachedEntity();
-			if (current)
-			{
-				EntityPrefabData epd = current.GetPrefabData();
-				if (epd && epd.GetPrefabName() == wanted)
-				{
-					if (slotIdx == 0)
-						primary = current;
-					armed++;
-					continue;
-				}
-				delete current;
-			}
-
-			if (wanted == ResourceName.Empty)
-				continue;
-
-			// an uncached prefab can come back invalid on the first open and load by the second,
-			// which is exactly what an intermittently naked mannequin looks like
-			Resource res = Resource.Load(wanted);
-			if (!res.IsValid())
-			{
-				unresolved = unresolved + " " + FilePart(wanted);
-				continue;
-			}
-
-			IEntity spawned = GetGame().SpawnEntityPrefabLocal(res, ent.GetWorld());
-			if (!spawned)
-			{
-				unresolved = unresolved + " spawn-failed:" + FilePart(wanted);
-				continue;
-			}
-			slot.AttachEntity(spawned);
-			armed++;
-			if (slotIdx == 0)
-				primary = spawned;
-		}
-
-		if (primary)
-		{
-			RK29_SwapPreviewOptic(primary, optic, 0);
-
-			// nothing selects a weapon on a freshly built mannequin, so it stands there with
-			// the rifle slung. Vanilla's arsenal branch does this off its Active flag.
-			BaseWeaponManagerComponent weaponManager = BaseWeaponManagerComponent.Cast(
-				ent.FindComponent(BaseWeaponManagerComponent));
-			if (weaponManager)
-			{
-				array<WeaponSlotComponent> weaponSlots = {};
-				weaponManager.GetWeaponsSlots(weaponSlots);
-				foreach (WeaponSlotComponent ws : weaponSlots)
-				{
-					if (ws && ws.GetWeaponEntity() == primary)
-					{
-						weaponManager.SelectWeapon(ws);
-						break;
-					}
-				}
-			}
-		}
-
-		// Vanilla's arsenal branch dresses the mannequin and only THEN hands it to the widget.
-		// super() already presented the bare body, so present it again now that it is dressed -
-		// otherwise what the player sees depends on when the widget last sampled the entity.
-		if (m_PreviewManager && m_wPreview)
-			m_PreviewManager.SetPreviewItem(m_wPreview, ent, attributes, true);
-
-		string report = "[RK29] preview '" + RK29_StashedLoadoutUIInfo.ResolveName(loadout) + "': " + dressed.ToString() + "/" + dress.Count().ToString()
-			+ " garment(s), " + armed.ToString() + "/" + weapons.Count().ToString() + " weapon(s)";
-		if (unresolved != "")
-			report = report + " | UNRESOLVED:" + unresolved;
-		Print(report, LogLevel.NORMAL);
-		return ent;
+		RK29_ClearPreviewBody();
+		m_RK29PreviewBody = body;
+		m_sRK29PreviewSig = sig;
+		return body;
 	}
 
-	//--------------------------------------------------------------------------------------------
-	protected string RK29_ClothingKeys(notnull map<string, ResourceName> dress)
+	//------------------------------------------------------------------------------------------------
+	//! Everything ResolvePreviewLoadout reads to build a dress: the body prefab, the kit it settled
+	//! on, and the stash the picks come from. Deliberately coarser than the resolver itself, which
+	//! consults the stash only while it names this kit - over-invalidating costs one dress, which is
+	//! what every call cost before this guard, where under-invalidating would leave the wrong soldier
+	//! standing. The orders and seated rounds need no place here: they are a pure function of these.
+	protected string RK29_PreviewSignature(notnull SCR_BasePlayerLoadout loadout,
+		notnull RK29_KitStruct kit)
 	{
-		string keys;
-		foreach (string slotName, ResourceName prefab : dress)
-			keys = keys + " '" + slotName + "'";
-		return keys;
+		string prefab = loadout.GetLoadoutResource();
+		return prefab + "|" + kit.m_sKitName + "|" + RK29_LocalStash.Kit() + "|"
+			+ RK29_LocalStash.Picks();
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Re-dress the mannequin from the kit, slot by slot. Matched by slot SOURCE NAME, which is
-	//! the same key space the capture reads out of BaseLoadoutManagerComponent.Slots - so a slot
-	//! the kit does not mention is one the kit leaves empty, and gets emptied here too.
-	//!
-	//! AttachEntity returns void, so there is no way to test a fit and back out: an unmatched
-	//! name would strip the body and dress it in nothing. Hence the dry run first - if not one
-	//! slot name lines up, the assumption is wrong and this leaves the mannequin alone rather
-	//! than showing the player a naked soldier.
-	protected int RK29_DressPreview(notnull IEntity ent, notnull map<string, ResourceName> dress, out string unresolved)
+	//------------------------------------------------------------------------------------------------
+	override void HandlerAttached(Widget w)
 	{
-		EquipedLoadoutStorageComponent loadoutStorage = EquipedLoadoutStorageComponent.Cast(
-			ent.FindComponent(EquipedLoadoutStorageComponent));
-		if (!loadoutStorage)
-		{
-			unresolved = unresolved + " no-loadout-storage";
-			return 0;
-		}
-
-		int slotCount = loadoutStorage.GetSlotsCount();
-		int recognised = 0;
-		string seen;
-		for (int probe = 0; probe < slotCount; probe++)
-		{
-			InventoryStorageSlot slot = loadoutStorage.GetSlot(probe);
-			if (!slot)
-				continue;
-			seen = seen + " '" + slot.GetSourceName() + "'";
-			ResourceName known;
-			if (dress.Find(slot.GetSourceName(), known))
-				recognised++;
-		}
-		if (recognised == 0)
-		{
-			// Loadout slots are authored as "LoadoutSlotInfo Jacket", so their source names
-			// should be the same keys the capture reads - but no vanilla code reads a loadout
-			// slot's name, so this is the one assumption here that cannot be checked against
-			// the corpus. Say so out loud rather than leaving a mannequin quietly undressed.
-			Print("[RK29] preview dress skipped - no loadout slot name matched the kit. Slots saw:"
-				+ seen + " | kit wants: " + RK29_ClothingKeys(dress), LogLevel.WARNING);
-			return 0;
-		}
-
-		int dressed = 0;
-
-		for (int i = 0; i < slotCount; i++)
-		{
-			InventoryStorageSlot slot = loadoutStorage.GetSlot(i);
-			if (!slot)
-				continue;
-
-			ResourceName wanted;
-			dress.Find(slot.GetSourceName(), wanted);
-
-			IEntity current = slot.GetAttachedEntity();
-			if (current)
-			{
-				EntityPrefabData epd = current.GetPrefabData();
-				if (epd && epd.GetPrefabName() == wanted)
-				{
-					// already right from a previous pass on this cached body - still dressed,
-					// so it counts. Skipping it made a fully-correct re-hover report 0/7.
-					dressed++;
-					continue;
-				}
-
-				delete current;
-			}
-
-			if (wanted == ResourceName.Empty)
-				continue;
-
-			Resource res = Resource.Load(wanted);
-			if (!res.IsValid())
-			{
-				unresolved = unresolved + " " + FilePart(wanted);
-				continue;
-			}
-
-			IEntity cloth = GetGame().SpawnEntityPrefabLocal(res, ent.GetWorld());
-			if (!cloth)
-			{
-				unresolved = unresolved + " spawn-failed:" + FilePart(wanted);
-				continue;
-			}
-			slot.AttachEntity(cloth);
-			dressed++;
-		}
-		return dressed;
+		super.HandlerAttached(w);
+		RK29_ClearPreviewBody();
 	}
 
-	//--------------------------------------------------------------------------------------------
-	protected string FilePart(ResourceName res)
+	//------------------------------------------------------------------------------------------------
+	//! The menu closing must not leave a dressed body standing in the world. No super call: the
+	//! parent does not define this event and vanilla's own overrides of it do not chain either.
+	override void HandlerDeattached(Widget w)
 	{
-		string s = "" + res;
-		int slash = s.LastIndexOf("/");
-		if (slash >= 0)
-			s = s.Substring(slash + 1, s.Length() - slash - 1);
-		return s;
+		RK29_ClearPreviewBody();
 	}
 
-	//--------------------------------------------------------------------------------------------
-	protected bool RK29_SwapPreviewOptic(IEntity entity, ResourceName optic, int depth)
+	//------------------------------------------------------------------------------------------------
+	protected IEntity RK29_SpawnPreviewBody(ResourceName prefab)
 	{
-		if (!entity || depth > 3)
-			return false;
+		if (prefab == ResourceName.Empty)
+			return null;
 
-		SCR_WeaponAttachmentsStorageComponent attachStorage = SCR_WeaponAttachmentsStorageComponent.Cast(
-			entity.FindComponent(SCR_WeaponAttachmentsStorageComponent));
-		if (!attachStorage)
-			return false;
-
-		for (int i = 0, n = attachStorage.GetSlotsCount(); i < n; i++)
+		Resource res = Resource.Load(prefab);
+		if (!res.IsValid())
 		{
-			InventoryStorageSlot slot = attachStorage.GetSlot(i);
-			if (!slot)
-				continue;
-
-			AttachmentSlotComponent asc = AttachmentSlotComponent.Cast(slot.GetParentContainer());
-			if (asc && asc.GetAttachmentSlotType() && asc.GetAttachmentSlotType().Type().IsInherited(AttachmentOptics))
-			{
-				IEntity current = slot.GetAttachedEntity();
-				if (current)
-				{
-					EntityPrefabData epd = current.GetPrefabData();
-					if (epd && epd.GetPrefabName() == optic)
-						return true;
-					delete current;
-				}
-
-				if (optic == ResourceName.Empty)
-					return true;
-
-				Resource res = Resource.Load(optic);
-				if (res.IsValid())
-				{
-					IEntity spawned = GetGame().SpawnEntityPrefabLocal(res, entity.GetWorld());
-					if (spawned)
-						slot.AttachEntity(spawned);
-				}
-				return true;
-			}
-
-			if (RK29_SwapPreviewOptic(slot.GetAttachedEntity(), optic, depth + 1))
-				return true;
+			Print(string.Format("[RK29] deploy preview: body prefab did not load - %1", prefab),
+				LogLevel.WARNING);
+			return null;
 		}
-		return false;
+
+		return GetGame().SpawnEntityPrefabLocal(res, GetGame().GetWorld());
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Takes our body back out of the world, whole - the gun and everything seated on it hangs off
+	//! its slots. Safe twice, safe on no body, and safe on one something else already took: the
+	//! pointer outlives the entity, so IsDeleted is the only honest test (vanilla's own idiom in
+	//! RK29_KitApply.DrainDoomed).
+	protected void RK29_ClearPreviewBody()
+	{
+		// before the early return: the signature names a body, so it cannot outlive one
+		m_sRK29PreviewSig = "";
+
+		if (!m_RK29PreviewBody)
+			return;
+
+		if (!m_RK29PreviewBody.IsDeleted())
+			SCR_EntityHelper.DeleteEntityAndChildren(m_RK29PreviewBody);
+
+		m_RK29PreviewBody = null;
 	}
 }

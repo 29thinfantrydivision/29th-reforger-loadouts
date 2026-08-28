@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{AB29C0FFEE29E001}Prefabs/Items/Equipment/Accessories/29th_Scabbard_Bayonet_M9_empty.et"
+ Configurations {
+  EntityTemplateResourceClass PC {
+  }
+  EntityTemplateResourceClass XBOX_ONE : PC {
+  }
+  EntityTemplateResourceClass XBOX_SERIES : PC {
+  }
+  EntityTemplateResourceClass PS4 : PC {
+  }
+  EntityTemplateResourceClass PS5 : PC {
+  }
+  EntityTemplateResourceClass HEADLESS : PC {
+  }
+ }
+}

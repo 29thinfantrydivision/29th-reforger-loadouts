@@ -1,2 +1,6 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Auto detect text files, normalise to LF in the repo, check out as CRLF (the Workbench convention)
+* text=auto eol=crlf
+
+# Binary game assets - never EOL-normalise (a mangled .edds is a corrupt texture)
+*.edds binary
+*.xob binary
