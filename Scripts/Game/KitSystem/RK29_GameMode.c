@@ -1,5 +1,6 @@
 //------------------------------------------------------------------------------------------------
-//! Replicated kit counts on the GM game mode. Arrays use the loadout-manager index space.
+//! Replicated kit counts on the GM game mode. Arrays are indexed by RK29_KitManager's kit index:
+//! the loadout-manager list first, then the picker-only kits appended past its end.
 //------------------------------------------------------------------------------------------------
 void RK29_OnCountsChangedMethod();
 typedef func RK29_OnCountsChangedMethod;
@@ -15,7 +16,7 @@ modded class SCR_GameModeEditor
 
 	protected ref RK29_OnCountsChangedInvoker m_RK29_OnCountsChanged;
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	RK29_OnCountsChangedInvoker RK29_GetOnCountsChanged()
 	{
 		if (!m_RK29_OnCountsChanged)
@@ -23,15 +24,11 @@ modded class SCR_GameModeEditor
 		return m_RK29_OnCountsChanged;
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Server only. Edits the arrays IN PLACE and bumps - which is what vanilla does everywhere
-	//! it replicates an array: SCR_CampaignSuppliesComponent Inserts/RemoveItemOrdered's then
-	//! BumpMe's, SCR_FactionCommanderHandlerComponent Sets/Inserts then BumpMe's. This used to
-	//! swap in freshly built arrays, on the belief that an in-place edit would not replicate. No
-	//! vanilla code shares that belief, and the swap is the more dangerous of the two: it frees
-	//! the array the replication layer was just told to send, where an in-place edit keeps one
-	//! array alive for the entity's whole life and allocates nothing per tick.
-	void RK29_SetCounts(notnull array<int> alive, notnull array<int> magnified)
+	//------------------------------------------------------------------------------------------------
+	//! Server only. Edits the arrays in place then BumpMe's, vanilla's own array-replication idiom
+	//! (SCR_CampaignSuppliesComponent, SCR_FactionCommanderHandlerComponent); do not swap in a
+	//! freshly built array.
+	void RK29_SetCounts_S(notnull array<int> alive, notnull array<int> magnified)
 	{
 		if (RK29_ArraysEqual(m_aRK29AliveCounts, alive) && RK29_ArraysEqual(m_aRK29MagnifiedCounts, magnified))
 			return;
@@ -44,31 +41,31 @@ modded class SCR_GameModeEditor
 		OnRK29CountsChanged();
 	}
 
-	//--------------------------------------------------------------------------------------------
-	int RK29_GetAliveCount(int loadoutIndex)
+	//------------------------------------------------------------------------------------------------
+	int RK29_GetAliveCount(int kitIndex)
 	{
-		if (!m_aRK29AliveCounts || loadoutIndex < 0 || loadoutIndex >= m_aRK29AliveCounts.Count())
+		if (!m_aRK29AliveCounts || kitIndex < 0 || kitIndex >= m_aRK29AliveCounts.Count())
 			return 0;
-		return m_aRK29AliveCounts[loadoutIndex];
+		return m_aRK29AliveCounts[kitIndex];
 	}
 
-	//--------------------------------------------------------------------------------------------
-	int RK29_GetMagnifiedCount(int loadoutIndex)
+	//------------------------------------------------------------------------------------------------
+	int RK29_GetMagnifiedCount(int kitIndex)
 	{
-		if (!m_aRK29MagnifiedCounts || loadoutIndex < 0 || loadoutIndex >= m_aRK29MagnifiedCounts.Count())
+		if (!m_aRK29MagnifiedCounts || kitIndex < 0 || kitIndex >= m_aRK29MagnifiedCounts.Count())
 			return 0;
-		return m_aRK29MagnifiedCounts[loadoutIndex];
+		return m_aRK29MagnifiedCounts[kitIndex];
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	protected void OnRK29CountsChanged()
 	{
 		if (m_RK29_OnCountsChanged)
 			m_RK29_OnCountsChanged.Invoke();
 	}
 
-	//--------------------------------------------------------------------------------------------
-	protected bool RK29_ArraysEqual(array<int> a, array<int> b)
+	//------------------------------------------------------------------------------------------------
+	protected static bool RK29_ArraysEqual(array<int> a, array<int> b)
 	{
 		if (!a || !b || a.Count() != b.Count())
 			return false;
@@ -80,38 +77,7 @@ modded class SCR_GameModeEditor
 		return true;
 	}
 
-	//--------------------------------------------------------------------------------------------
-	override void OnPlayerSpawned(int playerId, IEntity controlledEntity)
-	{
-		super.OnPlayerSpawned(playerId, controlledEntity);
-
-		RK29_KitManager mgr = RK29_KitManager.GetInstance();
-		if (mgr)
-			mgr.OnPlayerSpawned_S(playerId, controlledEntity);
-	}
-
-	//--------------------------------------------------------------------------------------------
-	override protected void OnPlayerDisconnected(int playerId, KickCauseCode cause, int timeout)
-	{
-		super.OnPlayerDisconnected(playerId, cause, timeout);
-
-		RK29_KitManager mgr = RK29_KitManager.GetInstance();
-		if (mgr)
-			mgr.OnPlayerDisconnected_S(playerId);
-	}
-
-	//--------------------------------------------------------------------------------------------
-	override void OnPlayerAuditSuccess(int iPlayerID)
-	{
-		super.OnPlayerAuditSuccess(iPlayerID);
-
-		RK29_KitManager mgr = RK29_KitManager.GetInstance();
-		if (mgr)
-			mgr.OnPlayerAuditSuccess_S(iPlayerID);
-	}
-
-	//--------------------------------------------------------------------------------------------
-	//! Registers the kit-authoring chat commands.
+	//------------------------------------------------------------------------------------------------
 	override void OnGameStart()
 	{
 		super.OnGameStart();
@@ -120,48 +86,31 @@ modded class SCR_GameModeEditor
 		if (!chatMgr)
 			return;
 
-		ChatCommandInvoker inv = chatMgr.GetCommandInvoker("kitdigest");
+		ChatCommandInvoker inv = chatMgr.GetCommandInvoker("kitmenu");
 		if (inv)
-			inv.Insert(RK29_OnChatKitDigest);
-
-		inv = chatMgr.GetCommandInvoker("kitvalidate");
-		if (inv)
-			inv.Insert(RK29_OnChatKitValidate);
+			inv.Insert(RK29_OnChatKitMenu);
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Chat commands are dispatched entirely on the typing client - vanilla creates an invoker
-	//! for any name asked for and applies no permission model of its own. The kit diagnostics
-	//! are authoring tools (they spawn bodies, write files, flood the log), so they run on the
-	//! session's own machine only: Workbench or a listen host. The picker itself is not a
-	//! chat command at all - it is bound to F4 and gates itself on the round phase.
-	protected bool RK29_DiagAllowed()
+	//------------------------------------------------------------------------------------------------
+	//! Hand the chat command back: SCR_ChatPanelManager is a game core and outlives this world,
+	//! so anything left inserted on its invokers keeps this game mode alive for the process.
+	override void OnGameEnd()
 	{
-		if (Replication.IsServer())
-			return true;
+		super.OnGameEnd();
 
 		SCR_ChatPanelManager chatMgr = SCR_ChatPanelManager.GetInstance();
-		if (chatMgr)
-			chatMgr.ShowHelpMessage("Kit diagnostics run on the server only.");
-		return false;
-	}
-
-	//--------------------------------------------------------------------------------------------
-	protected void RK29_OnChatKitValidate(SCR_ChatPanel panel, string data)
-	{
-		if (!RK29_DiagAllowed())
-			return;
-		RK29_KitValidate.Run();
-	}
-
-	//--------------------------------------------------------------------------------------------
-	protected void RK29_OnChatKitDigest(SCR_ChatPanel panel, string data)
-	{
-		if (!RK29_DiagAllowed())
+		if (!chatMgr)
 			return;
 
-		data.TrimInPlace();
-		RK29_KitCompose.Digest(data);
+		ChatCommandInvoker inv = chatMgr.GetCommandInvoker("kitmenu");
+		if (inv)
+			inv.Remove(RK29_OnChatKitMenu);
 	}
 
+	//------------------------------------------------------------------------------------------------
+	//! Chat commands dispatch entirely on the typing client, so this one is purely local.
+	protected void RK29_OnChatKitMenu(SCR_ChatPanel panel, string data)
+	{
+		RK29_LoadoutMenu.Toggle();
+	}
 }

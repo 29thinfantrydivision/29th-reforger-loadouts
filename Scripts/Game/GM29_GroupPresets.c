@@ -1,30 +1,11 @@
 //------------------------------------------------------------------------------------------------
-//! 29th Infantry Division - predefined squad registration
-//!
-//! Same shape as GM29_KitLoadouts.c:
-//!   1. GM29_GroupPresetHolder - the config root that Configs/Groups/GM29_Groups.conf
-//!      deserialises into. We own this class, so its field name (m_aGroupPresets) is stable.
-//!   2. modded SCR_Faction - merges the presets in that holder into m_aGroupRolePresetConfigs
-//!      on every faction instance (US and USSR both pick these up, since each faction's
-//!      Init() runs this independently). No per-faction editing of the base BLUFOR/OPFOR conf.
-//!      Merge means REPLACE-BY-ROLE, not append: a role is served by the first preset that
-//!      declares it, and the campaign faction confs already claim ASSAULT, MECHANIZED,
-//!      COMMANDER and RESERVES - so an appended 29th preset never applies. Roles the 29th does
-//!      not define (RECON, MEDIC, MORTAR, ...) keep their vanilla presets untouched.
-//!
-//! Revised from the plain SCR_GroupPreset version: SCR_GroupRolePresetConfig extends
-//! SCR_GroupPreset and adds m_aLoadoutResources, so a single preset both defines the joinable
-//! group AND restricts which of our existing GM29_Kits.conf loadouts are offered inside it.
-//! It lives in a different array on SCR_Faction (m_aGroupRolePresetConfigs, not
-//! m_aPredefinedGroups) - this replaces the earlier m_aPredefinedGroups injection.
-//!
-//! The loadout resource lists in GM29_Groups.conf hold both factions' resources per role
-//! (e.g. "Squad" contains US and USSR rifleman/AR/MG/etc). This is safe to share across
-//! factions unfiltered - IsLoadoutInGroup() only ever gets checked against a loadout the
-//! player already has, and SCR_FactionPlayerLoadout is itself faction-affiliated elsewhere,
-//! so a USSR player is never offered a US loadout in the first place.
-//!
-//! There is exactly one spot to confirm before this runs - marked "VERIFY" below.
+//! 29th predefined squad registration. GM29_GroupPresetHolder is the config root
+//! Configs/Groups/GM29_Groups.conf deserialises into; modded SCR_Faction.Init merges its presets
+//! into every faction's m_aGroupRolePresetConfigs, each faction independently.
+//! SCR_GroupRolePresetConfig rather than m_aPredefinedGroups because it also carries
+//! m_aLoadoutResources, which restricts the loadouts offered inside the group. Those lists hold
+//! both factions' resources per role, which is safe unfiltered: IsLoadoutInGroup() is only
+//! checked against a loadout the player already has.
 //------------------------------------------------------------------------------------------------
 
 //! Config root for the authored group list. Field name is ours -> reliable schema.
@@ -43,27 +24,32 @@ modded class SCR_Faction
 	[Attribute("{4F499D4957373C95}Configs/Groups/GM29_Groups.conf", desc: "29th predefined squad holder config")]
 	protected ResourceName m_sGM29GroupHolder;
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	override void Init(IEntity owner)
 	{
 		super.Init(owner);
 
-		// Vanilla SCR_Faction.Init() early-returns in edit mode before it touches catalogs.
-		// Match that: injecting presets while the World Editor is open mutates
-		// m_aGroupRolePresetConfigs on the in-editor faction instances and spams warnings.
+		// vanilla SCR_Faction.Init() early-returns in edit mode before it touches catalogs; injecting
+		// presets while the World Editor is open mutates the in-editor faction instances.
+		// Unconfirmed fix: reasoned from vanilla's guard, never seen fail or succeed.
 		if (SCR_Global.IsEditMode())
 			return;
 
 		InjectGM29Groups();
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	protected void InjectGM29Groups()
 	{
+		// vanilla's GetGroupRolePresetConfigs / IsGroupRolesConfigured deref this array with no
+		// null check, so it must exist even when the holder below fails to load
+		if (!m_aGroupRolePresetConfigs)
+			m_aGroupRolePresetConfigs = {};
+
 		Resource res = Resource.Load(m_sGM29GroupHolder);
 		if (!res.IsValid())
 		{
-			Print("[GM29Groups] group holder not found - check m_sGM29GroupHolder GUID (VERIFY)", LogLevel.WARNING);
+			Print("[GM29Groups] group holder not found - check m_sGM29GroupHolder GUID", LogLevel.WARNING);
 			return;
 		}
 
@@ -74,9 +60,6 @@ modded class SCR_Faction
 			return;
 		}
 
-		if (!m_aGroupRolePresetConfigs)
-			m_aGroupRolePresetConfigs = {};
-
 		int added = 0;
 		int replaced = 0;
 		foreach (SCR_GroupRolePresetConfig preset : holder.m_aGroupPresets)
@@ -84,14 +67,10 @@ modded class SCR_Faction
 			if (!preset)
 				continue;
 
-			// REPLACE by role, do not append. Every consumer of this array resolves a role by
-			// taking the FIRST preset that declares it - group creation
-			// (SCR_PlayerControllerGroupComponent.CreateNewGroup), the role label
-			// (SCR_AIGroup.GetGroupRoleName) and the deploy-menu loadout filter
-			// (SCR_AIGroup.IsLoadoutInGroup) all break on the first match. A campaign faction
-			// conf already ships presets for ASSAULT/MECHANIZED/COMMANDER/RESERVES, so an
-			// appended 29th preset is dead config: creating "29th HQ" would apply vanilla's
-			// Commander preset - vanilla name, vanilla size, vanilla loadout list.
+			// Replace by role, do not append: every consumer resolves a role by taking the first preset that
+			// declares it (CreateNewGroup, GetGroupRoleName, IsLoadoutInGroup), and a campaign faction conf
+			// already ships ASSAULT/MECHANIZED/COMMANDER/RESERVES - so an appended 29th preset is dead config
+			// that silently applies vanilla's.
 			int existingIdx = FindGroupPresetIndexByRole(preset.GetGroupRole());
 			if (existingIdx < 0)
 			{
@@ -100,19 +79,17 @@ modded class SCR_Faction
 				continue;
 			}
 
-			// Re-running (mode/round restart) lands here and overwrites our own entry with an
-			// identical one, so injection stays idempotent instead of stacking duplicates.
+			// re-running (mode/round restart) overwrites our own entry, so injection stays
+			// idempotent
 			m_aGroupRolePresetConfigs.Set(existingIdx, preset);
 			replaced = replaced + 1;
 		}
 
-		// Plain concatenation - no ternary inside Print(), per your guardrails.
-		Print("[GM29Groups] " + GetFactionKey() + ": added " + added.ToString()
-			+ " group role presets, replaced " + replaced.ToString(), LogLevel.NORMAL);
+		Print(string.Format("[GM29Groups] %1: added %2 group role presets, replaced %3",
+			GetFactionKey(), added, replaced), LogLevel.NORMAL);
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Index of the first registered preset serving this role, -1 when the role is unclaimed.
+	//------------------------------------------------------------------------------------------------
 	//! Role is the key rather than the group name: the name is what the 29th preset is trying to
 	//! set, so matching on it would never find the vanilla entry it needs to displace.
 	protected int FindGroupPresetIndexByRole(SCR_EGroupRole role)

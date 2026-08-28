@@ -1,0 +1,200 @@
+SizeLayoutWidgetClass {
+ Name "KitPresetRow"
+ Slot LayoutSlot "{AB29C0FFEEB22501}" {
+  Padding 0 0 0 4
+ }
+ AllowHeightOverride 1
+ HeightOverride 40
+ {
+  OverlayWidgetClass "{AB29C0FFEEB22502}" {
+   Name "RowFrame"
+   Slot AlignableSlot "{AB29C0FFEEB22503}" {
+    HorizontalAlign 3
+    VerticalAlign 3
+   }
+   {
+    ImageWidgetClass "{AB29C0FFEEB22504}" {
+     Name "RowBase"
+     Slot OverlayWidgetSlot "{AB29C0FFEEB22505}" {
+      HorizontalAlign 3
+      VerticalAlign 3
+     }
+     Opacity 0.4
+     Color 0 0 0 0.502
+    }
+    ImageWidgetClass "{AB29C0FFEEB22506}" {
+     Name "RowBg"
+     Slot OverlayWidgetSlot "{AB29C0FFEEB22507}" {
+      HorizontalAlign 3
+      VerticalAlign 3
+     }
+     "Is Visible" 0
+     Color 0.761 0.386 0.08 1
+    }
+    HorizontalLayoutWidgetClass "{AB29C0FFEEB22508}" {
+     Name "RowLine"
+     Slot OverlayWidgetSlot "{AB29C0FFEEB22509}" {
+      HorizontalAlign 3
+      VerticalAlign 3
+      Padding 8 0 8 0
+     }
+     {
+      ButtonWidgetClass "{AB29C0FFEEB2250A}" {
+       Name "RowButton"
+       components {
+        SCR_ModularButtonComponent "{AB29C0FFEEB30013}" {
+         m_aEffects {
+          SCR_ButtonEffectSound "{AB29C0FFEEB30014}" : "{D0EF588033B1793A}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Confirm.conf" {
+          }
+          SCR_ButtonEffectSound "{AB29C0FFEEB30015}" : "{A96BD3D75E106FC5}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Focused.conf" {
+          }
+          SCR_ButtonEffectSound "{AB29C0FFEEB30016}" : "{F66E5F9DD84911A8}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Hovered.conf" {
+          }
+         }
+         m_eEventReturnValue 2147483599
+         m_bCanBeToggled 0
+        }
+        RK29_MarqueeOnHover "{AB29C0FFEEB2250E}" {
+         m_sFrameWidget "NameFrame"
+         m_sContentWidget "NameContent"
+        }
+       }
+       Slot LayoutSlot "{AB29C0FFEEB2250B}" {
+        VerticalAlign 3
+        SizeMode Fill
+       }
+       style blank
+       {
+        HorizontalLayoutWidgetClass "{AB29C0FFEEB2250C}" {
+         Name "NameClip"
+         Slot ButtonWidgetSlot "{AB29C0FFEEB2250D}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+         }
+         Clipping True
+         {
+          FrameWidgetClass "{AB29C0FFEEB2250F}" {
+           Name "NameFrame"
+           Slot LayoutSlot "{AB29C0FFEEB22510}" {
+            VerticalAlign 1
+            SizeMode Fill
+           }
+           Clipping True
+           components {
+            SCR_HorizontalScrollAnimationComponent "{AB29C0FFEEB22511}" {
+             m_sAnimationContentWidget "NameContent"
+             m_fAnimationSpeedPxPerSec 30
+             m_fWaitTimeLeftSec 1
+             m_fWaitTimeRightSec 1
+            }
+           }
+           {
+            OverlayWidgetClass "{AB29C0FFEEB22512}" {
+             Name "NameContent"
+             Slot FrameWidgetSlot "{AB29C0FFEEB22513}" {
+              PositionX 0
+              OffsetLeft 0
+              OffsetTop 0
+              SizeX 0
+              OffsetRight 0
+              SizeY 0
+              OffsetBottom 0
+              SizeToContent 1
+             }
+             {
+              RichTextWidgetClass "{AB29C0FFEEB22514}" {
+               Name "RowName"
+               Slot OverlayWidgetSlot "{AB29C0FFEEB22515}" {
+                HorizontalAlign 3
+                VerticalAlign 3
+               }
+               Color 1 1 1 1
+               Text ""
+               "Font Size" 18
+               "Min Font Size" 18
+               FontProperties FontProperties "{AB29C0FFEEB22516}" {
+                Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+               }
+               "Vertical Alignment" Center
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+      EditBoxWidgetClass "{AB29C0FFEEB22517}" {
+       Name "RowNameEdit"
+       Slot LayoutSlot "{AB29C0FFEEB22518}" {
+        VerticalAlign 3
+        SizeMode Fill
+       }
+       "Is Visible" 0
+       Clipping True
+       "Ignore Cursor" 0
+       style blank
+       Color 1 1 1 1
+       "Use placeholder text" 1
+       "Placeholder text" "Save current as..."
+       "Font Size" 16
+       FontProperties FontProperties "{AB29C0FFEEB22519}" {
+        Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+       }
+      }
+      SizeLayoutWidgetClass "{AB29C0FFEEB2251A}" {
+       Name "RowDeleteSize"
+       Slot LayoutSlot "{AB29C0FFEEB2251B}" {
+        VerticalAlign 1
+       }
+       "Is Visible" 0
+       AllowWidthOverride 1
+       WidthOverride 26
+       AllowHeightOverride 1
+       HeightOverride 26
+       {
+        ButtonWidgetClass "{AB29C0FFEEB2251C}" {
+         Name "RowDelete"
+         Slot AlignableSlot "{AB29C0FFEEB2251D}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+         }
+         components {
+          SCR_ModularButtonComponent "{AB29C0FFEEB30017}" {
+           m_aEffects {
+            SCR_ButtonEffectSound "{AB29C0FFEEB30018}" : "{D0EF588033B1793A}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Confirm.conf" {
+            }
+            SCR_ButtonEffectSound "{AB29C0FFEEB30019}" : "{A96BD3D75E106FC5}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Focused.conf" {
+            }
+            SCR_ButtonEffectSound "{AB29C0FFEEB3001A}" : "{F66E5F9DD84911A8}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Hovered.conf" {
+            }
+           }
+           m_eEventReturnValue 2147483599
+           m_bCanBeToggled 0
+          }
+         }
+         style blank
+         {
+          ImageWidgetClass "{AB29C0FFEEB2251E}" {
+           Name "RowDeleteIcon"
+           Slot ButtonWidgetSlot "{AB29C0FFEEB2251F}" {
+            HorizontalAlign 1
+            VerticalAlign 1
+           }
+           Opacity 0.6
+           Color 0.741 0.741 0.737 1
+           Texture "{2EFEA2AF1F38E7F0}UI/Textures/Icons/icons_wrapperUI-64.imageset"
+           Image "trash"
+           Size 18 18
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}
