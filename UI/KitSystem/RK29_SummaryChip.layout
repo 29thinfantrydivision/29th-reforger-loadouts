@@ -1,0 +1,48 @@
+HorizontalLayoutWidgetClass {
+ Name "KitSummaryChip"
+ Slot LayoutSlot "{AB29C0FFEEB22411}" {
+  VerticalAlign 1
+  Padding 6 0 0 0
+ }
+ {
+  RichTextWidgetClass "{AB29C0FFEEB22412}" {
+   Name "ChipCount"
+   Slot LayoutSlot "{AB29C0FFEEB22413}" {
+    VerticalAlign 1
+   }
+   Color 0.741 0.741 0.737 1
+   Text ""
+   "Font Size" 16
+   "Min Font Size" 14
+   FontProperties FontProperties "{AB29C0FFEEB22414}" {
+    Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+   }
+   "Vertical Alignment" Center
+  }
+  SizeLayoutWidgetClass "{AB29C0FFEEB22415}" {
+   Name "ChipPreviewSize"
+   Slot LayoutSlot "{AB29C0FFEEB22416}" {
+    VerticalAlign 1
+    Padding 2 0 0 0
+   }
+   AllowWidthOverride 1
+   WidthOverride 48
+   AllowHeightOverride 1
+   HeightOverride 44
+   {
+    ItemPreviewWidgetClass "{AB29C0FFEEB22417}" {
+     Name "ChipPreview"
+     Slot AlignableSlot "{AB29C0FFEEB22418}" {
+      HorizontalAlign 3
+      VerticalAlign 3
+     }
+     "Use Engine Scale" 0
+     Filter Bilinear
+     Format LDR
+     "Clear Color" 0 0 0 0
+     "Blend mode" Blend
+    }
+   }
+  }
+ }
+}

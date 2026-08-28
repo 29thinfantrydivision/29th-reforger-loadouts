@@ -18,11 +18,6 @@ GenericEntity : "{5A987A8A13763769}Prefabs/Weapons/Rifles/M16/Rifle_M16A2_M203.e
   }
   WeaponComponent "{CFBAA4B706BA66E8}" {
    components {
-    AttachmentSlotComponent "{544EDE4D93452F03}" {
-     AttachmentSlot InventoryStorageSlot underbarrel {
-      Prefab "{AB29C0FFEE29D003}Prefabs/Weapons/Attachments/Underbarrel/29th_UGL_M203_long.et"
-     }
-    }
     MuzzleComponent "{CA6BE4D6B867541F}" {
      FireModes {
       BaseFireMode "{619AB45BF76565F3}" {
