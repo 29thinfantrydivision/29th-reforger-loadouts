@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{AB29C0FFEE29E011}Assets/Items/Equipment/Backpacks/29th_Backpack_M5/Data/29th_Backpack_M5_NoCross.emat"
+ Configurations {
+  EMATResourceClass PC {
+  }
+  EMATResourceClass XBOX_ONE : PC {
+  }
+  EMATResourceClass XBOX_SERIES : PC {
+  }
+  EMATResourceClass PS4 : PC {
+  }
+  EMATResourceClass PS5 : PC {
+  }
+  EMATResourceClass HEADLESS : PC {
+  }
+ }
+}
