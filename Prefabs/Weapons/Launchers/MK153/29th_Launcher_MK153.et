@@ -1,0 +1,89 @@
+GenericEntity : "{DB53366D8C521124}Prefabs/Weapons/Launchers/MK153/Launcher_MK153mod2_NoMBS.et" {
+ ID "CFBAA4B725411E45"
+ components {
+  WeaponComponent "{CFBAA4B706BA66E8}" {
+   components {
+    AttachmentSlotComponent "{620950A5750AEA2A}" {
+     AttachmentSlot InventoryStorageSlot mbus_front {
+      Prefab "{AB29C0FFEE29AC09}Prefabs/Weapons/Attachments/Optics/29th_MBUS_Front_MK153.et"
+     }
+    }
+    AttachmentSlotComponent "{62B6FD8D52DA0520}" {
+     AttachmentSlot InventoryStorageSlot mbus {
+      Prefab ""
+     }
+    }
+    AttachmentSlotComponent "{AB29C0FFEE29AC03}" {
+     AttachmentSlot InventoryStorageSlot optic_weaver {
+      PivotID "slot_rail_mbs"
+      Offset 0 0.009 0.037
+      ChildPivotID "snap_weapon"
+      ActivatePhysicsOnDetaching 1
+      DeactivatePhysicsOnAtaching 1
+      InspectionWidgetOffset -0.0589 0.1409 0.3086
+     }
+     AttachmentType AttachmentOpticsRIS1913Short "{AB29C0FFEE29AC04}" {
+     }
+     ShowInInspection 1
+    }
+    AttachmentSlotComponent "{B502E4DC8A9E835E}" {
+     Enabled 0
+     AttachmentSlot InventoryStorageSlot optics {
+     }
+    }
+    SightsComponent "{BB23A637957CFFF8}" {
+     SightsPosition PointInfo "{BB23A63796688E69}" {
+      Offset 0 0.0352 -0.5476
+     }
+     SightsRanges {
+      SightRangeInfo "{620950A49195205B}" {
+       Range 0 100
+       WeaponPosition PointInfo "{620950A49195205F}" {
+        Offset 0 -0.00367 -0.00139
+        Angles 0.39551 0 0
+       }
+      }
+      SightRangeInfo "{6A5485709F8355E5}" {
+       Range 0 200
+       WeaponPosition PointInfo "{6A5485709F8355F2}" {
+        Offset 0 -0.00773 -0.00297
+        Angles 0.83496 0 0
+       }
+      }
+      SightRangeInfo "{6A5485709F8698B0}" {
+       Range 0 300
+       WeaponPosition PointInfo "{6A5485709F86989E}" {
+        Offset 0 -0.01179 -0.00459
+        Angles 1.27441 0 0
+       }
+      }
+      SightRangeInfo "{6A5485709F84DEC9}" {
+       Range 0 400
+       WeaponPosition PointInfo "{6A5485709F84DED9}" {
+        Offset 0 -0.01623 -0.00643
+        Angles 1.75781 0 0
+       }
+      }
+      SightRangeInfo "{6A5485709F9A1D19}" {
+       Range 0 500
+       WeaponPosition PointInfo "{6A5485709F9A1D6A}" {
+        Offset 0 -0.02028 -0.00814
+        Angles 2.19727 0 0
+       }
+      }
+     }
+     SightsPointRear PointInfo "{6302A70E220DCF91}" {
+      PivotID "slot_rail_front"
+      Offset 0 0.0352 -0.5029
+     }
+     SightsSwitchSkip 0
+     ZeroingGenerator BaseZeroingGenerator "{AB29C0FFEE29AC90}" {
+     }
+    }
+    MuzzleComponent "{50F65D04F21F7633}" {
+     MagazineTemplate "{2C935EF6F98E6354}Prefabs/Weapons/Magazines/MK153/Container_MK153_HEAA.et"
+    }
+   }
+  }
+ }
+}

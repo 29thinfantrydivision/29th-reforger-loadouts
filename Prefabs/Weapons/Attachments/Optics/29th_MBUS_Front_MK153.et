@@ -1,0 +1,20 @@
+GameEntity : "{B05910AE5C2526DD}Prefabs/Weapons/Attachments/Optics/mbus/mbus_blk_folding_sight_front.et" {
+ ID "4BA426CBAED42A14"
+ components {
+  InventoryItemComponent "{62A74DAB8269036F}" {
+   Attributes SCR_ItemAttributeCollection "{62A74DAB82690363}" {
+    ItemDisplayName UIInfo "{62A74DAB82690364}" {
+     Name "#RK29-Item_MBUSFront_Name"
+     Description "#RK29-Item_MBUSFront_Description"
+    }
+   }
+  }
+  ActionsManagerComponent "{62A74DAB8269034E}" {
+   additionalActions {
+    RHS_FlipSightUserAction "{62A74DACC11E3325}" {
+     m_bShouldBeFoldedByDefault 0
+    }
+   }
+  }
+ }
+}

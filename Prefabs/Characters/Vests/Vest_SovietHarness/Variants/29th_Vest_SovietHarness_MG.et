@@ -1,10 +1,19 @@
 GenericEntity : "{08155E701A94961F}Prefabs/Characters/Vests/Vest_SovietHarness/Vest_SovietHarness_assembled_base.et" {
  ID "50D8C49B3558F152"
  components {
+  ClothNodeStorageComponent "{5CE0BD449244C3E1}" {
+   MaxCumulativeVolume 8050
+  }
   BaseLoadoutClothComponent "{5312D798A71DFBB1}" {
    Slots {
+    LoadoutSlotInfo GrenadePouch {
+     Prefab "{AB29C0FFEE29E003}Prefabs/Items/Equipment/Accessories/29th_Pouch_Soviet_100rnd_PKM.et"
+    }
     LoadoutSlotInfo Canteen {
      Enabled 0
+    }
+    LoadoutSlotInfo Bayonet {
+     Prefab "{AB29C0FFEE29E002}Prefabs/Items/Equipment/Accessories/29th_Scabbard_Bayonet_6Kh4_empty.et"
     }
    }
   }
