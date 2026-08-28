@@ -1,0 +1,11 @@
+ImageWidgetClass {
+ Name "TraitIcon"
+ Slot LayoutSlot "{AB29C0FFEEB21C01}" {
+  HorizontalAlign 1
+  VerticalAlign 1
+ }
+ "Inherit Color" 1
+ Texture "{A37CF52DBA874559}UI/Imagesets/WeaponInfo/WeaponInfo_Ammo.imageset"
+ Image "ammotype-fmj"
+ Size 16 16
+}

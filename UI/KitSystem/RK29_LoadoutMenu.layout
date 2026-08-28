@@ -1,0 +1,486 @@
+OverlayWidgetClass {
+ Name "RK29_LoadoutMenu"
+ {
+  HorizontalLayoutWidgetClass "{AB29C0FFEEB22400}" {
+   Name "LoadoutColumns"
+   Slot OverlayWidgetSlot "{AB29C0FFEEB22401}" {
+    HorizontalAlign 3
+    VerticalAlign 3
+   }
+   {
+    SizeLayoutWidgetClass "{AB29C0FFEEB21521}" {
+     Name "ClassBand"
+     Slot LayoutSlot "{AB29C0FFEEB21522}" {
+      VerticalAlign 3
+      Padding 0 0 12 0
+     }
+     AllowWidthOverride 1
+     WidthOverride 240
+     AllowHeightOverride 1
+     HeightOverride 720
+     {
+      ScrollLayoutWidgetClass "{AB29C0FFEEB21523}" {
+       Name "ClassScroll"
+       Slot AlignableSlot "{AB29C0FFEEB21524}" {
+        HorizontalAlign 3
+        VerticalAlign 3
+       }
+       {
+        VerticalLayoutWidgetClass "{AB29C0FFEEB21525}" {
+         Name "ColClasses"
+         Slot AlignableSlot "{AB29C0FFEEB21526}" {
+          HorizontalAlign 3
+         }
+        }
+       }
+      }
+     }
+    }
+    SizeLayoutWidgetClass "{AB29C0FFEEB21527}" {
+     Name "TileBand"
+     Slot LayoutSlot "{AB29C0FFEEB21528}" {
+      VerticalAlign 3
+      Padding 0 0 12 0
+     }
+     AllowWidthOverride 1
+     WidthOverride 311
+     AllowHeightOverride 1
+     HeightOverride 720
+     {
+      VerticalLayoutWidgetClass "{AB29C0FFEEB22C00}" {
+       Name "TileCol"
+       Slot AlignableSlot "{AB29C0FFEEB22C01}" {
+        HorizontalAlign 3
+        VerticalAlign 3
+       }
+       {
+        SizeLayoutWidgetClass "{AB29C0FFEEB22C02}" {
+         Name "ModeBar"
+         Slot LayoutSlot "{AB29C0FFEEB22C03}" {
+          HorizontalAlign 3
+          Padding 0 0 0 8
+         }
+         AllowHeightOverride 1
+         HeightOverride 30
+         {
+          HorizontalLayoutWidgetClass "{AB29C0FFEEB22C04}" {
+           Name "ModeRow"
+           Slot AlignableSlot "{AB29C0FFEEB22C05}" {
+            HorizontalAlign 3
+            VerticalAlign 3
+           }
+           {
+            SizeLayoutWidgetClass "{AB29C0FFEEB22C10}" {
+             Name "ModeLoadoutSize"
+             Slot LayoutSlot "{AB29C0FFEEB22C11}" {
+              VerticalAlign 3
+              SizeMode Fill
+              FillWeight 1
+             }
+             {
+              ButtonWidgetClass "{AB29C0FFEEB22C12}" {
+               Name "BtnModeLoadout"
+               Slot AlignableSlot "{AB29C0FFEEB22C13}" {
+                HorizontalAlign 3
+                VerticalAlign 3
+               }
+               components {
+                SCR_ModularButtonComponent "{AB29C0FFEEB3002D}" {
+                 m_aEffects {
+                  SCR_ButtonEffectVisibility "{AB29C0FFEEB3002E}" {
+                   m_eEvents 24576
+                   m_sWidgetName "ModeLoadoutBg"
+                   m_bToggledOn 1
+                  }
+                  SCR_ButtonEffectColor "{AB29C0FFEEB3002F}" : "{C5E2E5A4650334DC}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Color_ButtonBackground.conf" {
+                   m_eEvents 6159
+                   m_sWidgetName "ModeLoadoutPlate"
+                   m_cDefault 0.153 0.153 0.149 1
+                   m_cHovered 0.761 0.386 0.08 0.35
+                   m_cActivated 0.153 0.153 0.149 1
+                   m_cActivatedHovered 0.761 0.386 0.08 0.35
+                   m_cFocusGained 0.761 0.386 0.08 0.35
+                   m_cFocusLost 0.153 0.153 0.149 1
+                   m_cToggledOn 0.153 0.153 0.149 1
+                   m_cToggledOff 0.153 0.153 0.149 1
+                  }
+                  SCR_ButtonEffectSound "{AB29C0FFEEB30030}" : "{D0EF588033B1793A}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Confirm.conf" {
+                  }
+                  SCR_ButtonEffectSound "{AB29C0FFEEB30031}" : "{A96BD3D75E106FC5}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Focused.conf" {
+                  }
+                  SCR_ButtonEffectSound "{AB29C0FFEEB30032}" : "{F66E5F9DD84911A8}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Hovered.conf" {
+                  }
+                 }
+                 m_eEventReturnValue 2147483599
+                 m_bCanBeToggled 1
+                 m_bToggledOnlyThroughApi 1
+                }
+               }
+               style blank
+               "no focus" 1
+               {
+                OverlayWidgetClass "{AB29C0FFEEB22C14}" {
+                 Name "ModeLoadoutFrame"
+                 Slot ButtonWidgetSlot "{AB29C0FFEEB22C15}" {
+                  HorizontalAlign 3
+                  VerticalAlign 3
+                 }
+                 {
+                  ImageWidgetClass "{AB29C0FFEEB22C48}" {
+                   Name "ModeLoadoutPlate"
+                   Slot OverlayWidgetSlot "{AB29C0FFEEB22C49}" {
+                    HorizontalAlign 3
+                    VerticalAlign 3
+                   }
+                   Color 0.153 0.153 0.149 1
+                  }
+                  ImageWidgetClass "{AB29C0FFEEB22C16}" {
+                   Name "ModeLoadoutBg"
+                   Slot OverlayWidgetSlot "{AB29C0FFEEB22C17}" {
+                    HorizontalAlign 3
+                    VerticalAlign 3
+                   }
+                   Color 0.761 0.386 0.08 1
+                  }
+                  RichTextWidgetClass "{AB29C0FFEEB22C18}" {
+                   Name "ModeLoadoutLabel"
+                   Slot OverlayWidgetSlot "{AB29C0FFEEB22C19}" {
+                    HorizontalAlign 1
+                    VerticalAlign 1
+                   }
+                   Color 1 1 1 1
+                   Text "Loadout"
+                   "Font Size" 15
+                   "Min Font Size" 12
+                   FontProperties FontProperties "{AB29C0FFEEB22C1A}" {
+                    Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+                   }
+                  }
+                 }
+                }
+               }
+              }
+             }
+            }
+            SizeLayoutWidgetClass "{AB29C0FFEEB22C20}" {
+             Name "ModeAppearanceSize"
+             Slot LayoutSlot "{AB29C0FFEEB22C21}" {
+              VerticalAlign 3
+              SizeMode Fill
+              FillWeight 1
+             }
+             {
+              ButtonWidgetClass "{AB29C0FFEEB22C22}" {
+               Name "BtnModeAppearance"
+               Slot AlignableSlot "{AB29C0FFEEB22C23}" {
+                HorizontalAlign 3
+                VerticalAlign 3
+               }
+               components {
+                SCR_ModularButtonComponent "{AB29C0FFEEB30033}" {
+                 m_aEffects {
+                  SCR_ButtonEffectVisibility "{AB29C0FFEEB30034}" {
+                   m_eEvents 24576
+                   m_sWidgetName "ModeAppearanceBg"
+                   m_bToggledOn 1
+                  }
+                  SCR_ButtonEffectColor "{AB29C0FFEEB30035}" : "{C5E2E5A4650334DC}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Color_ButtonBackground.conf" {
+                   m_eEvents 6159
+                   m_sWidgetName "ModeAppearancePlate"
+                   m_cDefault 0.153 0.153 0.149 1
+                   m_cHovered 0.761 0.386 0.08 0.35
+                   m_cActivated 0.153 0.153 0.149 1
+                   m_cActivatedHovered 0.761 0.386 0.08 0.35
+                   m_cFocusGained 0.761 0.386 0.08 0.35
+                   m_cFocusLost 0.153 0.153 0.149 1
+                   m_cToggledOn 0.153 0.153 0.149 1
+                   m_cToggledOff 0.153 0.153 0.149 1
+                  }
+                  SCR_ButtonEffectSound "{AB29C0FFEEB30036}" : "{D0EF588033B1793A}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Confirm.conf" {
+                  }
+                  SCR_ButtonEffectSound "{AB29C0FFEEB30037}" : "{A96BD3D75E106FC5}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Focused.conf" {
+                  }
+                  SCR_ButtonEffectSound "{AB29C0FFEEB30038}" : "{F66E5F9DD84911A8}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Hovered.conf" {
+                  }
+                 }
+                 m_eEventReturnValue 2147483599
+                 m_bCanBeToggled 1
+                 m_bToggledOnlyThroughApi 1
+                }
+               }
+               style blank
+               "no focus" 1
+               {
+                OverlayWidgetClass "{AB29C0FFEEB22C24}" {
+                 Name "ModeAppearanceFrame"
+                 Slot ButtonWidgetSlot "{AB29C0FFEEB22C25}" {
+                  HorizontalAlign 3
+                  VerticalAlign 3
+                 }
+                 {
+                  ImageWidgetClass "{AB29C0FFEEB22C4A}" {
+                   Name "ModeAppearancePlate"
+                   Slot OverlayWidgetSlot "{AB29C0FFEEB22C4B}" {
+                    HorizontalAlign 3
+                    VerticalAlign 3
+                   }
+                   Color 0.153 0.153 0.149 1
+                  }
+                  ImageWidgetClass "{AB29C0FFEEB22C26}" {
+                   Name "ModeAppearanceBg"
+                   Slot OverlayWidgetSlot "{AB29C0FFEEB22C27}" {
+                    HorizontalAlign 3
+                    VerticalAlign 3
+                   }
+                   Color 0.761 0.386 0.08 1
+                  }
+                  RichTextWidgetClass "{AB29C0FFEEB22C28}" {
+                   Name "ModeAppearanceLabel"
+                   Slot OverlayWidgetSlot "{AB29C0FFEEB22C29}" {
+                    HorizontalAlign 1
+                    VerticalAlign 1
+                   }
+                   Color 1 1 1 1
+                   Text "Appearance"
+                   "Font Size" 15
+                   "Min Font Size" 12
+                   FontProperties FontProperties "{AB29C0FFEEB22C2A}" {
+                    Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+                   }
+                  }
+                 }
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+        ScrollLayoutWidgetClass "{AB29C0FFEEB21529}" {
+         Name "TileScroll"
+         Slot LayoutSlot "{AB29C0FFEEB2152A}" {
+          HorizontalAlign 3
+          SizeMode Fill
+         }
+         {
+          VerticalLayoutWidgetClass "{AB29C0FFEEB2152B}" {
+           Name "ColTiles"
+           Slot AlignableSlot "{AB29C0FFEEB2152C}" {
+            HorizontalAlign 3
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+    SizeLayoutWidgetClass "{AB29C0FFEEB2152D}" {
+     Name "DetailBand"
+     Slot LayoutSlot "{AB29C0FFEEB2152E}" {
+      VerticalAlign 3
+      SizeMode Fill
+     }
+     AllowHeightOverride 1
+     HeightOverride 720
+     {
+      OverlayWidgetClass "{AB29C0FFEEB22450}" {
+       Name "DetailStack"
+       Slot AlignableSlot "{AB29C0FFEEB22451}" {
+        HorizontalAlign 3
+        VerticalAlign 3
+       }
+       {
+        VerticalLayoutWidgetClass "{AB29C0FFEEB2152F}" {
+         Name "DetailCol"
+         Slot OverlayWidgetSlot "{AB29C0FFEEB21530}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+         }
+         {
+          SizeLayoutWidgetClass "{AB29C0FFEEB21531}" {
+           Name "DetailTitleSize"
+           Slot LayoutSlot "{AB29C0FFEEB21532}" {
+            HorizontalAlign 3
+            Padding 0 0 0 6
+           }
+           AllowHeightOverride 1
+           HeightOverride 32
+           {
+            RichTextWidgetClass "{AB29C0FFEEB21533}" {
+             Name "DetailTitle"
+             Slot AlignableSlot "{AB29C0FFEEB21534}" {
+              HorizontalAlign 3
+              VerticalAlign 3
+             }
+             Color 1 1 1 1
+             Text ""
+             "Font Size" 20
+             "Min Font Size" 16
+             FontProperties FontProperties "{AB29C0FFEEB21535}" {
+              Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+             }
+             "Vertical Alignment" Center
+            }
+           }
+          }
+          ScrollLayoutWidgetClass "{AB29C0FFEEB21536}" {
+           Name "DetailScroll"
+           Slot LayoutSlot "{AB29C0FFEEB21537}" {
+            HorizontalAlign 3
+            SizeMode Fill
+           }
+           {
+            VerticalLayoutWidgetClass "{AB29C0FFEEB21538}" {
+             Name "ColDetail"
+             Slot AlignableSlot "{AB29C0FFEEB21539}" {
+              HorizontalAlign 3
+             }
+            }
+           }
+          }
+         }
+        }
+        SizeLayoutWidgetClass "{AB29C0FFEEB22452}" {
+         Name "MannequinBox"
+         Slot OverlayWidgetSlot "{AB29C0FFEEB22453}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+         }
+         "Is Visible" 0
+         {
+          ItemPreviewWidgetClass "{AB29C0FFEEB22454}" {
+           Name "MannequinPreview"
+           Slot AlignableSlot "{AB29C0FFEEB22455}" {
+            HorizontalAlign 3
+            VerticalAlign 3
+           }
+           Opacity 1
+           "Use Engine Scale" 0
+           Color 1 1 1 1
+           "Use clear color" 1
+           "Clear Color" 0 0 0 0
+           "Blend mode" Blend
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+    SizeLayoutWidgetClass "{AB29C0FFEEB224B1}" {
+     Name "InfoBand"
+     Slot LayoutSlot "{AB29C0FFEEB224B2}" {
+      VerticalAlign 3
+      Padding 12 0 0 0
+     }
+     AllowWidthOverride 1
+     WidthOverride 230
+     AllowHeightOverride 1
+     HeightOverride 720
+     {
+      ScrollLayoutWidgetClass "{AB29C0FFEEB22520}" {
+       Name "InfoScroll"
+       Slot AlignableSlot "{AB29C0FFEEB22521}" {
+        HorizontalAlign 3
+        VerticalAlign 3
+       }
+       {
+        VerticalLayoutWidgetClass "{AB29C0FFEEB21F03}" {
+         Name "ColInfo"
+         Slot AlignableSlot "{AB29C0FFEEB21F04}" {
+          HorizontalAlign 3
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+  FrameWidgetClass "{AB29C0FFEEB22402}" {
+   Name "TipLayer"
+   Slot OverlayWidgetSlot "{AB29C0FFEEB22403}" {
+    HorizontalAlign 3
+    VerticalAlign 3
+   }
+   "Ignore Cursor" 1
+   "Z Order" 10
+   {
+    SizeLayoutWidgetClass "{AB29C0FFEEB22404}" {
+     Name "HoverTip"
+     Slot FrameWidgetSlot "{AB29C0FFEEB22405}" {
+      SizeToContent 1
+     }
+     "Is Visible" 0
+     {
+      OverlayWidgetClass "{AB29C0FFEEB22406}" {
+       Name "HoverTipFrame"
+       Slot AlignableSlot "{AB29C0FFEEB22407}" {
+        HorizontalAlign 3
+        VerticalAlign 3
+       }
+       {
+        ImageWidgetClass "{AB29C0FFEEB22408}" {
+         Name "TipBase"
+         Slot OverlayWidgetSlot "{AB29C0FFEEB22409}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+         }
+         Color 0 0 0 0.93
+        }
+        HorizontalLayoutWidgetClass "{AB29C0FFEEB22486}" {
+         Name "TipLine"
+         Slot OverlayWidgetSlot "{AB29C0FFEEB22487}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+          Padding 10 6 10 6
+         }
+         {
+          RichTextWidgetClass "{AB29C0FFEEB2240A}" {
+           Name "TipText"
+           Slot LayoutSlot "{AB29C0FFEEB2240B}" {
+            VerticalAlign 1
+           }
+           Color 0.9 0.9 0.89 1
+           Text ""
+           "Font Size" 15
+           "Min Font Size" 13
+           FontProperties FontProperties "{AB29C0FFEEB2240C}" {
+            Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+           }
+          }
+          SizeLayoutWidgetClass "{AB29C0FFEEB22488}" {
+           Name "TipSupplySize"
+           Slot LayoutSlot "{AB29C0FFEEB22489}" {
+            VerticalAlign 1
+            Padding 6 0 0 0
+           }
+           "Is Visible" 0
+           AllowWidthOverride 1
+           WidthOverride 20
+           {
+            ImageWidgetClass "{AB29C0FFEEB2248A}" {
+             Name "TipSupplyIcon"
+             Slot AlignableSlot "{AB29C0FFEEB2248B}" {
+              HorizontalAlign 0
+              VerticalAlign 1
+             }
+             "Is Visible" 0
+             Texture "{40D7A3144129A56F}UI/Textures/InventoryIcons/Supplies-stored.edds"
+             Size 18 18
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}

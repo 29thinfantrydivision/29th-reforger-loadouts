@@ -1,10 +1,9 @@
 //------------------------------------------------------------------------------------------------
-//! Client world system owning the kit menu keybind. Registered in
-//! Configs/Systems/ChimeraSystemsConfig.conf.
+//! Client world system owning the kit menu keybind. Registered in ChimeraSystemsConfig.conf.
 //------------------------------------------------------------------------------------------------
 class RK29_KitInputSystem extends WorldSystem
 {
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	override static void InitInfo(WorldSystemInfo outInfo)
 	{
 		super.InitInfo(outInfo);
@@ -14,11 +13,11 @@ class RK29_KitInputSystem extends WorldSystem
 			.SetLocation(WorldSystemLocation.Client);
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	override void OnInit()
 	{
 		// before any listener fires: put back user rebinds a mod-less session may have wiped
 		RK29_KeybindPrefs.RestoreOnce();
-		RK29_KitPicker.RegisterListeners();
+		RK29_LoadoutMenu.RegisterListeners();
 	}
 }

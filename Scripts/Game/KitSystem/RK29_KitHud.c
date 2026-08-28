@@ -3,8 +3,7 @@
 //------------------------------------------------------------------------------------------------
 class RK29_KitHud
 {
-	protected static const ResourceName HUD_LAYOUT = "{AB29C0FFEE292000}UI/KitSystem/RK29_KitHud.layout";
-	protected static const ResourceName ROW_LAYOUT = "{AB29C0FFEE291000}UI/KitSystem/RK29_Row.layout";
+	protected static const ResourceName HUD_LAYOUT = "{AB29C0FFEEB20033}UI/KitSystem/RK29_KitHud.layout";
 	protected static const int TICK_MS = 1000;
 	protected static const int HEADER_ROW_HEIGHT = 24;
 
@@ -19,21 +18,39 @@ class RK29_KitHud
 	protected Widget m_wFooterRow;
 	protected Widget m_wHeaderRow;
 	protected bool m_bSubscribed;
+
+	//! False means the table on screen is stale or absent: the counts invoker rebuilds on every
+	//! change but cannot give the first paint after create, re-show, or a faction-less bail.
+	protected bool m_bRowsPainted;
 	protected static bool s_bHiddenReported;
 	protected static bool s_bShownReported;
+	protected static bool s_bLayoutWarned;
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	//! Rebuilds every world - statics survive scenario changes, the callqueue does not.
 	static void Boot()
 	{
 		if (System.IsConsoleApp())
 			return;
 
+		// take the outgoing tick and its counts subscription back first: that invoker belongs to the
+		// game mode and outlives this object, so one left standing is a dead HUD still rebuilding.
+		if (s_Instance)
+		{
+			GetGame().GetCallqueue().Remove(s_Instance.Tick);
+			s_Instance.Unsubscribe();
+		}
+		s_bLayoutWarned = false;
+		s_bHiddenReported = false;
+		s_bShownReported = false;
+
 		s_Instance = new RK29_KitHud();
 		GetGame().GetCallqueue().CallLater(s_Instance.Tick, TICK_MS, true);
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
+	//! The clock and the show/hide. The table is not rebuilt here - the counts invoker does that;
+	//! the one rebuild it cannot give is the first paint after the HUD appears (m_bRowsPainted).
 	protected void Tick()
 	{
 		RK29_KitManager mgr = RK29_KitManager.GetInstance();
@@ -45,6 +62,7 @@ class RK29_KitHud
 		{
 			if (m_wRoot)
 				m_wRoot.SetVisible(false);
+			m_bRowsPainted = false;
 			return;
 		}
 
@@ -53,9 +71,12 @@ class RK29_KitHud
 			return;
 
 		SubscribeCounts();
+
+		// visible before the rebuild, because Rebuild refuses to stamp into a hidden root
 		m_wRoot.SetVisible(true);
 		UpdateTimer(mgr);
-		Rebuild();
+		if (!m_bRowsPainted)
+			Rebuild();
 
 		if (!s_bShownReported && m_wRows)
 		{
@@ -66,11 +87,9 @@ class RK29_KitHud
 		}
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Briefing countdown in the title band, ticking with the HUD. Rendered only while the
-	//! Round Timer addon is loaded - in config-fallback mode there is no clock to show.
-	//! Split at the colon into two fixed half-cells so the colon rides the centerline of the
-	//! count column below, whatever the digits measure - minutes grow leftward, seconds stay put.
+	//------------------------------------------------------------------------------------------------
+	//! Briefing countdown, hidden when the Round Timer addon is absent (remaining < 0). Split at the
+	//! colon into two fixed half-cells so the colon rides the centerline of the count column below.
 	protected void UpdateTimer(RK29_KitManager mgr)
 	{
 		if (!m_wTimerCell || !m_wTimerMin || !m_wTimerSec)
@@ -102,20 +121,24 @@ class RK29_KitHud
 		m_wTimerCell.SetVisible(true);
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	protected void EnsureWidgets()
 	{
 		if (m_wRoot)
 			return;
 
-		WorkspaceWidget ws = GetGame().GetWorkspace();
-		if (!ws)
+		// the HUD manager hands the layout the cursor-ignore flag and full-screen anchors; LOW is the
+		// layer read-only elements draw in. Absent for a world's first ticks, so a bare return retries.
+		SCR_HUDManagerComponent hud = GetGame().GetHUDManager();
+		if (!hud)
 			return;
 
-		m_wRoot = ws.CreateWidgets(HUD_LAYOUT);
+		m_wRoot = hud.CreateLayout(HUD_LAYOUT, EHudLayers.LOW);
 		if (!m_wRoot)
 		{
-			Print("[RK29] HUD layout failed to load", LogLevel.WARNING);
+			if (!s_bLayoutWarned)
+				Print("[RK29] HUD layout failed to load - retrying each tick", LogLevel.WARNING);
+			s_bLayoutWarned = true;
 			return;
 		}
 		m_wRows   = m_wRoot.FindAnyWidget("HudRows");
@@ -128,22 +151,19 @@ class RK29_KitHud
 		BuildHeaderRow();
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Column headings, built once: a glyph per numeric column, sitting in that column's own
-	//! fixed-width cell so it lands dead over the numbers below it. Built from the row layout
-	//! precisely so the columns cannot drift apart.
+	//------------------------------------------------------------------------------------------------
+	//! Built from the row layout so the header glyphs cannot drift out of the columns below them.
 	protected void BuildHeaderRow()
 	{
 		if (!m_wHeaderRow)
 			return;
 
 		WorkspaceWidget ws = GetGame().GetWorkspace();
-		Widget header = ws.CreateWidgets(ROW_LAYOUT, m_wHeaderRow);
+		Widget header = ws.CreateWidgets(RK29_MenuRowKit.ROW_LAYOUT, m_wHeaderRow);
 		if (!header)
 			return;
 
-		// a header is a label strip, not a row - shrink it so it sits on top of the table
-		// instead of eating a row's worth of height and crowding the first entry
+		// a header is a label strip, not a row - shrink it or it eats a row's worth of height
 		SizeLayoutWidget headerSize = SizeLayoutWidget.Cast(header);
 		if (headerSize)
 			headerSize.SetHeightOverride(HEADER_ROW_HEIGHT);
@@ -163,8 +183,6 @@ class RK29_KitHud
 		if (magIcon)
 			magIcon.SetVisible(true);
 
-		// the count column is headed by the same players glyph the server browser uses,
-		// which reads faster than a word and keeps both headings the same shape
 		Widget aliveIcon = header.FindAnyWidget("RowAliveIcon");
 		if (aliveIcon)
 			aliveIcon.SetVisible(true);
@@ -174,7 +192,7 @@ class RK29_KitHud
 			aliveText.SetVisible(false);
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	protected void SubscribeCounts()
 	{
 		if (m_bSubscribed)
@@ -186,12 +204,28 @@ class RK29_KitHud
 		m_bSubscribed = true;
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
+	//! Called on the outgoing instance when a world reboots - see Boot.
+	protected void Unsubscribe()
+	{
+		if (!m_bSubscribed)
+			return;
+
+		SCR_GameModeEditor gm = SCR_GameModeEditor.Cast(GetGame().GetGameMode());
+		if (gm)
+			gm.RK29_GetOnCountsChanged().Remove(Rebuild);
+
+		m_bSubscribed = false;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Row order follows the side config's class order, with anything unlisted appended in loadout
+	//! order; kits sharing a label sum into one row, whose icon is the first kit claiming that label.
 	protected void Rebuild()
 	{
 		RK29_KitManager mgr = RK29_KitManager.GetInstance();
 		SCR_GameModeEditor gm = SCR_GameModeEditor.Cast(GetGame().GetGameMode());
-		if (!mgr || !gm || !m_wRows || !m_wRoot.IsVisible())
+		if (!mgr || !gm || !m_wRoot || !m_wRows || !m_wRoot.IsVisible())
 			return;
 
 		string factionKey = RK29_KitHud.LocalFactionKey();
@@ -203,16 +237,12 @@ class RK29_KitHud
 				RK29_Log.Trace("[RK29] HUD hidden - local player has no faction yet");
 			}
 			m_wRoot.SetVisible(false);
+			// nothing was stamped, so make the next tick repaint instead of trusting the standing table
+			m_bRowsPainted = false;
 			return;
 		}
 
-		Widget child = m_wRows.GetChildren();
-		while (child)
-		{
-			Widget next = child.GetSibling();
-			child.RemoveFromHierarchy();
-			child = next;
-		}
+		RK29_WidgetUtil.ClearChildren(m_wRows);
 
 		if (m_wTitle)
 			m_wTitle.SetText(factionKey + " - KITS FIELDED");
@@ -221,18 +251,37 @@ class RK29_KitHud
 		int totalAlive = 0;
 		int totalMag = 0;
 
-		foreach (int idx, string kitName : mgr.m_aIndexToKit)
+		map<string, int> aliveByLabel = new map<string, int>();
+		map<string, int> magByLabel = new map<string, int>();
+		map<string, RK29_KitStruct> labelKits = new map<string, RK29_KitStruct>();
+		array<string> indexOrder = {};
+
+		int kitCount = mgr.KitCount();
+		for (int idx = 0; idx < kitCount; idx++)
 		{
+			string kitName = mgr.KitNameAt(idx);
 			if (kitName == "")
 				continue;
-			RK29_KitStruct kit = mgr.m_mKits.Get(kitName);
+			RK29_KitStruct kit = mgr.KitByName(kitName);
 			if (!kit || kit.m_sFactionKey != factionKey)
 				continue;
-			totalAlive += gm.RK29_GetAliveCount(idx);
-			totalMag   += gm.RK29_GetMagnifiedCount(idx);
+
+			int alive = gm.RK29_GetAliveCount(idx);
+			int mag = gm.RK29_GetMagnifiedCount(idx);
+			totalAlive += alive;
+			totalMag += mag;
+
+			string label = RK29_KitHud.ShortKitName(kitName);
+			if (!indexOrder.Contains(label))
+			{
+				indexOrder.Insert(label);
+				labelKits.Set(label, kit);
+			}
+
+			aliveByLabel.Set(label, aliveByLabel.Get(label) + alive);
+			magByLabel.Set(label, magByLabel.Get(label) + mag);
 		}
 
-		// with every number in the column hidden, the heading would be labelling nothing
 		if (m_wHeaderRow)
 		{
 			Widget headMagIcon = m_wHeaderRow.FindAnyWidget("RowMagIcon");
@@ -240,17 +289,14 @@ class RK29_KitHud
 				headMagIcon.SetVisible(totalMag > 0);
 		}
 
-		// row order follows the side config's class order, leftovers append in loadout order;
-		// kits sharing a display label sum into one row
 		array<string> labels = {};
-		map<string, RK29_KitStruct> labelKits = new map<string, RK29_KitStruct>();
-		if (mgr.m_Setup && mgr.m_Setup.m_aClasses)
+		if (mgr.Setup() && mgr.Setup().m_aClasses)
 		{
-			foreach (RK29_ClassSetup cls : mgr.m_Setup.m_aClasses)
+			foreach (RK29_ClassSetup cls : mgr.Setup().m_aClasses)
 			{
 				if (!cls)
 					continue;
-				RK29_KitStruct kit = mgr.m_mKits.Get(cls.m_sKitName);
+				RK29_KitStruct kit = mgr.KitByName(cls.m_sKitName);
 				if (!kit || kit.m_sFactionKey != factionKey)
 					continue;
 				string label = RK29_KitHud.ShortKitName(cls.m_sKitName);
@@ -261,123 +307,78 @@ class RK29_KitHud
 				}
 			}
 		}
-		foreach (string kitName : mgr.m_aIndexToKit)
+		foreach (string leftover : indexOrder)
 		{
-			if (kitName == "")
-				continue;
-			RK29_KitStruct kit = mgr.m_mKits.Get(kitName);
-			if (!kit || kit.m_sFactionKey != factionKey)
-				continue;
-			string label = RK29_KitHud.ShortKitName(kitName);
-			if (!labels.Contains(label))
-			{
-				labels.Insert(label);
-				labelKits.Set(label, kit);
-			}
+			if (!labels.Contains(leftover))
+				labels.Insert(leftover);
 		}
 
 		foreach (string label : labels)
 		{
-			int mag;
-			int alive = RK29_KitHud.LabelAlive(gm, mgr, factionKey, label, mag);
+			int alive = aliveByLabel.Get(label);
 			if (alive == 0)
 				continue;
 
-			Widget row = ws.CreateWidgets(ROW_LAYOUT, m_wRows);
+			Widget row = StampRow(ws, m_wRows, label, alive, magByLabel.Get(label));
 			if (!row)
 				continue;
-
-			TextWidget name = TextWidget.Cast(row.FindAnyWidget("RowName"));
-			if (name)
-				name.SetText(label);
-
-			TextWidget value = TextWidget.Cast(row.FindAnyWidget("RowValue"));
-			if (value)
-				value.SetText(alive.ToString());
-
-			// a zero in the optics column is noise - the absence of a number says it
-			TextWidget magValue = TextWidget.Cast(row.FindAnyWidget("RowMagValue"));
-			if (magValue)
-			{
-				magValue.SetText(mag.ToString());
-				magValue.SetVisible(mag > 0);
-			}
 
 			ImageWidget icon = ImageWidget.Cast(row.FindAnyWidget("RowIcon"));
 			if (icon)
 				RK29_KitHud.SetKitIcon(labelKits.Get(label), icon);
 		}
 
-		// the totals are the table's last row, not a caption - same layout, same columns,
-		// so the eye keeps scanning straight down instead of re-parsing a sentence
-		if (m_wFooterRow)
-		{
-			Widget old = m_wFooterRow.GetChildren();
-			while (old)
-			{
-				Widget next = old.GetSibling();
-				m_wFooterRow.RemoveChild(old);
-				old = next;
-			}
-
-			Widget totals = ws.CreateWidgets(ROW_LAYOUT, m_wFooterRow);
-			if (totals)
-			{
-				TextWidget totalName = TextWidget.Cast(totals.FindAnyWidget("RowName"));
-				if (totalName)
-					totalName.SetText("Total");
-
-				TextWidget totalValue = TextWidget.Cast(totals.FindAnyWidget("RowValue"));
-				if (totalValue)
-					totalValue.SetText(totalAlive.ToString());
-
-				TextWidget totalMagValue = TextWidget.Cast(totals.FindAnyWidget("RowMagValue"));
-				if (totalMagValue)
-				{
-					totalMagValue.SetText(totalMag.ToString());
-					totalMagValue.SetVisible(totalMag > 0);
-				}
-
-				// the totals line carries no class icon, but it keeps the icon's SPACE so "Total"
-				// starts on the same x as the class names above it. Opacity, not visibility: a
-				// hidden widget leaves the layout entirely, and an untextured ImageWidget left
-				// visible draws as a white square.
-				Widget totalIcon = totals.FindAnyWidget("RowIcon");
-				if (totalIcon)
-					totalIcon.SetOpacity(0);
-
-				Widget totalBase = totals.FindAnyWidget("RowBase");
-				if (totalBase)
-					totalBase.SetVisible(false); // the footer band already provides the backing
-			}
-		}
+		StampFooterRow(ws, totalAlive, totalMag);
+		m_bRowsPainted = true;
 	}
 
-	// ============================================================================== helpers
-
-	//--------------------------------------------------------------------------------------------
-	//! Alive/magnified summed over every kit of this faction sharing the display label.
-	static int LabelAlive(SCR_GameModeEditor gm, RK29_KitManager mgr, string factionKey, string label, out int magnified)
+	//------------------------------------------------------------------------------------------------
+	//! A zero in the optics column is hidden - same judgement on the totals line as on a class one.
+	protected Widget StampRow(WorkspaceWidget ws, Widget parent, string label, int alive,
+		int magnified)
 	{
-		int alive = 0;
-		magnified = 0;
-		foreach (int idx, string kitName : mgr.m_aIndexToKit)
+		Widget row = ws.CreateWidgets(RK29_MenuRowKit.ROW_LAYOUT, parent);
+		if (!row)
+			return null;
+
+		RK29_WidgetUtil.SetText(row, "RowName", label);
+		RK29_WidgetUtil.SetText(row, "RowValue", alive.ToString());
+
+		TextWidget magValue = TextWidget.Cast(row.FindAnyWidget("RowMagValue"));
+		if (magValue)
 		{
-			if (kitName == "")
-				continue;
-			RK29_KitStruct kit = mgr.m_mKits.Get(kitName);
-			if (!kit || kit.m_sFactionKey != factionKey)
-				continue;
-			if (ShortKitName(kitName) != label)
-				continue;
-			alive     += gm.RK29_GetAliveCount(idx);
-			magnified += gm.RK29_GetMagnifiedCount(idx);
+			magValue.SetText(magnified.ToString());
+			magValue.SetVisible(magnified > 0);
 		}
-		return alive;
+
+		return row;
 	}
 
-	//--------------------------------------------------------------------------------------------
-	static string LocalFactionKey()
+	//------------------------------------------------------------------------------------------------
+	protected void StampFooterRow(WorkspaceWidget ws, int totalAlive, int totalMag)
+	{
+		if (!m_wFooterRow)
+			return;
+
+		RK29_WidgetUtil.ClearChildren(m_wFooterRow);
+
+		Widget totals = StampRow(ws, m_wFooterRow, "Total", totalAlive, totalMag);
+		if (!totals)
+			return;
+
+		// keeps the icon's space so "Total" starts on the same x as the class names. Opacity, not
+		// visibility: a hidden widget leaves the layout, and an untextured ImageWidget draws white.
+		Widget totalIcon = totals.FindAnyWidget("RowIcon");
+		if (totalIcon)
+			totalIcon.SetOpacity(0);
+
+		Widget totalBase = totals.FindAnyWidget("RowBase");
+		if (totalBase)
+			totalBase.SetVisible(false);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected static string LocalFactionKey()
 	{
 		Faction f = SCR_FactionManager.SGetLocalPlayerFaction();
 
@@ -402,14 +403,14 @@ class RK29_KitHud
 		return f.GetFactionKey();
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	//! Config display name, else kit name with the "29th <FACTION> - " prefix cut.
 	static string ShortKitName(string kitName)
 	{
 		RK29_KitManager mgr = RK29_KitManager.GetInstance();
-		if (mgr && mgr.m_Setup)
+		if (mgr && mgr.Setup())
 		{
-			RK29_ClassSetup cls = mgr.m_Setup.FindClass(kitName);
+			RK29_ClassSetup cls = mgr.Setup().FindClass(kitName);
 			if (cls && cls.m_sDisplayName != string.Empty)
 				return cls.m_sDisplayName;
 		}
@@ -420,7 +421,7 @@ class RK29_KitHud
 		return kitName;
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	static void SetKitIcon(RK29_KitStruct kit, ImageWidget icon)
 	{
 		if (!kit || !kit.m_UIInfo)

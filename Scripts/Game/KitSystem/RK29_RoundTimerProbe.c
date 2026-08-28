@@ -1,38 +1,30 @@
 //------------------------------------------------------------------------------------------------
 //! Soft Round Timer integration - reads the RT fields off the game mode by name, no dependency.
-//! The names mirror the RT source; a rename there silently drops to the config fallback (phase)
-//! or hides the countdown (timer fields).
+//! A rename there silently drops to the config fallback (phase) or hides the countdown.
+//! PHASE_BRIEFING and PHASE_LIVE below mirror the Round Timer mod's own enum values, not just its
+//! names: reordering that enum there leaves every phase test here reading wrong and saying nothing.
 //------------------------------------------------------------------------------------------------
 class RK29_RoundTimerProbe
 {
 	static const int PHASE_NONE     = 0;
 	static const int PHASE_BRIEFING = 1;
 	static const int PHASE_LIVE     = 2;
-	static const int PHASE_ENDED    = 3;
 
-	protected bool m_bActive;
-	protected bool m_bResolved;
-	protected BaseGameMode m_GameMode;
-	protected int m_iIdxPhase     = -1;
+	protected bool          m_bActive;
+	protected bool          m_bResolved;
+	protected bool          m_bReported;
+	protected BaseGameMode  m_GameMode;
+	protected int           m_iIdxPhase            = -1;
 
 	// countdown fields - optional on top of the phase; any missing just hides the HUD timer
-	protected int m_iIdxStartTs          = -1;
-	protected int m_iIdxDurationS        = -1;
-	protected int m_iIdxPaused           = -1;
-	protected int m_iIdxPausedRemainingS = -1;
+	protected int           m_iIdxStartTs          = -1;
+	protected int           m_iIdxDurationS        = -1;
+	protected int           m_iIdxPaused           = -1;
+	protected int           m_iIdxPausedRemainingS = -1;
 
-	protected bool m_bReported;
-
-	//--------------------------------------------------------------------------------------------
-	void Probe()
+	//------------------------------------------------------------------------------------------------
+	protected void Probe()
 	{
-		m_bActive       = false;
-		m_iIdxPhase     = -1;
-		m_iIdxStartTs          = -1;
-		m_iIdxDurationS        = -1;
-		m_iIdxPaused           = -1;
-		m_iIdxPausedRemainingS = -1;
-
 		m_GameMode = GetGame().GetGameMode();
 		if (!m_GameMode)
 			return;
@@ -65,14 +57,16 @@ class RK29_RoundTimerProbe
 				string countdown = "countdown fields resolved";
 				if (m_iIdxStartTs < 0 || m_iIdxDurationS < 0 || m_iIdxPaused < 0 || m_iIdxPausedRemainingS < 0)
 					countdown = "countdown fields MISSING - HUD clock hidden";
-				Print("[RK29] round timer probe ACTIVE - phase field found on " + m_GameMode.Type().ToString() + " | " + countdown, LogLevel.NORMAL);
+				Print(string.Format(
+					"[RK29] round timer probe ACTIVE - phase field found on %1 | %2",
+					m_GameMode.Type().ToString(), countdown), LogLevel.NORMAL);
 			}
 			else
 				Print("[RK29] round timer not present - config fallback in effect", LogLevel.NORMAL);
 		}
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	//! Retries only until a game mode exists to inspect.
 	void EnsureProbed()
 	{
@@ -80,8 +74,8 @@ class RK29_RoundTimerProbe
 			Probe();
 	}
 
-	//--------------------------------------------------------------------------------------------
-	int GetPhase()
+	//------------------------------------------------------------------------------------------------
+	protected int GetPhase()
 	{
 		if (!m_bActive || !m_GameMode)
 			return PHASE_NONE;
@@ -93,10 +87,9 @@ class RK29_RoundTimerProbe
 		return phase;
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Whole seconds left in the current RT phase, clamped to [0, duration], mirroring the
-	//! timer's own display math. -1 when the timer is absent or any field failed to resolve
-	//! or read - callers hide the countdown on -1 rather than showing a wrong number.
+	//------------------------------------------------------------------------------------------------
+	//! Whole seconds left in the current phase, clamped to [0, duration]. -1 when the timer is
+	//! absent or a field failed to resolve or read - callers hide the countdown rather than lie.
 	int GetRemainingSeconds()
 	{
 		if (!m_bActive || !m_GameMode)
@@ -138,8 +131,8 @@ class RK29_RoundTimerProbe
 		return remaining;
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Open whenever the round is not LIVE. Timer absent = config fallback.
+	//------------------------------------------------------------------------------------------------
+	//! Open whenever the round is not live. Timer absent = config fallback.
 	bool IsPreround(bool noTimerOpen)
 	{
 		if (!m_bActive)
@@ -147,8 +140,7 @@ class RK29_RoundTimerProbe
 		return GetPhase() != PHASE_LIVE;
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Strictly the briefing phase. Timer absent = config fallback.
+	//------------------------------------------------------------------------------------------------
 	bool IsBriefing(bool noTimerOpen)
 	{
 		if (!m_bActive)
