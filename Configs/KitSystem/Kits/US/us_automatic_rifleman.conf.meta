@@ -1,5 +1,5 @@
 MetaFileClass {
- Name "{AB29C0FFEE29B01C}Configs/KitSystem/Kits/USSR/ussr_machine_gunner.conf"
+ Name "{AB29C0FFEE29B01B}Configs/KitSystem/Kits/US/us_automatic_rifleman.conf"
  Configurations {
   CONFResourceClass PC {
   }

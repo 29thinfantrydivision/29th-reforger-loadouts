@@ -320,7 +320,7 @@ class RK29_StashedLoadoutUIInfo
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! Row label for a Current Kit row - the kit's own short name ("Machine Gunner"), not the
+	//! Row label for a Current Kit row - the kit's own short name ("Automatic Rifleman"), not the
 	//! literal loadout name. Empty for every other row, which keeps its own name.
 	static string ResolveName(SCR_BasePlayerLoadout loadout)
 	{
