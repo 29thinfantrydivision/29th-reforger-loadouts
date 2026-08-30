@@ -71,6 +71,18 @@ class RK29_KitManager
 
 	ref RK29_RoundTimerProbe m_Probe = new RK29_RoundTimerProbe();
 
+	//! Owns every UIInfo we hand to a body. SCR_EditableEntityComponent.SetInfoInstance takes a
+	//! WEAK reference - "the info needs to be held somewhere else, the entity will merely link to
+	//! it", in vanilla's own words - so an instance nothing else holds is destroyed the moment the
+	//! call returns, leaving the component pointing at a dead object. Every vanilla caller keeps a
+	//! ref member for exactly this reason; this is ours.
+	//!
+	//! Keyed by KIT, not by body: the info is kit data, so every body wearing that kit shares one
+	//! instance. A per-body map would have to be reaped on every death or it would grow all
+	//! session - trading a dangling pointer for a leak. Bounded by the kit list, and rebuilt with
+	//! the manager on world load, so it never needs clearing.
+	protected ref map<string, ref RK29_KitUIInfo> m_mKitInfos = new map<string, ref RK29_KitUIInfo>();
+
 	//--------------------------------------------------------------------------------------------
 	static RK29_KitManager GetInstance()
 	{
@@ -900,6 +912,14 @@ class RK29_KitManager
 		NotifyDropped_S(pending.m_iPlayerId, droppedItems);
 		StampBody(character, pending.m_Kit);
 
+		// The radio the dress just spawned is sitting on its authored channel. Vanilla tunes
+		// radios at spawn only and nothing re-runs it for one acquired later, so a live re-kit
+		// asks for that same tune itself - see RK29_RadioTune.c. After the apply, because the
+		// gadget manager only learns of the new radio when it is inserted.
+		SCR_GroupsManagerComponent groups = SCR_GroupsManagerComponent.GetInstance();
+		if (groups)
+			groups.RK29_TuneToGroupFrequency_S(pending.m_iPlayerId, character);
+
 		// after the apply, never beside it - the notify racing ahead of a deferred apply is
 		// the ordering bug the old settle defer had
 		SCR_PlayerController pc = SCR_PlayerController.Cast(
@@ -1488,19 +1508,34 @@ class RK29_KitManager
 	protected void StampBody(IEntity body, RK29_KitStruct kit)
 	{
 		SCR_EditableEntityComponent editable = SCR_EditableEntityComponent.GetEditableEntity(body);
-		if (!editable)
+		if (!editable || !kit)
 			return;
 
-		RK29_KitUIInfo ours = RK29_KitUIInfo.Cast(editable.GetInfo());
-		if (ours)
-		{
-			// mutate, never re-instance - consumers cache the returned reference
-			if (ours.m_sRK29_KitName != kit.m_sKitName)
-				ours.RK29_SetKit(kit);
-			return;
-		}
+		RK29_KitUIInfo ours = KitInfo(kit);
 
-		editable.SetInfoInstance(RK29_KitUIInfo.RK29_Create(kit));
+		// already stamped with this kit. An unstamped body returns the prefab's own info here,
+		// which is never one of ours, so the first stamp always lands.
+		if (RK29_KitUIInfo.Cast(editable.GetInfo()) == ours)
+			return;
+
+		editable.SetInfoInstance(ours);
+	}
+
+	//--------------------------------------------------------------------------------------------
+	//! The manager-owned info for a kit, created once. Shared rather than mutated per body: an
+	//! instance that never changes is safe for a consumer to cache, and a body that swaps kit is
+	//! re-pointed at the other kit's instance. A consumer holding the old one shows the previous
+	//! role until it reads again - kit swaps are preround only and the editor list re-reads
+	//! constantly, so that window is not worth a per-body map to close.
+	protected RK29_KitUIInfo KitInfo(notnull RK29_KitStruct kit)
+	{
+		RK29_KitUIInfo info = m_mKitInfos.Get(kit.m_sKitName);
+		if (info)
+			return info;
+
+		info = RK29_KitUIInfo.RK29_Create(kit);
+		m_mKitInfos.Set(kit.m_sKitName, info);
+		return info;
 	}
 
 	//--------------------------------------------------------------------------------------------

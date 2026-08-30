@@ -1,7 +1,11 @@
 //------------------------------------------------------------------------------------------------
-//! Per-body role UIInfo. One instance per body, mutated on class swap - consumers cache the
-//! returned reference, so never replace the instance. Overrides must cover every accessor
-//! consumers call or they read blank wrapper defaults.
+//! Per-kit role UIInfo. One instance per KIT, created and OWNED by RK29_KitManager
+//! (m_mKitInfos) and shared by every body wearing that kit - SetInfoInstance only takes a weak
+//! reference, so an instance nobody holds dies on the spot. Never mutated once built, which is
+//! what makes it safe for a consumer to cache - and required, now that one instance backs
+//! EVERY body wearing the kit: a stray RK29_SetKit would relabel all of them at once. Build
+//! through RK29_Create and leave it alone. Overrides must cover every accessor consumers
+//! call or they read blank wrapper defaults.
 //------------------------------------------------------------------------------------------------
 class RK29_KitUIInfo : SCR_EditableEntityUIInfo
 {

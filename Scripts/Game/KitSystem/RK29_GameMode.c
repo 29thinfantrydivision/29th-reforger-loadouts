@@ -24,14 +24,20 @@ modded class SCR_GameModeEditor
 	}
 
 	//--------------------------------------------------------------------------------------------
-	//! Server only. Assign rebuilt arrays, never mutate in place, or replication misses it.
+	//! Server only. Edits the arrays IN PLACE and bumps - which is what vanilla does everywhere
+	//! it replicates an array: SCR_CampaignSuppliesComponent Inserts/RemoveItemOrdered's then
+	//! BumpMe's, SCR_FactionCommanderHandlerComponent Sets/Inserts then BumpMe's. This used to
+	//! swap in freshly built arrays, on the belief that an in-place edit would not replicate. No
+	//! vanilla code shares that belief, and the swap is the more dangerous of the two: it frees
+	//! the array the replication layer was just told to send, where an in-place edit keeps one
+	//! array alive for the entity's whole life and allocates nothing per tick.
 	void RK29_SetCounts(notnull array<int> alive, notnull array<int> magnified)
 	{
 		if (RK29_ArraysEqual(m_aRK29AliveCounts, alive) && RK29_ArraysEqual(m_aRK29MagnifiedCounts, magnified))
 			return;
 
-		m_aRK29AliveCounts = alive;
-		m_aRK29MagnifiedCounts = magnified;
+		m_aRK29AliveCounts.Copy(alive);
+		m_aRK29MagnifiedCounts.Copy(magnified);
 		Replication.BumpMe();
 
 		// no Rpl callback for the authority's own write

@@ -305,7 +305,11 @@ class RK29_KitCompose
 
 			Print("[RK29] " + kit.m_sKitName + ": " + FileOf(item) + " gated off - "
 				+ FileOf(kit.m_sPrimaryWeapon) + " cannot mount it", LogLevel.NORMAL);
-			kit.m_aItems.Remove(i);
+
+			// ORDERED: Remove() is swap-remove, which would drop the last batch into the gap.
+			// Batch order is spawn order, and spawn order decides first-fit placement - so a
+			// gated-off bayonet would silently reshuffle where the rest of the kit lands.
+			kit.m_aItems.RemoveOrdered(i);
 		}
 	}
 

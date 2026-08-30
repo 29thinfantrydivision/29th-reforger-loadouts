@@ -137,6 +137,15 @@ Four rules the apply pass is built around:
 - **Snap items into hands, never animate.** A held gadget is equipped by writing the hand
   slot directly; an animated transition out of a stale graph jams.
 
+**Radios get the spawn tune.** Vanilla tunes a radio only at spawn — `SCR_GroupsManagerComponent`
+does it twice over, from `OnPlayerSpawned` and again when the player's agent joins the group, both
+writing transceiver 0 of the first short-range radio and nothing else — and nothing re-runs it for
+a radio acquired later, so a live re-kit would otherwise hand the player a fresh radio on its
+authored channel. The apply calls vanilla's own `TunePlayersFrequency` afterwards, so a re-kit and
+a spawn cannot drift apart: same short-range radio, same transceiver, same group frequency, and a
+manpack left alone exactly as a spawn leaves it. Spawns need none of this — the loadout hook
+dresses the body before `OnPlayerSpawned` fires.
+
 Dropped items are logged at WARNING server-side and named to the player by owner-RPC.
 There is no mathematical fit guarantee — `kitvalidate` is how a kit is proven to fit
 before it ships.
