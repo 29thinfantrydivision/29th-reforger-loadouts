@@ -9,12 +9,8 @@ role file contributed rather than replacing it. An earlier version of this scrip
 checked for "replace mode" and was simply wrong about the engine.
 
 Checks
-  1. reachability   - every kit a roster declares is offered by some squad, and every
-                      name a squad offers resolves to a real kit. A squad whose names
-                      all miss falls through GetOfferedKits() to EVERY faction kit,
-                      which is the opposite of a restriction and logs nothing.
-  2. mag doctrine   - a rifle/carbine primary spends exactly 2 spares on tracer.
-  3. parity         - per role, US vs USSR: sidearm, backpack, weapon options, rounds.
+  1. mag doctrine   - a rifle/carbine primary spends exactly 2 spares on tracer.
+  2. parity         - per role, US vs USSR: sidearm, backpack, weapon options, rounds.
 
 Exit code is the number of findings, so this works as a pre-release gate.
 
@@ -168,44 +164,10 @@ def kit_files():
 
 # ---------------------------------------------------------------------------- checks
 
-def check_reachability(quiet):
-    if not quiet:
-        print('\n== 1. reachability ==')
-    text = read(os.path.join(CATALOGS, 'RK29_Squads.conf'))
-    offered = {}
-    for m in re.finditer(r'm_sGroupName "([^"]+)"\s*\n\s*m_aKitNames \{(.*?)\n\s*\}', text, re.S):
-        offered[m.group(1)] = re.findall(r'"([^"]+)"', m.group(2))
-
-    declared = set()
-    for f in os.listdir(ROSTERS):
-        if f.endswith('.conf'):
-            declared |= set(re.findall(r'm_sKitName "([^"]+)"', read(os.path.join(ROSTERS, f))))
-
-    all_offered = set(k for v in offered.values() for k in v)
-    for k in sorted(declared - all_offered):
-        report('unreachable', 'kit "%s" is declared by a roster but no squad offers it' % k)
-
-    for group in sorted(offered):
-        names = offered[group]
-        dangling = [k for k in names if k not in declared]
-        if dangling and len(dangling) == len(names):
-            report('squad-inert',
-                   'squad "%s" offers %d name(s), none of which resolve to a kit (%s). '
-                   'GetOfferedKits() then falls through to EVERY faction kit for this '
-                   'squad - the opposite of a restriction, and it logs nothing.'
-                   % (group, len(names), ', '.join(dangling)))
-        elif dangling:
-            report('squad-dangling',
-                   'squad "%s" names %s, which no roster declares'
-                   % (group, ', '.join(dangling)))
-        if not quiet:
-            tail = '   dangling: ' + ', '.join(dangling) if dangling else ''
-            print('   %-24s %2d kit(s)%s' % (group, len(names), tail))
-
 
 def check_doctrine(quiet):
     if not quiet:
-        print('\n== 2. mag doctrine (2 tracer spares on rifle/carbine primaries) ==')
+        print('\n== 1. mag doctrine (2 tracer spares on rifle/carbine primaries) ==')
     before = len(findings)
     for faction, name, path in kit_files():
         acc, _ = resolve(path)
@@ -222,7 +184,7 @@ def check_doctrine(quiet):
 
 def check_parity(quiet):
     if not quiet:
-        print('\n== 3. US vs USSR parity ==')
+        print('\n== 2. US vs USSR parity ==')
     roles = collections.defaultdict(dict)
     for faction, name, path in kit_files():
         role = name.split('_', 1)[1].replace('.conf', '')
@@ -273,7 +235,6 @@ def check_parity(quiet):
 
 def main():
     quiet = '--quiet' in sys.argv
-    check_reachability(quiet)
     check_doctrine(quiet)
     check_parity(quiet)
 

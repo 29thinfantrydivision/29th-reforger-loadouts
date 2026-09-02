@@ -335,10 +335,9 @@ class RK29_KitPicker
 	//! camera (deploy menu goes away), and dying while it is open (body goes away). The
 	//! controlled-entity hook only catches the first of those.
 	//!
-	//! While open WITH a live body, the round going LIVE is what invalidates the menu: an
-	//! alive open is preround-only, so a phase flip mid-browse leaves a menu up that Open()
-	//! would now refuse. Dead stays exempt - a dead pick is a stash for the NEXT body and is
-	//! legal at any point in the round.
+	//! While open WITH a live body, nothing about the round phase closes it: a live re-kit is
+	//! legal at any point in the round (once the round is live the server announces it rather
+	//! than refusing it), and a dead pick is a stash for the NEXT body, legal at any point too.
 	protected void WatchDeployMenu()
 	{
 		if (!m_Dialog)
@@ -346,16 +345,6 @@ class RK29_KitPicker
 		if (!IsLocalAlive() && !IsDeployMenuOpen())
 		{
 			Print("[RK29] kit menu closed - no live body and no deploy menu", LogLevel.NORMAL);
-			CloseMenu();
-			return;
-		}
-		RK29_KitManager mgr = RK29_KitManager.GetInstance();
-		if (IsLocalAlive() && mgr && !mgr.IsPreround())
-		{
-			Print("[RK29] kit menu closed - round went live", LogLevel.NORMAL);
-			SCR_PopUpNotification popup = SCR_PopUpNotification.GetInstance();
-			if (popup)
-				popup.PopupMsg("Kit Menu closed", 3, "Reason: the round is now live");
 			CloseMenu();
 			return;
 		}
@@ -369,9 +358,10 @@ class RK29_KitPicker
 		if (!mgr)
 			return;
 
-		// Two ways in, and they are gated differently. ALIVE is a live re-kit and stays
-		// briefing-only. DEAD is a request for the NEXT body: the server stashes it and assigns
-		// "Current Kit" without touching anything, so it is safe at any point in the round.
+		// Two ways in, and they are gated differently. ALIVE is a live re-kit: legal at any
+		// point in the round, but once the round is live the server announces it to everyone.
+		// DEAD is a request for the NEXT body: the server stashes it and assigns "Current Kit"
+		// without touching anything, so it is safe at any point in the round.
 		if (IsLocalAlive())
 		{
 			// LocalFactionKey falls back to the controlled entity's affiliation, so a corpse or
@@ -380,13 +370,6 @@ class RK29_KitPicker
 			{
 				Print("[RK29] kit menu refused - no faction yet", LogLevel.NORMAL);
 				NotifyDisabled("you have not joined a faction yet");
-				return;
-			}
-
-			if (!mgr.IsPreround())
-			{
-				Print("[RK29] kit menu refused - not preround", LogLevel.NORMAL);
-				NotifyDisabled("kit selection while alive is briefing only");
 				return;
 			}
 		}
@@ -446,7 +429,7 @@ class RK29_KitPicker
 
 		SCR_GameModeEditor gm = SCR_GameModeEditor.Cast(GetGame().GetGameMode());
 
-		// squad restriction - same filter the server enforces
+		// this side's kits - the same list the server enforces
 		array<string> offered = {};
 		PlayerController localPc = GetGame().GetPlayerController();
 		if (localPc)
@@ -455,7 +438,9 @@ class RK29_KitPicker
 		if (m_sSelectedKit != "" && !offered.Contains(m_sSelectedKit))
 			m_sSelectedKit = "";
 
-		// class order follows the side config, leftovers append in loadout order
+		// class order follows the side config. Nothing else can be offered: a kit with no
+		// roster class is deploy-only (the Training Platoon rows) and GetOfferedKits already
+		// left it out, so there are no leftovers to append.
 		array<string> ordered = {};
 		if (mgr.m_Setup && mgr.m_Setup.m_aClasses)
 		{
@@ -464,11 +449,6 @@ class RK29_KitPicker
 				if (orderCls && !ordered.Contains(orderCls.m_sKitName))
 					ordered.Insert(orderCls.m_sKitName);
 			}
-		}
-		foreach (string loadoutKit : mgr.m_aIndexToKit)
-		{
-			if (loadoutKit != "" && !ordered.Contains(loadoutKit))
-				ordered.Insert(loadoutKit);
 		}
 
 		foreach (string kitName : ordered)
@@ -482,7 +462,7 @@ class RK29_KitPicker
 			// Current Kit is a deploy-menu ROW, not a kit - it spawns whatever the player last
 			// picked. Offering it here would let someone "pick" the thing that replays their
 			// pick. Asked of the loadout type rather than a config flag so it cannot drift:
-			// the squad lists never name it, but the no-group fallback offers every faction kit.
+			// the offer list is every loadout on the side, Current Kit included.
 			if (mgr.IsCurrentKitLoadoutName(kitName))
 				continue;
 

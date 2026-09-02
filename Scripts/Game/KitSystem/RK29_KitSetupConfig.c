@@ -273,38 +273,6 @@ class RK29_SideSetup
 }
 
 //------------------------------------------------------------------------------------------------
-//! Kits offered to one squad, keyed by the m_sGroupName its PRESET declares in GM29_Groups.conf.
-//!
-//! Note "its preset declares", not "the group is currently called". A group's runtime custom
-//! name is not its identity: vanilla's create-group dialog opens with an empty name box and then
-//! overwrites whatever the preset set with the typed text
-//! (SCR_PlayerControllerGroupComponent.SetCustomNameAndDescription), so a player-created
-//! "29th HQ" group carries an EMPTY custom name unless somebody typed one - and the name also
-//! crosses an async profanity filter that leaves it empty on clients for a while.
-//!
-//! The manager resolves the preset behind the group instead (RK29_KitManager.PresetGroupName)
-//! and matches on the name IT authored, so these entries stay readable and GM29_Groups.conf
-//! remains the one place the role-to-name mapping lives. A runtime rename still matches as an
-//! override, so a squad can be pointed at a specific list by name if you ever want that.
-[BaseContainerProps(), BaseContainerCustomTitleField("m_sGroupName")]
-class RK29_SquadKits
-{
-	[Attribute(desc: "m_sGroupName of the matching preset in GM29_Groups.conf, e.g. '29th Squad'. '*' = default for squads without an entry", category: "29th")]
-	string m_sGroupName;
-
-	[Attribute(desc: "Kit names offered to this squad. Empty = all faction kits", category: "29th")]
-	ref array<string> m_aKitNames;
-}
-
-//! Squad kit catalog - Configs/KitSystem/Catalogs/RK29_Squads.conf
-[BaseContainerProps(configRoot: true)]
-class RK29_SquadKitCatalog
-{
-	[Attribute(desc: "Per-squad kit lists", category: "29th")]
-	ref array<ref RK29_SquadKits> m_aSquads;
-}
-
-//------------------------------------------------------------------------------------------------
 //! Optic category definitions - Configs/KitSystem/Catalogs/*.conf
 [BaseContainerProps(configRoot: true)]
 class RK29_OpticLibrary
@@ -316,7 +284,7 @@ class RK29_OpticLibrary
 [BaseContainerProps(configRoot: true)]
 class RK29_KitSetup
 {
-	[Attribute("0", desc: "Behavior when the 29th Round Timer is NOT loaded: 1 = open (HUD + live re-kit always), 0 = closed (deploy-only kit choice)", category: "29th")]
+	[Attribute("0", desc: "Phase assumed when the 29th Round Timer is NOT loaded: 1 = preround (briefing HUD shown, a live re-kit heals and goes unannounced), 0 = live (no HUD, every live re-kit skips the heal and is announced to the whole server)", category: "29th")]
 	bool m_bNoTimerOpen;
 
 	[Attribute("0", desc: "1 = print the per-item apply trace (every strip, container weighing and placement). Debugging aid - leave off on a live server, a briefing would print thousands of lines", category: "29th")]
@@ -339,12 +307,6 @@ class RK29_KitSetup
 
 	[Attribute(desc: "Weapon definitions - usually loaded from Catalogs configs", category: "29th")]
 	ref array<ref RK29_WeaponDef> m_aWeaponDefs;
-
-	[Attribute(desc: "Squad kit catalogs (Helpers folder)", params: "conf class=RK29_SquadKitCatalog", category: "29th")]
-	ref array<ResourceName> m_aSquadConfigs;
-
-	[Attribute(desc: "Squad kit lists - usually loaded from Helpers configs", category: "29th")]
-	ref array<ref RK29_SquadKits> m_aSquads;
 
 	//! Merged at load from the referenced catalogs.
 	[Attribute(desc: "Item aliases - usually loaded from Helpers configs", category: "29th")]
@@ -385,34 +347,6 @@ class RK29_KitSetup
 				return c.m_sSideDefaultKit;
 		}
 		return "";
-	}
-
-	//--------------------------------------------------------------------------------------------
-	//! Squad entry by authored group name; falls back to the "*" default entry, else null.
-	RK29_SquadKits FindSquadKits(string groupName)
-	{
-		if (!m_aSquads)
-			return null;
-
-		RK29_SquadKits fallback;
-		foreach (RK29_SquadKits sq : m_aSquads)
-		{
-			if (!sq)
-				continue;
-
-			// "*" is the default marker, never a real group name - a group we could not resolve a
-			// preset for must not match it here and skip a legitimate rename below.
-			if (sq.m_sGroupName == "*")
-			{
-				fallback = sq;
-				continue;
-			}
-
-			if (groupName != "" && sq.m_sGroupName == groupName)
-				return sq;
-		}
-
-		return fallback;
 	}
 
 	//--------------------------------------------------------------------------------------------

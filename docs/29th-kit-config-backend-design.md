@@ -14,7 +14,7 @@ runtime that consumes the result. Both docs meet at `RK29_KitStruct`.
 Configs/KitSystem/
   RK29_KitSetup.conf                    entry point - everything below is loaded from here
   Rosters/    RK29_Roster_US · RK29_Roster_USSR       per-faction class lists
-  Catalogs/   RK29_Aliases · RK29_Magazines · RK29_Optics · RK29_Squads · RK29_Weapons
+  Catalogs/   RK29_Aliases · RK29_Magazines · RK29_Optics · RK29_Weapons
   Kits/       Common/infantry · Roles/<role> · US|USSR/<faction>_<role>
   Blocks/     Common/<bundle> · USSR/gear_pkm · USSR/gear_rpk
 ```
@@ -378,7 +378,7 @@ One server pass at `RK29_KitManager.Boot`, naming the offending file and field.
 
 **WARNING — it will run, but read the line:**
 
-- Any referenced side, optic, alias, magazine, weapon or squad config missing or
+- Any referenced side, optic, alias, magazine or weapon config missing or
   unreadable. `RK29_KitSetup.conf` itself missing disables customization entirely while
   still counting kits.
 - More than one option on a slot setting `m_bDefault`.
@@ -422,8 +422,7 @@ estimate would drift from what the game does. It queues one job per weapon optio
 release gate is zero FAIL lines.**
 
 `tools/audit_kits.py` is the static companion: it resolves the inheritance chains without
-running the game and checks kit reachability through the squad catalog, the magazine
-doctrine, and US/USSR parity.
+running the game and checks the magazine doctrine and US/USSR parity.
 
 ### Workbench expectations
 

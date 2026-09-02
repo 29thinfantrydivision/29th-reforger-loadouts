@@ -13,10 +13,12 @@ which covers where kit *content* comes from. This doc treats a kit as a resolved
 
 The mod replaces vanilla respawn-menu loadout selection with a unit-controlled kit system.
 
-- A player picks a **class** from the list their squad is offered, then a **primary
+- A player picks a **class** from their side's list, then a **primary
   weapon** and — where the class allows it — an **optic**, *None* included.
-- Kits can be swapped **on a living body during preround**, with zero displacement: not
-  moved an inch, no pose, stance or camera reset.
+- Kits can be swapped **on a living body at any point in the round**, with zero
+  displacement: not moved an inch, no pose, stance or camera reset. Once the round is
+  live the swap is announced to every player in the notification feed (the kill feed's
+  log) and skips the heal.
 - A **briefing HUD** shows how many of each kit are alive on the player's team, with a
   magnified-optic tally per kit.
 
@@ -39,7 +41,7 @@ and a mid-round HUD would need; see §11.
 into `SCR_LoadoutManager` and prunes entries the unit did not author. Picking one spawns
 the body; the kit system dresses it.
 
-**Alive in briefing.** `F4` opens the picker (`RK29_ToggleKitMenu`, bound in the
+**Alive.** `F4` opens the picker (`RK29_ToggleKitMenu`, bound in the
 character, in-game and deploy-menu action contexts). Pick a class or change the
 customization, apply, and the living body is re-dressed in place.
 
@@ -47,7 +49,7 @@ customization, apply, and the living body is re-dressed in place.
 with **Apply Kit** as a dialog footer button beside Close (`Space` also applies). Columns
 run left to right: class → weapon → optic.
 
-- The class column is limited to what the player's squad offers (§6).
+- The class column is every kit on the player's side (§6).
 - The optic column is filtered to optics that physically fit the selected weapon, each
   badged `1X` or `MAG`.
 - Selections are **per class**. Swapping class swaps the customization context; an optic
@@ -152,28 +154,25 @@ before it ships.
 
 ---
 
-## 6. Squad gating
+## 6. Offered kits
 
-`GetOfferedKits` answers "what may this player take", in authority order:
+`GetOfferedKits` answers "what may this player take": every roster class on their side, in
+loadout order. It is the one chokepoint the request check, the deploy row, the default kit
+and the picker's class column all read, so a future restriction lands in exactly one place.
 
-1. The squad kit catalog, keyed on the name the group's **preset** declares.
-2. The vanilla group loadout lists.
-3. Every kit for the player's faction.
+A loadout with no roster class is **deploy-only**. The Training Platoon rows are plain
+`SCR_FactionPlayerLoadout` entries in `GM29_Kits.conf`; the TP preset lists them in its
+`m_aLoadoutResources`, so the deploy menu offers them to a TP squad and spawns the body
+as-is. They are walked into the kit map for counting and stamping, but they never appear
+in the picker and a request for one is refused.
 
-The preset name, not the runtime name, is identity. Vanilla's create-group dialog opens
-with an empty name box and then overwrites whatever the preset set with the typed text,
-so a group created as "29th HQ" reports an empty custom name; the name also crosses an
-async profanity filter and reads back empty on clients for a while. The group's **role**
-is a plain replicated int carried in `RplSave`/`RplLoad`, so
-`FindGroupRolePresetConfig()` maps it back to the authored config reliably.
+Squads used to narrow this through a per-preset catalog (`RK29_Squads.conf`, removed
+2026-09-02). The unit assigns roles itself, so the group a player sits in says nothing
+about what they may wear. The group presets in `GM29_Groups.conf` still exist for the
+deploy menu's own filter: each preset lists the Current Kit rows, which is what makes the
+row appear for that squad at all.
 
-A group created with no role — vanilla's `RPC_AskCreateGroup` path — has neither role nor
-name, and vanilla's own deploy filter matches presets by role too, so it would hand that
-player an empty deploy menu. `GM29_Groups.conf` therefore carries a hidden `NONE` preset
-mirroring the rifle squad, with `m_bCanBeCreatedByPlayer 0` to keep it out of the
-create-group dialog.
-
-The server applies the same filter at apply time. The picker's list is a convenience; it
+The server applies the same list at apply time. The picker's list is a convenience; it
 is not what is trusted.
 
 ---
@@ -236,11 +235,12 @@ notification granularity.
 
 ```
 picker APPLY ──RPC (playerController, RK29_-prefixed)──▶ server chokepoint:
-  1. validate: preround phase, class exists for this faction and squad, weapon in the
-     class list, optic in an allowed category and fits the weapon
+  1. validate: class exists for this faction, weapon in the class list, optic in an
+     allowed category and fits the weapon
   2. clone the base struct, apply weapon / optic / ammo choices
-  3. full-heal the body if alive
-  4. apply to the living body, or stash for spawn-time if dead
+  3. full-heal the body if alive and the round is not live
+  4. apply to the living body, or stash for spawn-time if dead; a live-round apply is
+     announced to everyone through the notification feed once the body is dressed
   5. RK29_AssignLoadout_S — identity update, atomic with the apply
   6. OnPlayerLoadoutSet_S -> Recompute() -> RplProp -> every HUD updates
 ```
@@ -248,8 +248,9 @@ picker APPLY ──RPC (playerController, RK29_-prefixed)──▶ server chokep
 The client is never trusted; every field is re-validated here. Steps 3–5 live in one
 server function so the ledger can never disagree with the body.
 
-**The heal.** A live re-kit is preround-only, so anything wrong with the body is
-staging-area damage and a clean loadout deserves a clean body. `RK29_KitHeal` clears
+**The heal.** Runs for a preround re-kit only: anything wrong with the body then is
+staging-area damage and a clean loadout deserves a clean body. A mid-round re-kit keeps
+its wounds, so a kit change is never a free full heal. `RK29_KitHeal` clears
 tourniquets first (they are items, so no heal can see them, and a tourniquetted limb
 counts as 70% damaged whatever its hitzones say), calls `FullHeal(false)`, tops up the
 sub-threshold damage `FullHeal` skips — its first damage state is 0.75 on health and 0.7
@@ -261,8 +262,8 @@ mods override, which is what makes this compatible by construction. `false` rath
 the GM's default because a re-kit is a reset, not a battlefield heal.
 
 **Stash validity.** Selections live in server memory, keyed per player and per class.
-They are validated at both read sites, so a faction or squad change cannot hand a player
-a kit they may no longer take. A body already wearing the old gear keeps it until the next
+They are validated at both read sites, so a faction change cannot hand a player a kit
+from the other side. A body already wearing the old gear keeps it until the next
 apply.
 
 ---
@@ -272,6 +273,15 @@ apply.
 "Preround" means the 29th Round Timer's phase is **not LIVE** — briefing, no round set up,
 and post-round all count as open. The HUD is stricter and shows during BRIEFING only,
 with the briefing countdown in its title band.
+
+The phase no longer gates a live re-kit. It decides two things: whether the re-kit heals
+(preround only), and whether it is announced. Mid-round the server sends
+`ENotification.RK29_LIVE_REKIT` to everyone through `SCR_NotificationsComponent` — the
+feed the kill feed writes to — carrying only the player id; vanilla's
+`SCR_NotificationPlayer` renders "<name> swapped loadouts while the round is live". The
+kit itself is logged server-side only. Text and icon live in
+`Configs/Notifications/Notifications.conf`, which squats the vanilla config's GUID so the
+one entry merges into vanilla's list.
 
 Integration is soft and one-directional. An `RK29_` probe locates the timer's RplProps on
 the game mode by name through Enforce reflection

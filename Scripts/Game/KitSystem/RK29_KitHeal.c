@@ -1,9 +1,10 @@
 //------------------------------------------------------------------------------------------------
 //! Full heal, run on the server when a kit lands on a living body.
 //!
-//! A live re-kit is preround-only, so whatever is wrong with the body is staging-area damage - a
+//! Runs for a PREROUND re-kit only, so whatever is wrong with the body is staging-area damage - a
 //! drop off a wall, a negligent discharge, a medic who stopped bandaging halfway. A clean loadout
-//! deserves a clean body.
+//! deserves a clean body. A mid-round re-kit is allowed too but skips this: those wounds are the
+//! round's own, and a kit change must not double as a free full heal.
 //!
 //! Four steps. Each covers something none of the others can:
 //!
@@ -50,7 +51,7 @@
 //! player in cardiac arrest.
 //!
 //! No client permission anywhere: this runs inside the kit RPC handler on the server, which has
-//! already vetted faction, squad offer, weapon and optic.
+//! already vetted faction, weapon and optic.
 //------------------------------------------------------------------------------------------------
 class RK29_KitHeal
 {

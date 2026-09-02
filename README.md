@@ -27,11 +27,12 @@ Configs/
   KitSystem/
     RK29_KitSetup.conf        entry point - everything below is loaded from here
     Rosters/                  RK29_Roster_US · RK29_Roster_USSR   per-faction class lists
-    Catalogs/                 RK29_Aliases · RK29_Magazines · RK29_Optics · RK29_Squads · RK29_Weapons
+    Catalogs/                 RK29_Aliases · RK29_Magazines · RK29_Optics · RK29_Weapons
     Kits/                     Common/infantry -> Roles/<role> -> US|USSR/<role>   (inheritance chain)
     Blocks/                   Common/<bundle> · USSR/gear_pkm · USSR/gear_rpk
   Loadouts/GM29_Kits.conf     the deploy-menu loadout entries the kit system hangs off
-  Groups/GM29_Groups.conf     squad presets + which kits each squad may offer
+  Groups/GM29_Groups.conf     squad presets (every squad is offered every kit on its side)
+  Notifications/              mid-round re-kit line for the notification feed (merges into vanilla's)
   UI/RK29_Dialogs.conf        picker dialog preset
 Prefabs/                      weapons, vests, character bodies
 Scripts/Game/                 GM29_* injection + KitSystem/RK29_* runtime
