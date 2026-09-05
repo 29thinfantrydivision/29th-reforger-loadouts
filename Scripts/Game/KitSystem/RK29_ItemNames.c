@@ -1,12 +1,19 @@
 //------------------------------------------------------------------------------------------------
 //! In-game display names for item/weapon prefabs, read off the prefab container and cached.
-//! Localization keys (#AR-...) are translated here so callers can concatenate freely.
+//! Localization keys (#AR-...) are translated here so callers can concatenate freely; the cache is
+//! cleared at every world start so a prefab edited between sessions is read again.
 //------------------------------------------------------------------------------------------------
 class RK29_ItemNames
 {
 	protected static ref map<ResourceName, string> s_mCache = new map<ResourceName, string>();
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
+	static void ClearCache()
+	{
+		s_mCache.Clear();
+	}
+
+	//------------------------------------------------------------------------------------------------
 	static string Get(ResourceName prefab)
 	{
 		if (prefab == ResourceName.Empty)
@@ -24,9 +31,9 @@ class RK29_ItemNames
 		return name;
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Thin variant prefabs (e.g. Rifle_SVD_PSO) may not declare the item component or its
-	//! name at their own level - walk the prefab ancestry until a name shows up.
+	//------------------------------------------------------------------------------------------------
+	//! Thin variant prefabs (e.g. Rifle_SVD_PSO) declare no name at their own level - walk the
+	//! prefab ancestry until one shows up.
 	protected static string ReadName(ResourceName prefab)
 	{
 		Resource res = Resource.Load(prefab);
@@ -44,9 +51,9 @@ class RK29_ItemNames
 		return "";
 	}
 
-	//--------------------------------------------------------------------------------------------
-	//! Items carry the name on InventoryItemComponent, weapons on their attachments
-	//! storage - any component with item Attributes counts.
+	//------------------------------------------------------------------------------------------------
+	//! Items carry the name on InventoryItemComponent, weapons on their attachments storage - any
+	//! component with item Attributes counts.
 	protected static string ReadNameFrom(IEntitySource src)
 	{
 		for (int i = 0, n = src.GetComponentCount(); i < n; i++)
@@ -75,13 +82,12 @@ class RK29_ItemNames
 		return "";
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	protected static string Fallback(ResourceName prefab)
 	{
-		string raw = "" + prefab;
-		int lastSlash = raw.LastIndexOf("/");
-		if (lastSlash >= 0)
-			raw = raw.Substring(lastSlash + 1, raw.Length() - lastSlash - 1);
+		string raw = FilePath.StripPath(prefab);
+		if (raw == "")
+			raw = "" + prefab;
 		int dot = raw.LastIndexOf(".");
 		if (dot > 0)
 			raw = raw.Substring(0, dot);

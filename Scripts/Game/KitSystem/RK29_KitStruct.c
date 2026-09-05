@@ -1,22 +1,19 @@
 //------------------------------------------------------------------------------------------------
-//! Captured kit data, mirroring the prefab's authoring format. Built by RK29_KitCapture.
+//! One kit: identity from RK29_KitCapture, gear from RK29_KitCompose and RK29_KitResolve.
 //------------------------------------------------------------------------------------------------
 
 class RK29_KitItemBatch
 {
-	//! TargetStorage path from the prefab - placement hint only.
-	string m_sTargetHint;
-
-	//! Authored placement preference, best first. Resolved at compose time from the item
-	//! entry, then the alias. Empty means the apply pass decides.
+	//! Placement preference, best first, from the item entry then the alias. Empty = the apply
+	//! pass decides.
 	ref array<string> m_aPreferred;
 
-	ref array<ResourceName> m_aPrefabs = {};
+	//! How important this is when the kit does not fit: lower keeps its place, higher gives way to
+	//! it (RK29_KitApply.MakeRoomByRank). Not an insertion order - the solver still places by fit.
+	static const int KEEP_RANK_DEFAULT = 50;
+	int m_iKeepRank = KEEP_RANK_DEFAULT;
 
-	//! "only if the primary can take it" - a bayonet. Decided AFTER the weapon is chosen,
-	//! not at compose time: the base kit still carries the prefab's weapon, and a class can
-	//! offer one weapon with a lug and another without.
-	bool m_bPrimaryAttachment;
+	ref array<ResourceName> m_aPrefabs = {};
 }
 
 //------------------------------------------------------------------------------------------------
@@ -27,39 +24,38 @@ class RK29_KitStruct
 
 	string m_sFactionKey;
 
-	ResourceName m_sSourcePrefab;
-
 	//! loadout slot name -> prefab (names for logs only; slots are type-gated at apply)
 	ref map<string, ResourceName> m_mClothing = new map<string, ResourceName>();
 
 	//! equipment storage slot name -> prefab (WristwatchSlot, BinocularSlot, ...)
 	ref map<string, ResourceName> m_mEquipment = new map<string, ResourceName>();
 
-	//! weapon slot index -> prefab; grenade slot stored as 100
+	//! "<loadout slot>/<slot on that garment>" -> prefab (Hat/NVG), see GarmentSlotKey. Seated by
+	//! RK29_KitApply.DressGarmentAttachments after the garment itself is dressed.
+	ref map<string, ResourceName> m_mGarmentAttachments = new map<string, ResourceName>();
+
+	//! weapon slot index -> prefab, as RK29_KitResolve.ClaimSlot numbers them (0/1 rifles, 2 sidearm).
+	//! Grenades are never here: they are items, primed into the throwable slot by the apply pass.
 	ref map<int, ResourceName> m_mWeapons = new map<int, ResourceName>();
-	static const int GRENADE_SLOT = 100;
 
 	ResourceName m_sPrimaryWeapon;
 
 	ref array<ref RK29_KitItemBatch> m_aItems = {};
 
-	//! Role qualifications, granted as character labels at apply (medic, sapper, ...).
-	//! Composition-owned: a weapon choice can never add or drop one.
+	//! Granted as character labels at apply. Composition-owned: a weapon choice never adds or
+	//! drops one.
 	ref array<RK29_ETrait> m_aTraits = {};
 
-	//! Instanced at capture, shared read-only. Do NOT store the BaseContainer instead -
+	//! Instanced at capture, shared read-only. Do not store the BaseContainer instead -
 	//! containers die with their resource even behind a held ref Resource.
 	ref SCR_UIInfo m_UIInfo;
 
-	//--------------------------------------------------------------------------------------------
-	//! Deep copy. Weapon, mag and optic choices are all laid over the clone by the caller
-	//! (RK29_KitCompose) - this used to take them as parameters, but no caller ever did.
+	//------------------------------------------------------------------------------------------------
 	RK29_KitStruct DeepCopy()
 	{
 		RK29_KitStruct c = new RK29_KitStruct();
 		c.m_sKitName      = m_sKitName;
 		c.m_sFactionKey   = m_sFactionKey;
-		c.m_sSourcePrefab = m_sSourcePrefab;
 		c.m_UIInfo        = m_UIInfo;
 		c.m_sPrimaryWeapon = m_sPrimaryWeapon;
 
@@ -72,15 +68,17 @@ class RK29_KitStruct
 		foreach (string eqSlot, ResourceName eqRes : m_mEquipment)
 			c.m_mEquipment.Set(eqSlot, eqRes);
 
+		foreach (string attKey, ResourceName attRes : m_mGarmentAttachments)
+			c.m_mGarmentAttachments.Set(attKey, attRes);
+
 		foreach (int idx, ResourceName res : m_mWeapons)
 			c.m_mWeapons.Set(idx, res);
 
 		foreach (RK29_KitItemBatch batch : m_aItems)
 		{
 			RK29_KitItemBatch nb = new RK29_KitItemBatch();
-			nb.m_sTargetHint = batch.m_sTargetHint;
 			nb.m_aPreferred  = batch.m_aPreferred;
-			nb.m_bPrimaryAttachment = batch.m_bPrimaryAttachment;
+			nb.m_iKeepRank   = batch.m_iKeepRank;
 			foreach (ResourceName item : batch.m_aPrefabs)
 				nb.m_aPrefabs.Insert(item);
 			if (!nb.m_aPrefabs.IsEmpty())
@@ -90,7 +88,7 @@ class RK29_KitStruct
 		return c;
 	}
 
-	//--------------------------------------------------------------------------------------------
+	//------------------------------------------------------------------------------------------------
 	int CountItems()
 	{
 		int n = 0;
@@ -98,4 +96,56 @@ class RK29_KitStruct
 			n += batch.m_aPrefabs.Count();
 		return n;
 	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The m_mGarmentAttachments key. Slash-joined like every other two-part address here
+	//! ("group/entry"), so a second row for the same garment slot replaces the first, as a later
+	//! clothing group on a slot replaces an earlier one.
+	static string GarmentSlotKey(string garmentSlot, string slot)
+	{
+		return garmentSlot + "/" + slot;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	static bool SplitGarmentSlotKey(string key, out string garmentSlot, out string slot)
+	{
+		int cut = key.IndexOf("/");
+		if (cut <= 0 || cut >= key.Length() - 1)
+			return false;
+		garmentSlot = key.Substring(0, cut);
+		slot = key.Substring(cut + 1, key.Length() - cut - 1);
+		return true;
+	}
+}
+
+//------------------------------------------------------------------------------------------------
+//! How much of one ammo type a kit carries with one weapon. The alias is resolved by the weapon
+//! definition, so "belt" means one magazine on an M249 and another on a PKM.
+//! Runtime DTO, not config - built only by RK29_KitResolve.ApplyItemGroup for
+//! RK29_KitCompose.EmitAmmo, so it carries no [Attribute]s.
+class RK29_WeaponAmmo
+{
+	string m_sAlias;
+
+	//! Set only by a worn entry: the slot this row goes to instead of a container.
+	string m_sSlot;
+
+	//! Which map that slot lives in - worn clothing, or the equipment slots (binoculars, watch).
+	bool m_bClothing;
+
+	//! Set only by a garment-attachment group's row: the loadout slot of the garment m_sSlot is on,
+	//! which routes the row to the garment-attachment map instead of either of the two above.
+	string m_sGarmentSlot;
+
+	//! Magazine variant from RK29_Magazines.conf, resolved through the weapon's magazine well.
+	string m_sVariant;
+
+	//! Literal prefab, for ammo that is not a magazine of this weapon. Wins over everything else.
+	ResourceName m_sPrefab;
+
+	int m_iCount = 1;
+
+	//! The entry's own keep rank, else its group's; -1 = neither stated, so EmitCarriedRow falls
+	//! back to the alias's or the weapon's.
+	int m_iKeepRank = -1;
 }
