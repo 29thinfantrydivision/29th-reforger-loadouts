@@ -71,6 +71,40 @@ class RK29_KitApply
 	//! pass left here, so those must Print or RK29_Log.Trace, never Note.
 	protected static bool s_bQuiet;
 
+	//! Whether the running pass places LOCALLY - straight into storage slots, nothing through the
+	//! inventory manager. Written at the top of Place beside s_bQuiet, same lifetime, same rule.
+	//!
+	//! WHY IT EXISTS. The inventory manager's mutating calls (TrySpawnPrefabToStorage,
+	//! TryInsertItemInStorage, TryDeleteItem) are requests to the AUTHORITY: on a listen host they
+	//! run at once, on a client they are sent to the server by replication id and answered through
+	//! replication (vanilla's own OnItemAdded says so, and its inventory UI refuses to move into a
+	//! storage with no RplId - SCR_InventoryStorageManagerComponent.CanUseStorageForMove). The
+	//! mannequin is SpawnEntityPrefabLocal: no replication, no ids, no server copy. So on a client
+	//! every one of those calls returned "request sent" and dressed nothing - the host saw a full
+	//! soldier and every other player a bare body, the 2026-09 field report. The same body on the
+	//! host worked only because the host IS the authority.
+	//!
+	//! The local route is the one vanilla's own deploy preview takes
+	//! (SCR_LoadoutPreviewComponent: SpawnEntityPrefabLocal + InventoryStorageSlot.AttachEntity).
+	//! MEASURED on a Workbench listen host, 23 classes, every route held against the manager's
+	//! (2026-09-06): garments, weapons per slot, loaded rounds and mounted attachments come out
+	//! IDENTICAL. Cargo does not: a universal storage grows its slot list only inside the engine's
+	//! own insertion (the InsertItem event is native-to-script, not callable), and a bare attach
+	//! fills only the one seat it already offers - so pouches and packs take one item each and
+	//! the rest of the cargo cannot be seated on this route. What cannot be seated is carried as
+	//! weight instead (s_fUnseatedWeight, added onto the body so the weight row still reads the
+	//! whole kit) and is NOT reported dropped: the fit solve has no occupancy to reason about here,
+	//! and the server's real apply reports real drops through RK29_RpcDo_ItemsDropped anyway.
+	//!
+	//! Taken only where the manager cannot act - a client. The listen host keeps the manager route,
+	//! which fills cargo for real; nothing on the host changes. A replicated, player-controlled body
+	//! must never take the local route: attaching past the manager writes nothing the server would
+	//! replicate.
+	protected static bool s_bLocal;
+
+	//! Cargo the local route could not seat, as prefab weight - see s_bLocal. Reset by Place.
+	protected static float s_fUnseatedWeight;
+
 	//! Largest authored side per prefab, read once - see ItemMaxDimension. Session-scoped: cleared
 	//! at world start with the other prefab caches, or a Workbench edit to an item's dimensions
 	//! would place by last session's size.
@@ -80,6 +114,180 @@ class RK29_KitApply
 	static void ClearCaches()
 	{
 		s_mDimCache.Clear();
+	}
+
+	// ============================================================================ placement route
+
+	//------------------------------------------------------------------------------------------------
+	//! Spawn `prefab` into `storage` at `slotId` (-1 = anywhere the storage will take it) through
+	//! whichever route this pass runs on, handing back the entity when it can be known. The manager
+	//! route answers the entity through its callback, which only fires where replication exists -
+	//! a caller that needs the entity regardless asks the storage afterwards (NewestItemIn, or the
+	//! slot by id). The local route always knows it.
+	protected static bool SpawnInto(notnull SCR_InventoryStorageManagerComponent manager, ResourceName prefab,
+		BaseInventoryStorageComponent storage, int slotId, out IEntity outSpawned)
+	{
+		outSpawned = null;
+
+		if (!s_bLocal)
+		{
+			SCR_AITakeItemFromArsenal_InventoryCallback cb = new SCR_AITakeItemFromArsenal_InventoryCallback();
+			if (!manager.TrySpawnPrefabToStorage(prefab, storage, slotId, cb: cb))
+				return false;
+
+			outSpawned = cb.GetEntity();
+			return true;
+		}
+
+		if (!storage || prefab == ResourceName.Empty)
+			return false;
+
+		// the storage's own fit test first, so a refusal costs no entity: the same volume, weight
+		// and slot-type rules the manager consults, asked of the storage directly
+		if (!storage.CanStoreResource(prefab, slotId))
+			return false;
+
+		Resource res = Resource.Load(prefab);
+		if (!res.IsValid())
+			return false;
+
+		IEntity owner = storage.GetOwner();
+		if (!owner)
+			return false;
+
+		IEntity item = GetGame().SpawnEntityPrefabLocal(res, owner.GetWorld());
+		if (!item)
+			return false;
+
+		if (!SeatLocal(storage, item, slotId))
+		{
+			SCR_EntityHelper.DeleteEntityAndChildren(item);
+			return false;
+		}
+
+		outSpawned = item;
+		return true;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Puts a spawned item into the seat `storage` already offers, attached the way vanilla's deploy
+	//! preview attaches. No seat means the storage would have to grow one, which only the engine's
+	//! own insertion does - see s_bLocal.
+	protected static bool SeatLocal(notnull BaseInventoryStorageComponent storage, notnull IEntity item, int slotId)
+	{
+		InventoryStorageSlot slot = LocalSlotFor(storage, item, slotId);
+		if (!slot)
+			return false;
+
+		slot.AttachEntity(item);
+		return true;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Takes an item out of whatever seat holds it on the local route, without deleting it.
+	protected static void UnseatLocal(notnull IEntity item)
+	{
+		InventoryItemComponent iic = InventoryItemComponent.Cast(item.FindComponent(InventoryItemComponent));
+		if (!iic)
+			return;
+
+		InventoryStorageSlot seat = iic.GetParentSlot();
+		if (seat && seat.GetAttachedEntity() == item)
+			seat.DetachEntity();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Move an existing item into `storage` at `slotId` through the pass's route. Local: out of its
+	//! seat, into the one the storage offers; a storage that will not take it leaves it where it was.
+	protected static bool MoveInto(notnull SCR_InventoryStorageManagerComponent manager, notnull IEntity item,
+		BaseInventoryStorageComponent storage, int slotId)
+	{
+		if (!s_bLocal)
+			return manager.TryInsertItemInStorage(item, storage, slotId);
+
+		if (!storage || !storage.CanStoreItem(item, slotId))
+			return false;
+
+		// remembered so a destination that refuses after all can take it back
+		InventoryItemComponent iic = InventoryItemComponent.Cast(item.FindComponent(InventoryItemComponent));
+		InventoryStorageSlot from;
+		if (iic)
+			from = iic.GetParentSlot();
+
+		UnseatLocal(item);
+		if (SeatLocal(storage, item, slotId))
+			return true;
+
+		if (from && from.GetStorage())
+			SeatLocal(from.GetStorage(), item, from.GetID());
+		return false;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Would `storage` take `prefab` at `slotId`, asked through the pass's route. The manager's
+	//! answer and the storage's own are the same rules; the storage is asked directly on the local
+	//! route so nothing here depends on a manager that has no authority to speak for the body.
+	protected static bool CanTake(notnull SCR_InventoryStorageManagerComponent manager, ResourceName prefab,
+		BaseInventoryStorageComponent storage, int slotId)
+	{
+		if (!storage)
+			return false;
+		if (!s_bLocal)
+			return manager.CanInsertResourceInStorage(prefab, storage, slotId);
+
+		return storage.CanStoreResource(prefab, slotId);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected static bool CanTakeItem(notnull SCR_InventoryStorageManagerComponent manager, notnull IEntity item,
+		BaseInventoryStorageComponent storage, int slotId)
+	{
+		if (!storage)
+			return false;
+		if (!s_bLocal)
+			return manager.CanInsertItemInStorage(item, storage, slotId);
+
+		return storage.CanStoreItem(item, slotId);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The empty seat `slotId` names on `storage`, or for -1 the seat the storage itself offers the
+	//! item. Callers name a seat two ways - by slot ID (weapon, attachment, magazine and equipment
+	//! seats) and by index (loadout and cloth-node slots, where the two coincide on every body we
+	//! field) - so the ID is matched first and the index is the fallback. A seat already holding
+	//! something is refused rather than overwritten: AttachEntity deletes a previous occupant, and
+	//! the manager route would have refused the same insert.
+	protected static InventoryStorageSlot LocalSlotFor(notnull BaseInventoryStorageComponent storage,
+		notnull IEntity item, int slotId)
+	{
+		if (slotId < 0)
+		{
+			InventoryStorageSlot offered = storage.FindSuitableSlotForItem(item);
+			if (offered && offered.GetAttachedEntity())
+				return null;
+			return offered;
+		}
+
+		int count = storage.GetSlotsCount();
+		for (int i = 0; i < count; i++)
+		{
+			InventoryStorageSlot slot = storage.GetSlot(i);
+			if (slot && slot.GetID() == slotId)
+			{
+				if (slot.GetAttachedEntity())
+					return null;
+				return slot;
+			}
+		}
+
+		if (slotId < count)
+		{
+			InventoryStorageSlot byIndex = storage.GetSlot(slotId);
+			if (byIndex && !byIndex.GetAttachedEntity())
+				return byIndex;
+		}
+
+		return null;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -169,13 +377,17 @@ class RK29_KitApply
 	//! on. See RK29_MannequinDress.ApplyLoaded.
 	//!
 	//! `quiet` silences this pass's narration, for the preview alone - it re-runs on every pick
-	//! change. False only on hard failure: a body with no inventory storage manager, not a soldier.
-	static bool Place(notnull IEntity character, notnull RK29_KitStruct kit, out array<ResourceName> droppedItems, map<int, ref array<ref RK29_LoadedPick>> loadedMags, array<ref RK29_AttachmentOrder> orders, bool quiet = false)
+	//! change. `local` places past the inventory manager, for a body that has no replication - the
+	//! preview again, and only ever the preview; see s_bLocal. False only on hard failure: a body
+	//! with no inventory storage manager, not a soldier.
+	static bool Place(notnull IEntity character, notnull RK29_KitStruct kit, out array<ResourceName> droppedItems, map<int, ref array<ref RK29_LoadedPick>> loadedMags, array<ref RK29_AttachmentOrder> orders, bool quiet = false, bool local = false)
 	{
 		if (!droppedItems)
 			droppedItems = {};
 
 		s_bQuiet = quiet;
+		s_bLocal = local;
+		s_fUnseatedWeight = 0;
 
 		SCR_InventoryStorageManagerComponent manager = SCR_InventoryStorageManagerComponent.Cast(
 			character.FindComponent(SCR_InventoryStorageManagerComponent));
@@ -218,7 +430,25 @@ class RK29_KitApply
 
 		// attachments last - the weapons must be fully spawned
 		ApplyAttachmentOrders(manager, weaponEntities, orders);
+
+		// the cargo the local route could not seat still weighs something: put it on the body's own
+		// storage as additional weight, which is where GetTotalWeightOfAllStorages will find it
+		if (s_bLocal && s_fUnseatedWeight > 0)
+		{
+			SCR_CharacterInventoryStorageComponent own = SCR_CharacterInventoryStorageComponent.Cast(
+				character.FindComponent(SCR_CharacterInventoryStorageComponent));
+			if (own)
+				own.SetAdditionalWeight(own.GetAdditionalWeight() + s_fUnseatedWeight);
+		}
 		return true;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Kilograms of cargo the last local pass carried as weight rather than as entities. Zero after a
+	//! manager-route pass.
+	static float LastUnseatedWeight()
+	{
+		return s_fUnseatedWeight;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -494,14 +724,15 @@ class RK29_KitApply
 	{
 		BaseInventoryStorageComponent seatStorage;
 		InventoryStorageSlot seat = FindSeatFor(weapon, prefab, seatStorage);
-		if (seat && seatStorage && manager.TrySpawnPrefabToStorage(prefab, seatStorage, seat.GetID()))
+		IEntity unused;
+		if (seat && seatStorage && SpawnInto(manager, prefab, seatStorage, seat.GetID(), unused))
 			return true;
 
 		array<BaseInventoryStorageComponent> storages = {};
 		CollectAttachmentStorages(weapon, storages);
 		foreach (BaseInventoryStorageComponent storage : storages)
 		{
-			if (manager.TrySpawnPrefabToStorage(prefab, storage, -1))
+			if (SpawnInto(manager, prefab, storage, -1, unused))
 				return true;
 		}
 		return false;
@@ -622,7 +853,12 @@ class RK29_KitApply
 	//! entity reads as occupied to the next insert. `known` is the seat when the caller has it.
 	protected static void ForceDelete(notnull SCR_InventoryStorageManagerComponent manager, notnull IEntity victim, InventoryStorageSlot known = null)
 	{
-		if (manager.TryDeleteItem(victim))
+		// never asked on the local route: on a client it answers true for a request the server will
+		// never see, and the victim stays standing. The storage's own removal runs instead, so its
+		// slot list and weight tally let go before the entity does.
+		if (s_bLocal)
+			UnseatLocal(victim);
+		else if (manager.TryDeleteItem(victim))
 			return;
 
 		InventoryStorageSlot seat = known;
@@ -1005,11 +1241,12 @@ class RK29_KitApply
 			return;
 		}
 
+		IEntity unused;
 		foreach (string slotName, ResourceName prefab : kit.m_mEquipment)
 		{
 			if (satisfied.Contains(slotName))
 				continue;
-			if (!manager.TrySpawnPrefabToStorage(prefab, equipStorage, -1))
+			if (!SpawnInto(manager, prefab, equipStorage, -1, unused))
 				Note(string.Format("[RK29] equipment did not equip: %1", prefab),
 					LogLevel.WARNING);
 		}
@@ -1060,7 +1297,8 @@ class RK29_KitApply
 				continue;
 			}
 
-			if (!manager.TrySpawnPrefabToStorage(prefab, nodes, slotIdx))
+			IEntity unused;
+			if (!SpawnInto(manager, prefab, nodes, slotIdx, unused))
 				Note(string.Format("[RK29] garment attachment did not equip: %1 refused %2 in %3",
 					FileNameOf(garment), FilePath.StripPath("" + prefab), slotName), LogLevel.WARNING);
 		}
@@ -1141,7 +1379,8 @@ class RK29_KitApply
 			if (!kit.m_mClothing.Find(slot.GetSourceName(), wanted) || wanted == ResourceName.Empty)
 				continue;
 
-			if (manager.TrySpawnPrefabToStorage(wanted, loadoutStorage, i))
+			IEntity unusedGarment;
+			if (SpawnInto(manager, wanted, loadoutStorage, i, unusedGarment))
 				placed.Set(slot.GetSourceName(), true);
 			else
 				Note(string.Format("[RK29] clothing did not equip in slot %1: %2",
@@ -1153,7 +1392,8 @@ class RK29_KitApply
 		{
 			if (prefab == ResourceName.Empty || placed.Contains(slotName))
 				continue;
-			if (manager.TrySpawnPrefabToStorage(prefab, loadoutStorage, -1))
+			IEntity unusedRouted;
+			if (SpawnInto(manager, prefab, loadoutStorage, -1, unusedRouted))
 				Note(string.Format("[RK29] clothing slot '%1' not on this body - %2 routed by the"
 					+ " engine", slotName, prefab), LogLevel.WARNING);
 			else
@@ -1180,8 +1420,8 @@ class RK29_KitApply
 
 		foreach (int slotIdx, ResourceName prefab : kit.m_mWeapons)
 		{
-			SCR_AITakeItemFromArsenal_InventoryCallback cb = new SCR_AITakeItemFromArsenal_InventoryCallback();
-			if (!manager.TrySpawnPrefabToStorage(prefab, weaponStorage, slotIdx, cb: cb))
+			IEntity spawned;
+			if (!SpawnInto(manager, prefab, weaponStorage, slotIdx, spawned))
 			{
 				// out from under the quiet gate deliberately, the one exception: a slot the kit
 				// names refusing its weapon is a fault every time - it stayed silent while the F4
@@ -1194,8 +1434,7 @@ class RK29_KitApply
 				continue;
 			}
 
-			// the callback answers through replication, which a preview body may not have
-			IEntity spawned = cb.GetEntity();
+			// the manager's callback answers through replication, which a preview body may not have
 			if (!spawned)
 			{
 				for (int s = 0, sn = weaponStorage.GetSlotsCount(); s < sn; s++)
@@ -1308,7 +1547,8 @@ class RK29_KitApply
 			return;
 		}
 
-		if (manager.TrySpawnPrefabToStorage(pick.m_sPrefab, destStorage, magSlot.GetID()))
+		IEntity unused;
+		if (SpawnInto(manager, pick.m_sPrefab, destStorage, magSlot.GetID(), unused))
 		{
 			Note(string.Format("[RK29] loaded %1 into %2", FilePath.StripPath("" + pick.m_sPrefab),
 				FileNameOf(weapon)), LogLevel.NORMAL);
@@ -1319,7 +1559,7 @@ class RK29_KitApply
 			FileNameOf(weapon), pick.m_sPrefab), LogLevel.WARNING);
 		// the round it came with goes back: the spares are already short by one
 		if (seatedPrefab != ResourceName.Empty
-			&& manager.TrySpawnPrefabToStorage(seatedPrefab, destStorage, magSlot.GetID()))
+			&& SpawnInto(manager, seatedPrefab, destStorage, magSlot.GetID(), unused))
 			Note(string.Format("[RK29] restored %1 into %2 instead",
 				FilePath.StripPath("" + seatedPrefab), FileNameOf(weapon)), LogLevel.WARNING);
 	}
@@ -1718,7 +1958,7 @@ class RK29_KitApply
 			array<int> fits = {};
 			for (int c = 0; c < nCont; c++)
 			{
-				if (manager.CanInsertResourceInStorage(st.m_aItems[i], st.m_aContainers[c], st.m_aSlotIds[c]))
+				if (CanTake(manager, st.m_aItems[i], st.m_aContainers[c], st.m_aSlotIds[c]))
 					fits.Insert(c);
 			}
 			st.m_aEligible.Insert(fits);
@@ -1805,9 +2045,25 @@ class RK29_KitApply
 		if (chosen == -1)
 			return false;
 
-		SCR_AITakeItemFromArsenal_InventoryCallback cb = new SCR_AITakeItemFromArsenal_InventoryCallback();
-		if (!manager.TrySpawnPrefabToStorage(item, st.m_aContainers[chosen], st.m_aSlotIds[chosen], cb: cb))
+		IEntity got;
+		if (!SpawnInto(manager, item, st.m_aContainers[chosen], st.m_aSlotIds[chosen], got))
 		{
+			// LOCAL ROUTE: the container said it fits and the seat was the only thing missing - a
+			// universal storage with no free slot to attach to. Carried as weight, counted as
+			// placed with no entity behind it, never dropped: see s_bLocal.
+			if (s_bLocal)
+			{
+				s_fUnseatedWeight += st.m_aContainers[chosen].GetWeightFromResource(item);
+				st.m_aPlaced[idx] = true;
+				st.m_aHome[idx] = chosen;
+				st.m_aSeq[idx] = st.m_iNextSeq;
+				st.m_iNextSeq++;
+				st.m_aSpawned[idx] = null;
+				st.m_mStackHome.Set(item, chosen);
+				RK29_Log.Trace("[RK29] carried as weight (local preview, no seat): " + FilePath.StripPath("" + item));
+				return true;
+			}
+
 			Note(string.Format("[RK29] insert refused: %1 -> %2", item, st.m_aKeys[chosen]),
 				LogLevel.WARNING);
 			return false;
@@ -1817,9 +2073,8 @@ class RK29_KitApply
 		st.m_aHome[idx] = chosen;
 		st.m_aSeq[idx] = st.m_iNextSeq;
 		st.m_iNextSeq++;
-		// the entity, so it can be taken back out later. The callback answers through replication,
-		// which a client-side preview body may not have, so the container is asked directly then.
-		IEntity got = cb.GetEntity();
+		// the entity, so it can be taken back out later. The manager's callback answers through
+		// replication, which a preview body has none of, so the container is asked directly then.
 		if (!got)
 			got = NewestItemIn(st.m_aContainers[chosen], item, st.m_aSpawned);
 		st.m_aSpawned[idx] = got;
@@ -1866,7 +2121,9 @@ class RK29_KitApply
 
 		int from = st.m_aHome[victim];
 		IEntity leaving = st.m_aSpawned[victim];
-		ForceDelete(manager, leaving);
+		// null for an item the local route carried as weight rather than as an entity
+		if (leaving)
+			ForceDelete(manager, leaving);
 
 		string homeKey = st.m_aKeys[from];
 		string victimFile = FilePath.StripPath("" + st.m_aItems[victim]);
@@ -1958,7 +2215,7 @@ class RK29_KitApply
 
 		foreach (int c : st.m_aEligible[idx])
 		{
-			if (!manager.CanInsertResourceInStorage(item, st.m_aContainers[c], st.m_aSlotIds[c]))
+			if (!CanTake(manager, item, st.m_aContainers[c], st.m_aSlotIds[c]))
 				continue;
 
 			int penalty = 0;
@@ -2139,12 +2396,12 @@ class RK29_KitApply
 
 		for (int d = 0, n = st.m_aContainers.Count(); d < n; d++)
 		{
-			if (d == c || !manager.CanInsertItemInStorage(occupant, st.m_aContainers[d], st.m_aSlotIds[d]))
+			if (d == c || !CanTakeItem(manager, occupant, st.m_aContainers[d], st.m_aSlotIds[d]))
 				continue;
-			if (!manager.TryInsertItemInStorage(occupant, st.m_aContainers[d], st.m_aSlotIds[d]))
+			if (!MoveInto(manager, occupant, st.m_aContainers[d], st.m_aSlotIds[d]))
 				continue;
 
-			if (manager.CanInsertResourceInStorage(st.m_aItems[idx], st.m_aContainers[c], st.m_aSlotIds[c]))
+			if (CanTake(manager, st.m_aItems[idx], st.m_aContainers[c], st.m_aSlotIds[c]))
 			{
 				int moved = st.m_aSpawned.Find(occupant);
 				if (moved != -1)
@@ -2154,7 +2411,7 @@ class RK29_KitApply
 				return true;
 			}
 
-			if (!manager.TryInsertItemInStorage(occupant, st.m_aContainers[c], homeSlot))
+			if (!MoveInto(manager, occupant, st.m_aContainers[c], homeSlot))
 			{
 				Note(string.Format("[RK29] eviction undo failed - %1 stays where it was"
 					+ " moved to", FileNameOf(occupant)), LogLevel.WARNING);
@@ -2262,7 +2519,8 @@ class RK29_KitApply
 			return ResourceName.Empty;
 
 		ResourceName grenade = bestBatch.m_aPrefabs[bestIdx];
-		if (!manager.TrySpawnPrefabToStorage(grenade, weaponStorage, -1))
+		IEntity unused;
+		if (!SpawnInto(manager, grenade, weaponStorage, -1, unused))
 			return ResourceName.Empty;
 
 		RK29_Log.Trace("[RK29] primed grenade slot: " + FilePath.StripPath("" + grenade));

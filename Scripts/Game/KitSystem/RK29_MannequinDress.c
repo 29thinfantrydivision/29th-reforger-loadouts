@@ -50,7 +50,11 @@ class RK29_MannequinDress
 	{
 		array<ResourceName> dropped;
 		outDropped = null;
-		if (!RK29_KitApply.Place(body, kit, dropped, loadedMags, orders, true))
+		// quiet, and LOCAL off the authority: the mannequin has no replication, so on a client the
+		// inventory manager's requests go nowhere - the naked mannequin every non-host player saw.
+		// The host is the authority and keeps the manager route. See RK29_KitApply.s_bLocal.
+		bool local = !Replication.IsServer();
+		if (!RK29_KitApply.Place(body, kit, dropped, loadedMags, orders, true, local))
 		{
 			Print(string.Format("[RK29] %1: not a soldier - no inventory storage manager on the"
 				+ " body", subject), LogLevel.WARNING);
@@ -107,6 +111,12 @@ class RK29_MannequinDress
 			body.FindComponent(EquipedLoadoutStorageComponent)));
 
 		string suffix = ", " + RK29_KitWeight.WeightLabel(RK29_KitWeight.LiveTotal(body));
+
+		// the client route carries the cargo it cannot seat as weight - said here so a log read
+		// off a client is not mistaken for a body one pouch short
+		float unseated = RK29_KitApply.LastUnseatedWeight();
+		if (unseated > 0)
+			suffix = suffix + " (" + RK29_KitWeight.WeightLabel(unseated) + " of cargo carried as weight - client preview)";
 
 		if (dropped && !dropped.IsEmpty())
 			suffix = suffix + " | " + dropped.Count().ToString() + " DROPPED";
