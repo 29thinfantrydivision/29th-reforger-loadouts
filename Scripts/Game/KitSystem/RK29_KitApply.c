@@ -71,39 +71,41 @@ class RK29_KitApply
 	//! pass left here, so those must Print or RK29_Log.Trace, never Note.
 	protected static bool s_bQuiet;
 
-	//! Whether the running pass places LOCALLY - straight into storage slots, nothing through the
-	//! inventory manager. Written at the top of Place beside s_bQuiet, same lifetime, same rule.
+	//! Whether the running pass places into storage slots directly instead of through the inventory
+	//! manager. Written at the top of Place beside s_bQuiet, same lifetime, same rule.
 	//!
-	//! WHY IT EXISTS. The inventory manager's mutating calls (TrySpawnPrefabToStorage,
-	//! TryInsertItemInStorage, TryDeleteItem) are requests to the AUTHORITY: on a listen host they
-	//! run at once, on a client they are sent to the server by replication id and answered through
-	//! replication (vanilla's own OnItemAdded says so, and its inventory UI refuses to move into a
-	//! storage with no RplId - SCR_InventoryStorageManagerComponent.CanUseStorageForMove). The
-	//! mannequin is SpawnEntityPrefabLocal: no replication, no ids, no server copy. So on a client
-	//! every one of those calls returned "request sent" and dressed nothing - the host saw a full
-	//! soldier and every other player a bare body, the 2026-09 field report. The same body on the
-	//! host worked only because the host IS the authority.
+	//! The manager's mutating calls (TrySpawnPrefabToStorage, TryInsertItemInStorage, TryDeleteItem)
+	//! are requests to the authority, addressed by replication id: the host runs them at once, a
+	//! client sends them to the server (vanilla's OnItemAdded says so, and its inventory UI refuses
+	//! any storage with no RplId - SCR_InventoryStorageManagerComponent.CanUseStorageForMove). The
+	//! mannequin is SpawnEntityPrefabLocal, so it has no id to address: on a client every such call
+	//! answers "request sent" and dresses nothing. Hence this route, which is the one vanilla's own
+	//! deploy preview takes (SCR_LoadoutPreviewComponent: SpawnEntityPrefabLocal +
+	//! InventoryStorageSlot.AttachEntity). Taken only off the authority; the host keeps the manager
+	//! route. A replicated, player-controlled body must never take it - attaching past the manager
+	//! writes nothing the server would replicate.
 	//!
-	//! The local route is the one vanilla's own deploy preview takes
-	//! (SCR_LoadoutPreviewComponent: SpawnEntityPrefabLocal + InventoryStorageSlot.AttachEntity).
-	//! MEASURED on a Workbench listen host, 23 classes, every route held against the manager's
-	//! (2026-09-06): garments, weapons per slot, loaded rounds and mounted attachments come out
-	//! IDENTICAL. Cargo does not: a universal storage grows its slot list only inside the engine's
-	//! own insertion (the InsertItem event is native-to-script, not callable), and a bare attach
-	//! fills only the one seat it already offers - so pouches and packs take one item each and
-	//! the rest of the cargo cannot be seated on this route. What cannot be seated is carried as
-	//! weight instead (s_fUnseatedWeight, added onto the body so the weight row still reads the
-	//! whole kit) and is NOT reported dropped: the fit solve has no occupancy to reason about here,
-	//! and the server's real apply reports real drops through RK29_RpcDo_ItemsDropped anyway.
+	//! Cargo seats here for real. Do not re-derive otherwise from the API surface: it says a slot
+	//! cannot be created from script, which is true and beside the point, because
+	//! FindSuitableSlotForItem is native and mints one on demand (probed on a peer 2026-09-07 -
+	//! three magazines into an empty pouch gave slot ids 0, 1, 2, and the storage's weight walk rose
+	//! 0.48 kg each time).
 	//!
-	//! Taken only where the manager cannot act - a client. The listen host keeps the manager route,
-	//! which fills cargo for real; nothing on the host changes. A replicated, player-controlled body
-	//! must never take the local route: attaching past the manager writes nothing the server would
-	//! replicate.
+	//! Cargo eligibility is honest on this route without the manager: SCR_UniversalInventoryStorage
+	//! Component overrides CanStoreResource/CanStoreItem with the real volume, dimension and weight
+	//! checks, all of which run locally. So an over-stuffed kit drops the same items here as on the
+	//! host. Only the always-true base event survives on storages that do not override it - equipment
+	//! mounts - which is what MountAccepts exists for.
+	//!
+	//! A seat refused after eligibility passed is therefore a routing mistake in this route, and is
+	//! reported as a drop like any other. Do not soften that into a weight correction on the body:
+	//! it was, and it turned the one routing bug this route has ever had into a 0.45 kg discrepancy
+	//! instead of the twenty-three missing items it actually was.
 	protected static bool s_bLocal;
 
-	//! Cargo the local route could not seat, as prefab weight - see s_bLocal. Reset by Place.
-	protected static float s_fUnseatedWeight;
+	//! Does a named mount accept this prefab, keyed "<garment>#<slot id>|<prefab>" - see
+	//! MountAccepts. Only the type answer is kept; occupancy is re-read live.
+	protected static ref map<string, bool> s_mMountFit = new map<string, bool>();
 
 	//! Largest authored side per prefab, read once - see ItemMaxDimension. Session-scoped: cleared
 	//! at world start with the other prefab caches, or a Workbench edit to an item's dimensions
@@ -114,6 +116,7 @@ class RK29_KitApply
 	static void ClearCaches()
 	{
 		s_mDimCache.Clear();
+		s_mMountFit.Clear();
 	}
 
 	// ============================================================================ placement route
@@ -142,8 +145,8 @@ class RK29_KitApply
 		if (!storage || prefab == ResourceName.Empty)
 			return false;
 
-		// the storage's own fit test first, so a refusal costs no entity: the same volume, weight
-		// and slot-type rules the manager consults, asked of the storage directly
+		// the storage's own refusal first, so it costs no entity. Not the engine's fit test - see
+		// CanTake; the seat below is the real gate
 		if (!storage.CanStoreResource(prefab, slotId))
 			return false;
 
@@ -224,9 +227,15 @@ class RK29_KitApply
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! Would `storage` take `prefab` at `slotId`, asked through the pass's route. The manager's
-	//! answer and the storage's own are the same rules; the storage is asked directly on the local
-	//! route so nothing here depends on a manager that has no authority to speak for the body.
+	//! Would `storage` take `prefab` at `slotId`, asked through the pass's route: the manager where
+	//! it has authority, the storage itself where it has none.
+	//!
+	//! The base CanStoreResource/CanStoreItem are script events implemented as `return true`
+	//! (generated BaseInventoryStorageComponent), but the storages cargo actually goes in override
+	//! them: SCR_UniversalInventoryStorageComponent runs PerformVolumeValidationForResource,
+	//! IsAdditionalWeightOk and CheckParentWeightLimit, all locally. So the local answer is honest
+	//! for a pouch. It is NOT honest for a mount, which inherits the base event unchanged - hence
+	//! MountAccepts below.
 	protected static bool CanTake(notnull SCR_InventoryStorageManagerComponent manager, ResourceName prefab,
 		BaseInventoryStorageComponent storage, int slotId)
 	{
@@ -235,7 +244,53 @@ class RK29_KitApply
 		if (!s_bLocal)
 			return manager.CanInsertResourceInStorage(prefab, storage, slotId);
 
+		// a mount does not override CanStoreResource, so the base event would say yes to anything -
+		// and ChooseContainer scores a mount tier 0, so without this the whole kit piles onto one
+		// seat. Cargo storages below need no such help: SCR_UniversalInventoryStorageComponent
+		// overrides it with the real volume and weight checks.
+		if (slotId >= 0)
+			return MountAccepts(storage, slotId, prefab);
+
 		return storage.CanStoreResource(prefab, slotId);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Would the mount at `slotId` take `prefab`. FindSuitableSlotForItem is native and honours the
+	//! seat's authored AllowedItemTypes - the only way to read that rule from script - so a probe
+	//! copy is spawned and the seat the engine names is compared with the one on offer. Occupancy is
+	//! re-read every call; only the type answer is cached, being a property of the garment prefab.
+	protected static bool MountAccepts(notnull BaseInventoryStorageComponent storage, int slotId,
+		ResourceName prefab)
+	{
+		InventoryStorageSlot seat = storage.GetSlot(slotId);
+		if (!seat || seat.GetAttachedEntity())
+			return false;
+
+		string key = OwnerFileName(storage) + "#" + slotId.ToString() + "|" + prefab;
+
+		bool known;
+		if (s_mMountFit.Find(key, known))
+			return known;
+
+		bool accepts = false;
+
+		Resource res = Resource.Load(prefab);
+		IEntity owner = storage.GetOwner();
+		if (res && res.IsValid() && owner)
+		{
+			IEntity probe = GetGame().SpawnEntityPrefabLocal(res, owner.GetWorld());
+			if (probe)
+			{
+				InventoryStorageSlot offered = storage.FindSuitableSlotForItem(probe);
+				accepts = offered && offered.GetID() == slotId;
+				SCR_EntityHelper.DeleteEntityAndChildren(probe);
+
+				// a probe that would not spawn is not an answer - do not remember it
+				s_mMountFit.Set(key, accepts);
+			}
+		}
+
+		return accepts;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -246,6 +301,17 @@ class RK29_KitApply
 			return false;
 		if (!s_bLocal)
 			return manager.CanInsertItemInStorage(item, storage, slotId);
+
+		// the item is in hand here, so the engine is asked without a probe - see MountAccepts
+		if (slotId >= 0)
+		{
+			InventoryStorageSlot seat = storage.GetSlot(slotId);
+			if (!seat || seat.GetAttachedEntity())
+				return false;
+
+			InventoryStorageSlot offered = storage.FindSuitableSlotForItem(item);
+			return offered && offered.GetID() == slotId;
+		}
 
 		return storage.CanStoreItem(item, slotId);
 	}
@@ -387,7 +453,6 @@ class RK29_KitApply
 
 		s_bQuiet = quiet;
 		s_bLocal = local;
-		s_fUnseatedWeight = 0;
 
 		SCR_InventoryStorageManagerComponent manager = SCR_InventoryStorageManagerComponent.Cast(
 			character.FindComponent(SCR_InventoryStorageManagerComponent));
@@ -431,24 +496,7 @@ class RK29_KitApply
 		// attachments last - the weapons must be fully spawned
 		ApplyAttachmentOrders(manager, weaponEntities, orders);
 
-		// the cargo the local route could not seat still weighs something: put it on the body's own
-		// storage as additional weight, which is where GetTotalWeightOfAllStorages will find it
-		if (s_bLocal && s_fUnseatedWeight > 0)
-		{
-			SCR_CharacterInventoryStorageComponent own = SCR_CharacterInventoryStorageComponent.Cast(
-				character.FindComponent(SCR_CharacterInventoryStorageComponent));
-			if (own)
-				own.SetAdditionalWeight(own.GetAdditionalWeight() + s_fUnseatedWeight);
-		}
 		return true;
-	}
-
-	//------------------------------------------------------------------------------------------------
-	//! Kilograms of cargo the last local pass carried as weight rather than as entities. Zero after a
-	//! manager-route pass.
-	static float LastUnseatedWeight()
-	{
-		return s_fUnseatedWeight;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -2048,22 +2096,6 @@ class RK29_KitApply
 		IEntity got;
 		if (!SpawnInto(manager, item, st.m_aContainers[chosen], st.m_aSlotIds[chosen], got))
 		{
-			// LOCAL ROUTE: the container said it fits and the seat was the only thing missing - a
-			// universal storage with no free slot to attach to. Carried as weight, counted as
-			// placed with no entity behind it, never dropped: see s_bLocal.
-			if (s_bLocal)
-			{
-				s_fUnseatedWeight += st.m_aContainers[chosen].GetWeightFromResource(item);
-				st.m_aPlaced[idx] = true;
-				st.m_aHome[idx] = chosen;
-				st.m_aSeq[idx] = st.m_iNextSeq;
-				st.m_iNextSeq++;
-				st.m_aSpawned[idx] = null;
-				st.m_mStackHome.Set(item, chosen);
-				RK29_Log.Trace("[RK29] carried as weight (local preview, no seat): " + FilePath.StripPath("" + item));
-				return true;
-			}
-
 			Note(string.Format("[RK29] insert refused: %1 -> %2", item, st.m_aKeys[chosen]),
 				LogLevel.WARNING);
 			return false;

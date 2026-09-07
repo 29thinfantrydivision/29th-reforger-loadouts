@@ -2,7 +2,8 @@
 //! What a kit weighs: ask the dressed body through vanilla's own
 //! SCR_InventoryStorageManagerComponent.GetTotalWeightOfAllStorages() - the call
 //! SCR_InventoryMenuUI:713 makes - and format it. Never re-implement that walk, or the readout
-//! and the inventory screen will disagree.
+//! and the inventory screen will disagree; the same two storages drive encumbrance in
+//! CharacterControllerComponent.CalculateSpeedLimits, so it is the weight the game acts on.
 //------------------------------------------------------------------------------------------------
 class RK29_KitWeight
 {
