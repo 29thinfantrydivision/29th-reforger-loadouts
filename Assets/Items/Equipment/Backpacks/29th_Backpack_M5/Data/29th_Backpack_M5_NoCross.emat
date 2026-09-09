@@ -1,0 +1,5 @@
+MatPBRBasic : "{AD04B939A2C3F083}Assets/_BaseMaterials/Equipment_MatPBRBasic.emat" {
+ CavityFromAO 0.853
+ BCRMap "{AB29C0FFEE29E012}Assets/Items/Equipment/Backpacks/29th_Backpack_M5/Data/29th_Backpack_M5_NoCross_BCR.edds"
+ NMOMap "{E78B1B4E1F554945}Assets/Items/Equipment/Backpacks/Backpack_Medical_M5/Data/Backpack_Medical_M5_NMO.edds"
+}
