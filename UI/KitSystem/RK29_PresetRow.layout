@@ -137,8 +137,9 @@ SizeLayoutWidgetClass {
        style blank
        Color 1 1 1 1
        "Use placeholder text" 1
-       "Placeholder text" "Save current as..."
+       "Placeholder text" "Save current as"
        "Font Size" 16
+       "Placeholder color" 0.6 0.6 0.6 1
        FontProperties FontProperties "{AB29C0FFEEB22519}" {
         Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
        }
