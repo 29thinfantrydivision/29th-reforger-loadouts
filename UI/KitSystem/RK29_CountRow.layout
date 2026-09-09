@@ -164,7 +164,7 @@ SizeLayoutWidgetClass {
          }
          Clipping True
          components {
-          SCR_HorizontalScrollAnimationComponent "{AB29C0FFEEB21B07}" {
+          RK29_ScrollAnimation "{AB29C0FFEEB21B07}" {
            m_sAnimationContentWidget "NameContent"
            m_fAnimationSpeedPxPerSec 30
            m_fWaitTimeLeftSec 1

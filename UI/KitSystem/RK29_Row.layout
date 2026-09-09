@@ -46,6 +46,7 @@ SizeLayoutWidgetClass {
     RK29_MarqueeOnHover "{AB29C0FFEEB22474}" {
      m_sFrameWidget "RowChipsFrame"
      m_sContentWidget "RowChipsContent"
+     m_sTextWidget ""
     }
    }
    Slot AlignableSlot "{AB29C0FFEE291003}" {
@@ -114,7 +115,7 @@ SizeLayoutWidgetClass {
            }
            Clipping True
            components {
-            SCR_HorizontalScrollAnimationComponent "{AB29C0FFEEB2246F}" {
+            RK29_ScrollAnimation "{AB29C0FFEEB2246F}" {
              m_sAnimationContentWidget "NameContent"
              m_fAnimationSpeedPxPerSec 30
              m_fWaitTimeLeftSec 1
@@ -173,7 +174,7 @@ SizeLayoutWidgetClass {
            }
            Clipping True
            components {
-            SCR_HorizontalScrollAnimationComponent "{AB29C0FFEEB22477}" {
+            RK29_ScrollAnimation "{AB29C0FFEEB22477}" {
              m_sAnimationContentWidget "RowChipsContent"
              m_fAnimationSpeedPxPerSec 30
              m_fWaitTimeLeftSec 1
