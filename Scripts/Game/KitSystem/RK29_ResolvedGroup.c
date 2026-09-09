@@ -38,6 +38,7 @@ class RK29_ResolvedGroup
 	string m_sWornSlot;              // CLOTHING groups: the garment slot every entry fills
 	string m_sGarmentSlot;           // GARMENT_ATTACHMENT groups: loadout slot of the host garment (Hat)
 	string m_sSlotOnGarment;         // GARMENT_ATTACHMENT groups: the slot ON that garment (NVG)
+	bool m_bSignpostInLoadout;       // GARMENT_ATTACHMENT groups: named in the Loadout tab too, as a link
 	ref array<ref RK29_ResolvedEntry> m_aEntries = {};
 
 	//! Catalog groups this one absorbed through m_aIncludeGroups, by id. An override or exclusion addressed

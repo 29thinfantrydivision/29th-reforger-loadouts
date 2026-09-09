@@ -251,6 +251,15 @@ class RK29_MannequinView
 	}
 
 	//------------------------------------------------------------------------------------------------
+	IEntity GarmentAt(string slotName)
+	{
+		if (!m_MannequinBody)
+			return null;
+
+		return RK29_MannequinDress.GarmentAt(m_MannequinBody, slotName);
+	}
+
+	//------------------------------------------------------------------------------------------------
 	void ShowMannequin(bool show)
 	{
 		if (m_wMannequinBox)

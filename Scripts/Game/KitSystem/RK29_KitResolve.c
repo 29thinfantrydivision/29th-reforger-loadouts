@@ -1109,6 +1109,7 @@ class RK29_KitResolve
 				g.m_sGarmentSlot = onDef.m_sGarmentSlot;
 				g.m_sSlotOnGarment = onDef.m_sSlot;
 				g.m_bAllowEmpty = onDef.m_bAllowEmpty;
+				g.m_bSignpostInLoadout = onDef.m_bSignpostInLoadout;
 			}
 			g.m_eKind = itemDef.m_eKind;
 			g.m_iBudget = itemDef.m_iBudget;

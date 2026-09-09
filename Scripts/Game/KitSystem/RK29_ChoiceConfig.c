@@ -276,6 +276,12 @@ class RK29_GarmentAttachmentGroup : RK29_ItemGroup
 	//! Same contract as the clothing flag: None is a deliberate pick, distinct from not answering.
 	[Attribute("0", desc: "Taking nothing is a legal pick on this slot - rendered as a 'None' row. Off means the slot must be filled", category: "29th")]
 	bool m_bAllowEmpty;
+
+	//! Off by default because the space is not free: the Loadout column is the kit's weapons and
+	//! gear, and one line per garment slot would crowd it out. A slot's own panel is always the
+	//! group's home whether this is set or not - see RK29_MenuTileColumn.StampGarmentLink.
+	[Attribute("0", desc: "Also name this group in the Loadout tab, as one line that navigates to the garment it seats on. Off = it appears only under that garment, on the Appearance tab. On is for things notable enough to belong beside the weapons - night vision, which a player who never opens Appearance would otherwise never learn exists - and not for every pouch on a rig", category: "29th")]
+	bool m_bSignpostInLoadout;
 }
 
 //------------------------------------------------------------------------------------------------

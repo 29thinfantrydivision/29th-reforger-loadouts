@@ -160,6 +160,19 @@ class RK29_MenuTileColumn
 			// a garment group belongs to the other tab, never to both
 			if (other && other.IsClothingGroup())
 				continue;
+
+			// what seats on a garment is edited under that garment, on the other tab. A group notable
+			// enough to be named here too gets one line pointing at it - see StampGarmentLink - and
+			// every other one is simply absent from this column, not hidden from the player: its home
+			// is the garment's panel either way.
+			if (other && other.IsGarmentAttachmentGroup())
+			{
+				if (other.m_bSignpostInLoadout)
+					StampGarmentLink(other);
+
+				continue;
+			}
+
 			StampSmallTile(other);
 		}
 	}
@@ -196,10 +209,14 @@ class RK29_MenuTileColumn
 	//! kit: for six of the seven slots there is no group to ask.
 	protected void StampWornTile(string slot, string caption, RK29_ResolvedGroup g)
 	{
+		// something seating on this garment is a second reason the slot opens, and so a second reason it
+		// must not wear the padlock: a class offered one helmet still chooses what rides on it
+		bool hosts = RK29_MenuRowKit.SlotHostsAttachment(m_Menu.Offer(), slot);
+
 		// no group means nothing to open, one answer means nothing to change - to a player both are the
 		// same fact, so both wear the padlock
 		RK29_MenuRowKit.StampHeader(m_wColTiles, caption,
-			RK29_MenuRowKit.LockFlag(!g || RK29_MenuRowKit.GroupFullyPinned(g)));
+			RK29_MenuRowKit.LockFlag(!hosts && (!g || RK29_MenuRowKit.GroupFullyPinned(g))));
 
 		ResourceName garment;
 		if (m_Menu.PreviewKit())
@@ -217,23 +234,38 @@ class RK29_MenuTileColumn
 		if (!row)
 			return;
 
-		RK29_MenuRowKit.FillPreview(row, garment);
+		// the garment as worn rather than as authored, so a helmet pictures the night vision seated on
+		// it - the same reason a weapon tile points at the mannequin's own gun rather than at a prefab.
+		// No mannequin, or a slot it did not dress, falls back to the prefab.
+		IEntity onBody = m_Menu.Mannequin().GarmentAt(slot);
+		if (onBody)
+			RK29_MenuRowKit.FillPreviewEntity(row, onBody);
+		else
+			RK29_MenuRowKit.FillPreview(row, garment);
 
-		if (!g)
+		// what the tile opens: this slot's own garment group, or - for a slot dressed by block clothing
+		// that something still seats on - that attachment, which then has no host section to open under
+		RK29_ResolvedGroup opener = g;
+		if (!opener)
+			opener = RK29_MenuRowKit.HostedAttachmentOn(m_Menu.Offer(), slot);
+
+		if (!opener)
 			return;
 
 		int index = m_aTileGroup.Count();
-		m_aTileGroup.Insert(g.m_sId);
+		m_aTileGroup.Insert(opener.m_sId);
 
-		m_Menu.SetPlateToggled(row, "RowButton", "RowBg", m_Menu.Detail().OpenGroup() == g.m_sId);
+		m_Menu.SetPlateToggled(row, "RowButton", "RowBg", m_Menu.Detail().OpenGroup() == opener.m_sId);
 
 		// "+2 more", the same door the folded tiles carry. Without it a backpack slot offering four bags
-		// looks exactly like the boots, which offer none.
-		RK29_MenuRowKit.ShowMoreHint(row, RK29_MenuRowKit.SelectableCount(g) - 1);
+		// looks exactly like the boots, which offer none. Counted over the garments alone: what seats on
+		// them is a section of the panel this opens, not another answer to which garment to wear.
+		if (g)
+			RK29_MenuRowKit.ShowMoreHint(row, RK29_MenuRowKit.SelectableCount(g) - 1);
 
 		// and a padlocked slot does not open at all: six of these slots have no group and have never been
 		// clickable, so a seventh wearing the same lock and still opening makes the lock mean nothing
-		if (RK29_MenuRowKit.GroupFullyPinned(g))
+		if (!hosts && RK29_MenuRowKit.GroupFullyPinned(opener))
 			return;
 
 		m_Menu.AttachHandler(row, "RowButton", RK29_EMenuRowKind.TILE, index, m_aTileHandlers);
@@ -463,6 +495,17 @@ class RK29_MenuTileColumn
 	//! as the one item it holds, pictured and named; a counted group reads as one chip per item.
 	protected void StampSmallTile(notnull RK29_ResolvedGroup g)
 	{
+		// A group holding nothing has no picture to show and no chips to lay out: a caption over an
+		// empty 64-pixel plate cost 92 to say nothing, which is what buried Medical below the fold on
+		// any class carrying flares nobody took. The caption keeps its place and the plate under it
+		// becomes one line naming how many answers are waiting; the tile comes back the moment the
+		// group issues anything.
+		if (TileIsEmpty(g))
+		{
+			StampEmptyGroupRow(g);
+			return;
+		}
+
 		// a group that issues nothing adjustable wears its padlock on the caption - "GRENADES [lock]" -
 		// which answers "why can't I change any of this" before the tile is opened. It still opens,
 		// unlike a padlocked garment slot: behind the click are rows naming items this tile only
@@ -522,6 +565,124 @@ class RK29_MenuTileColumn
 		m_Menu.SetPlateToggled(row, "RowButton", "RowBg", m_Menu.Detail().OpenGroup() == g.m_sId);
 
 		m_Menu.AttachHandler(row, "RowButton", RK29_EMenuRowKind.TILE, index, m_aTileHandlers);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Whether this group is issuing nothing at all right now. Two shapes of empty and one answer:
+	//! an EXCLUSIVE group holding no pick - night vision nobody chose, a bag slot answered None -
+	//! and a counted group every one of whose entries stands at zero.
+	protected bool TileIsEmpty(notnull RK29_ResolvedGroup g)
+	{
+		if (g.m_eKind == RK29_EChoiceKind.EXCLUSIVE)
+			return RK29_KitResolve.PickedEntry(g, m_Menu.Picks()) == null;
+
+		foreach (RK29_ResolvedEntry e : g.m_aEntries)
+		{
+			if (e && RK29_KitResolve.PickedCount(g, e, m_Menu.Picks()) > 0)
+				return false;
+		}
+
+		return true;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! An empty group: its caption, unchanged and still carrying whatever padlock it has earned, and
+	//! under it one line saying what is on offer. It still opens the same panel the tile would have
+	//! and still lights while that panel is open - the only thing it gives up is the picture it had
+	//! nothing to put in.
+	protected void StampEmptyGroupRow(notnull RK29_ResolvedGroup g)
+	{
+		RK29_MenuRowKit.StampHeader(m_wColTiles, SmallTileCaptionOf(g),
+			RK29_MenuRowKit.LockFlag(RK29_MenuRowKit.GroupFullyPinned(g)));
+
+		Widget row = RK29_MenuRowKit.StampSlimRow(m_wColTiles, AvailableNoteOf(g));
+		if (!row)
+			return;
+
+		int index = m_aTileGroup.Count();
+		m_aTileGroup.Insert(g.m_sId);
+
+		m_Menu.SetPlateToggled(row, "RowButton", "RowBg", m_Menu.Detail().OpenGroup() == g.m_sId);
+		m_Menu.AttachHandler(row, "RowButton", RK29_EMenuRowKind.TILE, index, m_aTileHandlers);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! What an empty group says on its right: how many answers are waiting behind it. A group with
+	//! none at all - every entry closed at zero by an override - says so outright, because "0
+	//! available" reads as a count that failed rather than as a group offering nothing.
+	protected string AvailableNoteOf(notnull RK29_ResolvedGroup g)
+	{
+		int available = RK29_MenuRowKit.AvailableCount(g);
+		if (available < 1)
+			return "None";
+
+		return available.ToString() + " available";
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! One garment attachment in this column, for the groups m_bSignpostInLoadout names. Night vision
+	//! is worth standing beside the kit's weapons and gear - a player who never opens the Appearance
+	//! tab would otherwise never learn it exists - but it seats on the helmet and is edited under it,
+	//! so this row navigates and never opens a panel of its own. In every one of its states, so that
+	//! one row means one thing: the click always goes to the garment that governs it.
+	//!
+	//! What changes with the state is only how much room it takes. Worn is a full tile like any other
+	//! piece of kit; empty or refused is the one line, because a picture of nothing is not worth 64
+	//! pixels and the words are what there is to read.
+	protected void StampGarmentLink(notnull RK29_ResolvedGroup g)
+	{
+		// no padlock on this caption in any state, the blocked one included: what a lock says is "there
+		// is nothing you can do here", and the fix is one pick away on the other tab
+		RK29_MenuRowKit.StampHeader(m_wColTiles, SmallTileCaptionOf(g));
+
+		// Something worn is worth exactly the space anything else the kit carries gets: the full tile,
+		// with its picture and its name under the marquee that scrolls it when it overruns. Shrinking
+		// only happens where there is nothing to show - an unanswered seat or one the garment refuses
+		// - and then the words are the whole content.
+		//
+		// ExclusiveAnswer and not PickedEntry: it is the read the apply makes, so the tile cannot
+		// picture night vision the body will not be wearing. A pick naming a blocked entry survives in
+		// the pick set on purpose, ready for the helmet that can take it again.
+		RK29_ResolvedEntry worn;
+		if (!RK29_MenuRowKit.BlockedByHost(g))
+			worn = RK29_KitResolve.ExclusiveAnswer(g, m_Menu.Picks());
+
+		Widget row;
+		if (worn)
+		{
+			row = RK29_MenuRowKit.StampTile(m_wColTiles, m_Menu.EntryLabelIn(g, worn));
+			if (row)
+				RK29_MenuRowKit.FillPreview(row, m_Menu.EntryPreviewPrefab(worn, g));
+
+			// no "+N more": no tile in this column carries one - the weapons do not - and it is the
+			// worn tiles on the Appearance tab that do. A tile that reads like the ones beside it is
+			// worth more here than a second hint that it opens
+		}
+		else
+		{
+			row = RK29_MenuRowKit.StampSlimRow(m_wColTiles, GarmentLinkNoteOf(g));
+		}
+
+		if (!row)
+			return;
+
+		int index = m_aTileGroup.Count();
+		m_aTileGroup.Insert(g.m_sId);
+
+		// no toggled plate: this row is never the open panel, whatever the detail band is showing
+		m_Menu.AttachHandler(row, "RowButton", RK29_EMenuRowKind.GARMENT_LINK, index, m_aTileHandlers);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! What an empty garment attachment says on its right: how many it could be wearing, or - when
+	//! the worn garment cannot seat it at all - what would fix that. Only the two empty states reach
+	//! here; a seat holding something is a tile and names what it holds.
+	protected string GarmentLinkNoteOf(notnull RK29_ResolvedGroup g)
+	{
+		if (RK29_MenuRowKit.BlockedByHost(g))
+			return RK29_MenuRowKit.HostNeedOf(m_Menu.Offer(), g);
+
+		return AvailableNoteOf(g);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -686,5 +847,70 @@ class RK29_MenuTileColumn
 
 		BuildTiles();
 		m_Menu.Detail().BuildDetail();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A garment attachment's row: go to where it is actually edited - the Appearance tab, that
+	//! garment's panel, this section already unfolded under it. Landing folded would cost two more
+	//! clicks than the row it replaced and leave the player on a helmet list with nothing saying why
+	//! they were sent there.
+	//!
+	//! Not routed through OnModeClicked: that clears the fold, which would close the panel this is
+	//! opening, and rebuilds both columns on the way. The tab is flipped here and the one rebuild
+	//! below stamps the lit tab itself - see UpdateModeTabs.
+	void OnGarmentLinkClicked(int index)
+	{
+		string groupId = TileGroupAt(index);
+		if (groupId == "")
+			return;
+
+		RK29_ResolvedGroup g = RK29_KitResolve.FindGroup(m_Menu.Offer(), groupId);
+		if (!g || !g.IsGarmentAttachmentGroup())
+			return;
+
+		// the fold belongs to the tab being left, exactly as OnModeClicked reads it. What the tile
+		// column is highlighting does not: leaving it alone is what brings the player back to the
+		// weapon they had selected.
+		m_bAppearance = true;
+		m_Menu.Detail().ClearFold();
+
+		// the garment's own group is the panel; this one is a section inside it. A slot dressed by block
+		// clothing has no such group, and then the attachment is the panel.
+		RK29_ResolvedGroup host = HostGroupOf(g.m_sGarmentSlot);
+		if (host)
+		{
+			m_Menu.Detail().SetOpenGroup(host.m_sId);
+
+			// unfolded only where there is something to choose. A seat the worn garment cannot take
+			// states that on its folded tile and the garment above it is the row to change - unfolding
+			// would land the player on greyed rows instead of on the tile that explains them.
+			if (!RK29_MenuRowKit.BlockedByHost(g))
+				m_Menu.Detail().SetOpenAttachmentGroup(g.m_sId);
+		}
+		else
+		{
+			m_Menu.Detail().SetOpenGroup(g.m_sId);
+		}
+
+		BuildTiles();
+		m_Menu.Detail().BuildDetail();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The clothing group dressing a loadout slot, or null where that slot is block clothing. The
+	//! same walk BuildAppearanceTiles makes over the whole offer rather than the kit-level rest: a
+	//! vest a gun brings with it owns its slot too.
+	protected RK29_ResolvedGroup HostGroupOf(string slot)
+	{
+		if (slot == "")
+			return null;
+
+		foreach (RK29_ResolvedGroup candidate : m_Menu.Offer())
+		{
+			if (candidate && candidate.IsClothingGroup() && candidate.m_sWornSlot == slot)
+				return candidate;
+		}
+
+		return null;
 	}
 }

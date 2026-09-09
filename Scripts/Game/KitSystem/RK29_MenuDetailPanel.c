@@ -35,10 +35,10 @@ class RK29_MenuDetailPanel
 	protected string m_sSelectedWeaponGroup;
 
 	//! While set, the weapon panel lists the weapon group's own entries instead of what the gun owns.
-	protected bool m_bWeaponListOpen;
+	protected bool m_bHostListOpen;
 
 	//! Which of the gun's choice groups is unfolded; "" = all folded. One id and not a set: the panel
-	//! asks one question at a time, so unfolding folds whatever was open, and ToggleWeaponList clears
+	//! asks one question at a time, so unfolding folds whatever was open, and ToggleHostList clears
 	//! this for the same reason.
 	protected string m_sOpenAttachmentGroup;
 	protected ref array<ref RK29_MenuRowRef> m_aDetailRows = {};
@@ -112,11 +112,22 @@ class RK29_MenuDetailPanel
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! Which section of the open panel is unfolded, set from outside for one case only: the tile
+	//! column's garment link, which opens a garment panel with the section it stands for already
+	//! unfolded. Landing folded would leave the player on a garment list with nothing saying why they
+	//! were sent - see RK29_MenuTileColumn.OnGarmentLinkClicked. Every other unfold is this panel's
+	//! own, through OnAttachmentGroupClicked.
+	void SetOpenAttachmentGroup(string groupId)
+	{
+		m_sOpenAttachmentGroup = groupId;
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! The two inner folds only, for a path changing what the open panel shows rather than closing
 	//! it.
 	void ClearInnerFold()
 	{
-		m_bWeaponListOpen = false;
+		m_bHostListOpen = false;
 		m_sOpenAttachmentGroup = "";
 	}
 
@@ -155,6 +166,16 @@ class RK29_MenuDetailPanel
 		{
 			SetDetailTitle("");
 			BuildWeaponPanel(g);
+			return;
+		}
+
+		// a garment something seats on opens as a panel rather than a list, for the same reason a gun
+		// does: what rides on it is edited under it. The panel names itself, so no title.
+		if (g.IsClothingGroup()
+			&& RK29_MenuRowKit.SlotHostsAttachment(m_Menu.Offer(), g.m_sWornSlot))
+		{
+			SetDetailTitle("");
+			BuildGarmentPanel(g);
 			return;
 		}
 
@@ -205,7 +226,7 @@ class RK29_MenuDetailPanel
 	//! StampOwnedChoice and share the one-open rule: unfolding either folds the other.
 	protected void BuildWeaponPanel(notnull RK29_ResolvedGroup g)
 	{
-		if (m_bWeaponListOpen && RK29_MenuRowKit.SelectableCount(g) > 1)
+		if (m_bHostListOpen && RK29_MenuRowKit.SelectableCount(g) > 1)
 		{
 			RK29_MenuRowKit.StampHeader(m_wColDetail, WEAPON_HEADER);
 			BuildExclusiveDetail(g);
@@ -219,7 +240,7 @@ class RK29_MenuDetailPanel
 		{
 			RK29_MenuRowKit.StampHeader(m_wColDetail, WEAPON_HEADER);
 			StampFoldTile(g, m_Menu.WeaponLabelOf(g), m_Menu.ResolvedWeaponPrefabOf(g),
-				RK29_EMenuRowKind.WEAPON_FOLD, false, false);
+				RK29_EMenuRowKind.HOST_FOLD, false, false);
 		}
 
 		// keyed by the weapon ID this group currently resolves to, so a pick swap re-parents the panel
@@ -229,6 +250,60 @@ class RK29_MenuDetailPanel
 			return;
 
 		StampOwnedGroups(weaponId);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! One garment, whole - BuildWeaponPanel's mirror, and deliberately the same three moves: the
+	//! garment as a tile that opens its own list, then every group seating on it. A helmet with night
+	//! vision under it is a gun with an optic under it; nothing about the fold differs, so the fold is
+	//! the same one, and StampOwnedChoice stamps the sections unchanged.
+	//!
+	//! Keyed by the loadout slot rather than by the garment, unlike the weapon panel's weapon id: a
+	//! group seats on whatever is worn in the slot, so swapping the helmet re-parents nothing.
+	protected void BuildGarmentPanel(notnull RK29_ResolvedGroup g)
+	{
+		string caption = "CHANGE " + RK29_MenuRowKit.Upper(g.m_sDisplayName);
+
+		if (m_bHostListOpen && RK29_MenuRowKit.SelectableCount(g) > 1)
+		{
+			RK29_MenuRowKit.StampHeader(m_wColDetail, caption);
+			BuildExclusiveDetail(g);
+			return;
+		}
+
+		// a slot offering one garment gets neither caption nor tile, exactly as a gun with one answer
+		// does: the panel then opens straight onto what seats on it, which is the only question left
+		if (RK29_MenuRowKit.SelectableCount(g) > 1)
+		{
+			RK29_MenuRowKit.StampHeader(m_wColDetail, caption);
+			StampFoldTile(g, m_Menu.ExclusiveTileSummary(g), m_Menu.ExclusiveTilePreview(g),
+				RK29_EMenuRowKind.HOST_FOLD, false, false);
+		}
+
+		StampHostedGroups(g.m_sWornSlot);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Everything seating on the garment worn in this slot, in offer order. StampOwnedGroups' mirror,
+	//! minus its three buckets: a garment slot holds seats and nothing else.
+	//!
+	//! The suppression differs by one term, and that term is the feature. A seat the worn garment
+	//! cannot take has every row blocked, so SelectableCount reads 1 - under the usual two - and the
+	//! plain test would drop the section from exactly the panel where the garment that would unblock
+	//! it is being chosen. BlockedByHost is what keeps it on screen; see there for why a weapon seat
+	//! never hits this.
+	protected void StampHostedGroups(string garmentSlot)
+	{
+		foreach (RK29_ResolvedGroup g : m_Menu.Offer())
+		{
+			if (!g || !g.IsGarmentAttachmentGroup() || g.m_sGarmentSlot != garmentSlot)
+				continue;
+
+			if (RK29_MenuRowKit.SelectableCount(g) < 2 && !RK29_MenuRowKit.BlockedByHost(g))
+				continue;
+
+			StampOwnedChoice(g);
+		}
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -304,10 +379,10 @@ class RK29_MenuDetailPanel
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! One EXCLUSIVE group the gun owns: its caption, then either the folded tile naming what that
-	//! seat currently holds or - for the single group m_sOpenAttachmentGroup names - the flat list of
-	//! its answers. The optic seat gets a caption like every other, rather than sectioning itself
-	//! into 1X and magnified under a caption over a caption.
+	//! One EXCLUSIVE group a gun or a garment owns: its caption, then either the folded tile naming
+	//! what that seat currently holds or - for the single group m_sOpenAttachmentGroup names - the
+	//! flat list of its answers. The optic seat gets a caption like every other, rather than
+	//! sectioning itself into 1X and magnified under a caption over a caption.
 	protected void StampOwnedChoice(notnull RK29_ResolvedGroup g)
 	{
 		RK29_MenuRowKit.StampHeader(m_wColDetail, g.m_sDisplayName);
@@ -325,7 +400,17 @@ class RK29_MenuDetailPanel
 
 		RK29_KitSetup setup = RK29_MenuRowKit.Setup();
 		RK29_ResolvedEntry chosen = RK29_KitResolve.PickedEntry(g, m_Menu.Picks());
-		StampFoldTile(g, m_Menu.ExclusiveTileSummary(g), m_Menu.EntryPreviewPrefab(chosen, g),
+
+		// A seat the worn garment cannot take stays folded and says so on the tile. "None" would be a
+		// lie of the ordinary kind - it reports a choice the player declined, where what happened is
+		// that the helmet cannot carry one - and unfolding four greyed rows to explain it spends the
+		// panel's height on an answer the tile above already contains. The list is still one click
+		// away for anyone who wants to see what the other helmet buys.
+		string label = m_Menu.ExclusiveTileSummary(g);
+		if (RK29_MenuRowKit.BlockedByHost(g))
+			label = RK29_MenuRowKit.HostIncompatibleOf(m_Menu.Offer(), g);
+
+		StampFoldTile(g, label, m_Menu.EntryPreviewPrefab(chosen, g),
 			RK29_EMenuRowKind.ATTACHMENT_FOLD,
 			setup && chosen && RK29_KitResolve.IsMagnifiedEntry(setup, g, chosen),
 			chosen != null && g.m_bIsOpticsPoint);
@@ -470,16 +555,12 @@ class RK29_MenuDetailPanel
 			}
 		}
 
-		// a garment attachment the picked garment cannot seat: what it needs is a host with the slot,
+		// a garment attachment the picked garment cannot seat: what it needs is a host that can take it,
 		// and the host's section is the row to change. Before the generic forms, whose "Needs
-		// <culprit>" would name the very helmet that refuses it
+		// <culprit>" would name the very helmet that refuses it. The same sentence the tile column's
+		// row carries, from RK29_MenuRowKit.HostNeedOf, so the two cannot drift.
 		if (g.IsGarmentAttachmentGroup() && e.m_bBlockedMissing)
-		{
-			string hostLabel = GroupLabel(e.m_sBlockedGroup);
-			if (hostLabel == "")
-				hostLabel = g.m_sGarmentSlot;
-			return "Needs a " + hostLabel + " with the " + g.m_sSlotOnGarment + " slot.";
-		}
+			return RK29_MenuRowKit.HostNeedOf(m_Menu.Offer(), g);
 
 		// an exclusion the kit states rather than something the prefabs refuse. "over 4" is a bound, not an
 		// incompatibility, and the count form stays out of prose: item names cannot be pluralised safely
@@ -965,7 +1046,7 @@ class RK29_MenuDetailPanel
 			return;
 
 		m_sOpenAttachmentGroup = stamped.m_sGroup;
-		m_bWeaponListOpen = false;
+		m_bHostListOpen = false;
 		BuildDetail();
 	}
 
@@ -999,9 +1080,9 @@ class RK29_MenuDetailPanel
 	//! only the detail column moves. Whatever group of the gun was unfolded folds with it either way
 	//! round: opening cannot leave a seat of the old gun standing open, and closing must not leave
 	//! one seat marked open on a panel that is going back to showing every seat folded.
-	void ToggleWeaponList()
+	void ToggleHostList()
 	{
-		m_bWeaponListOpen = !m_bWeaponListOpen;
+		m_bHostListOpen = !m_bHostListOpen;
 		m_sOpenAttachmentGroup = "";
 		BuildDetail();
 	}
@@ -1024,14 +1105,32 @@ class RK29_MenuDetailPanel
 		ClearSiblingSlotPicks(groupId, entryId);
 
 		// A garment pick is its own confirmation: one answer, and the thing worth looking at next is
-		// the soldier wearing it - so the group closes and BuildDetail brings the mannequin back.
-		// Anything worn closes this way, a seat on the helmet included. A seat on a gun does not: the
-		// panel it would close is the weapon's own. Counted groups stay open: a number is edited.
+		// the soldier wearing it - so the group closes and BuildDetail brings the mannequin back. A
+		// seat on a gun does not close: the panel it would close is the weapon's own. Counted groups
+		// stay open: a number is edited.
+		//
+		// A garment something seats on is a panel and not a bare list, so it follows the gun instead:
+		// closing it would take away the section the pick just changed. Swapping to the helmet that
+		// takes night vision has to leave that section standing - it is the whole point of the swap -
+		// and a pick inside the section is read on its own folded tile, the way a gun's is.
 		RK29_ResolvedGroup picked = RK29_KitResolve.FindGroup(m_Menu.Offer(), groupId);
-		if (picked && (picked.IsClothingGroup() || picked.IsGarmentAttachmentGroup()))
+		if (picked && (picked.IsClothingGroup() || picked.IsGarmentAttachmentGroup())
+			&& !RK29_MenuRowKit.SlotHostsAttachment(m_Menu.Offer(), GarmentSlotOf(picked)))
 			SetOpenGroup("");
 
 		m_Menu.AfterPickChanged();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The loadout slot a worn group answers for, from either side of it: the slot a clothing group
+	//! dresses, or the slot of the garment an attachment seats on. Both name the same panel, which is
+	//! what lets one test decide whether a pick closes it.
+	protected string GarmentSlotOf(notnull RK29_ResolvedGroup g)
+	{
+		if (g.IsClothingGroup())
+			return g.m_sWornSlot;
+
+		return g.m_sGarmentSlot;
 	}
 
 	//------------------------------------------------------------------------------------------------

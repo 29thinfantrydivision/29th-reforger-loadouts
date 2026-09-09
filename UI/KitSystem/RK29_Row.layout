@@ -207,6 +207,23 @@ SizeLayoutWidgetClass {
           }
          }
         }
+        RichTextWidgetClass "{AB29C0FFEEB22490}" {
+         Name "RowStateNote"
+         Slot LayoutSlot "{AB29C0FFEEB22491}" {
+          VerticalAlign 1
+          Padding 8 0 4 0
+         }
+         "Is Visible" 0
+         Color 0.741 0.741 0.737 1
+         Text ""
+         "Font Size" 15
+         "Min Font Size" 12
+         FontProperties FontProperties "{AB29C0FFEEB22492}" {
+          Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+         }
+         "Horizontal Alignment" Right
+         "Vertical Alignment" Center
+        }
         SizeLayoutWidgetClass "{AB29C0FFEE29101C}" {
          Name "RowMagCol"
          Slot LayoutSlot "{AB29C0FFEE29101D}" {

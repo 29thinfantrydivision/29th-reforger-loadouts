@@ -142,6 +142,21 @@ class RK29_MannequinDress
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! The garment worn in one loadout slot of the mannequin, live. WeaponAt's counterpart, and for
+	//! the same reason: a tile pointed at the entity rather than at the prefab pictures what is
+	//! hanging off it - the optic on the gun, the night vision on the helmet. The lookup is the
+	//! apply's own, so the picture cannot disagree with what was dressed.
+	static IEntity GarmentAt(notnull IEntity body, string slotName)
+	{
+		EquipedLoadoutStorageComponent loadoutStorage = EquipedLoadoutStorageComponent.Cast(
+			body.FindComponent(EquipedLoadoutStorageComponent));
+		if (!loadoutStorage)
+			return null;
+
+		return RK29_KitApply.GarmentIn(loadoutStorage, slotName);
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! Nothing selects a weapon on a freshly built mannequin, so it stands there with the rifle slung.
 	//! It leaves a binding nothing reachable from script can clear, which is why every caller must
 	//! stand a fresh body up for each dress - see ApplyLoaded.

@@ -1354,7 +1354,9 @@ class RK29_KitApply
 
 	//------------------------------------------------------------------------------------------------
 	//! The garment worn in the loadout slot of that source name - the key ReplaceClothing dresses by.
-	protected static IEntity GarmentIn(notnull EquipedLoadoutStorageComponent loadoutStorage, string slotName)
+	//! Public because the menu asks it of the mannequin: RK29_MannequinDress.GarmentAt pictures a
+	//! helmet with what is seated on it, and a second copy of this walk could disagree with the dress.
+	static IEntity GarmentIn(notnull EquipedLoadoutStorageComponent loadoutStorage, string slotName)
 	{
 		for (int i = 0, n = loadoutStorage.GetSlotsCount(); i < n; i++)
 		{

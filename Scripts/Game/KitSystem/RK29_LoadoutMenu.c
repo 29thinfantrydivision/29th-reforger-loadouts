@@ -1278,6 +1278,11 @@ class RK29_LoadoutMenu
 			m_Tiles.OnTileClicked(index);
 			return;
 		}
+		if (kind == RK29_EMenuRowKind.GARMENT_LINK)
+		{
+			m_Tiles.OnGarmentLinkClicked(index);
+			return;
+		}
 		if (kind == RK29_EMenuRowKind.DETAIL_ENTRY)
 		{
 			m_Detail.OnDetailClicked(index);
@@ -1293,9 +1298,9 @@ class RK29_LoadoutMenu
 			m_Detail.OnCountStep(index, 1);
 			return;
 		}
-		if (kind == RK29_EMenuRowKind.WEAPON_FOLD)
+		if (kind == RK29_EMenuRowKind.HOST_FOLD)
 		{
-			m_Detail.ToggleWeaponList();
+			m_Detail.ToggleHostList();
 			return;
 		}
 		if (kind == RK29_EMenuRowKind.LOADED_TOGGLE)

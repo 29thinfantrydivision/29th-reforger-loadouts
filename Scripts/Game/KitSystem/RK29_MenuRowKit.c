@@ -9,8 +9,10 @@ enum RK29_EMenuRowKind
 	DETAIL_ENTRY,
 	COUNT_MINUS,
 	COUNT_PLUS,
-	//! the weapon panel's own weapon tile - unfolds that weapon group's entries
-	WEAPON_FOLD,
+	//! a panel's own host tile - the gun on a weapon panel, the garment on a garment panel - which
+	//! unfolds that group's entries in place. One kind for both: what hangs off the host differs,
+	//! the fold does not
+	HOST_FOLD,
 	//! a count row's in-gun toggle - seats that row's magazine in the weapon
 	LOADED_TOGGLE,
 	//! the typed count, routed on commit only
@@ -23,7 +25,10 @@ enum RK29_EMenuRowKind
 	PRESET_DELETE,
 	//! the typed preset name, routed on commit only
 	PRESET_SAVE_EDIT,
-	MODE_TAB
+	MODE_TAB,
+	//! a garment attachment's row in the tile column - navigates to the garment it seats on rather
+	//! than opening anything itself. Shares TILE's book, so its index addresses m_aTileGroup
+	GARMENT_LINK
 }
 
 //------------------------------------------------------------------------------------------------
@@ -90,6 +95,11 @@ class RK29_MenuRowKit
 
 	//! "claimed no body slot at all" - above every real slot index, so such a group sorts last.
 	protected static const int NO_SLOT = 9999;
+
+	//! What a group costs under its caption while it is holding nothing: less than half the 64 the
+	//! empty plate there used to take. Row.layout is authored 40 and its root SizeLayout authors
+	//! AllowHeightOverride, so it is told this instead.
+	protected static const float SLIM_ROW_HEIGHT = 28.0;
 
 	//! A stepper on its bound is greyed rather than removed: it stays clickable and OnCountStep's
 	//! clamp no-ops, so this is affordance only.
@@ -381,6 +391,187 @@ class RK29_MenuRowKit
 			count++;
 
 		return count;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! How many things a group would actually let the player add. Never the None row, which is what
+	//! separates this from SelectableCount: an empty group is already answering None, so counting it
+	//! advertises the state the row is in - the night vision group would offer "5 available" over
+	//! four goggles. An entry an override has closed at zero is not on offer either, whatever the
+	//! group's kind. Item entries only, the same rows a detail pane stamps.
+	static int AvailableCount(notnull RK29_ResolvedGroup g)
+	{
+		int count = 0;
+		foreach (RK29_ResolvedEntry e : g.m_aEntries)
+		{
+			if (!e || e.m_bBlocked || !RK29_EntryItem.Cast(e.m_Def))
+				continue;
+
+			if (RK29_KitResolve.CeilingOf(e) < 1)
+				continue;
+
+			count++;
+		}
+
+		return count;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Whether this group is empty only because the garment it seats on cannot take it - every row
+	//! blocked by EnforceGarmentSlots rather than by anything the group itself decides.
+	//!
+	//! Asked wherever SelectableCount would otherwise read such a group as "nothing to decide" and
+	//! take its section away: it counts 0 rows plus 1 for the None it allows, which is under the
+	//! usual two. A weapon seat never reaches this - PruneUnmountable removes what cannot mount,
+	//! where a garment slot blocks it and keeps the reason - so the same suppression test that is
+	//! right for a gun would hide night vision from exactly the panel where the helmet is chosen.
+	static bool BlockedByHost(notnull RK29_ResolvedGroup g)
+	{
+		foreach (RK29_ResolvedEntry e : g.m_aEntries)
+		{
+			if (e && e.m_bBlockedMissing)
+				return true;
+		}
+
+		return false;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Why a host-blocked garment attachment cannot be taken, in the words the player is shown both
+	//! on its tile-column row and on every greyed row of its section. One sentence from one place so
+	//! the two cannot drift.
+	//!
+	//! It names the host's section and never a garment: "Needs a compatible Helmet" stays true when
+	//! a second helmet with the slot is added, where naming the one that works today would not. The
+	//! slot on the garment is deliberately not said - m_sSlotOnGarment is a source name ("NVG",
+	//! "BackVelcro") with no player-facing spelling, and sending someone to look for a "BackVelcro
+	//! slot" in a menu that never uses the word is worse than saying nothing.
+	static string HostNeedOf(array<ref RK29_ResolvedGroup> offer, notnull RK29_ResolvedGroup g)
+	{
+		// no full stop: it reads as a state beside its caption first and as a sentence second, and the
+		// tile-column row is where it is read most
+		return "Needs a compatible " + HostLabelOf(offer, g);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The same fact told from inside the garment's own panel, where the tile above is already the
+	//! host being talked about: what the seat holds is not a choice the player declined but a thing
+	//! this garment cannot carry. Stands where a folded seat would otherwise read "None", which says
+	//! the opposite - that night vision was offered and turned down.
+	static string HostIncompatibleOf(array<ref RK29_ResolvedGroup> offer, notnull RK29_ResolvedGroup g)
+	{
+		return "Not compatible with current " + HostLabelOf(offer, g);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The host's own section name - "Helmet" - as both sentences above spell it, and as authored:
+	//! the display name is the author's capitalisation and is not shouted or flattened here.
+	protected static string HostLabelOf(array<ref RK29_ResolvedGroup> offer, notnull RK29_ResolvedGroup g)
+	{
+		string hostId;
+		foreach (RK29_ResolvedEntry e : g.m_aEntries)
+		{
+			if (e && e.m_bBlockedMissing)
+			{
+				hostId = e.m_sBlockedGroup;
+				break;
+			}
+		}
+
+		string hostLabel;
+		if (offer && hostId != "")
+		{
+			RK29_ResolvedGroup host = RK29_KitResolve.FindGroup(offer, hostId);
+			if (host)
+			{
+				hostLabel = host.m_sDisplayName;
+				if (hostLabel == "")
+					hostLabel = host.m_sId;
+			}
+		}
+
+		// the loadout slot itself, for a class whose host slot is block clothing and so has no group
+		// to name. The words are worse ("a compatible Hat") but they are still true
+		if (hostLabel == "")
+			hostLabel = g.m_sGarmentSlot;
+
+		return hostLabel;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Whether anything seats on the garment worn in this loadout slot - a helmet with a night vision
+	//! group over it. True for a group blocked by the worn garment too, which is the whole point: it
+	//! is what makes that slot's tile open a panel and what puts the blocked section in it.
+	//!
+	//! One question asked from both sides - the tile column's open rule and the detail panel's
+	//! routing - so a slot cannot advertise a panel that comes up empty, or hold one that never opens.
+	static bool SlotHostsAttachment(array<ref RK29_ResolvedGroup> offer, string garmentSlot)
+	{
+		return HostedAttachmentOn(offer, garmentSlot) != null;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The first group seating on the garment worn in this loadout slot, or null. Answers
+	//! SlotHostsAttachment, and stands in as the thing to open for a slot whose own garment is block
+	//! clothing: there is no host section to open the attachment under, so the attachment is opened
+	//! directly. A section listing every hosted group walks the offer itself -
+	//! RK29_MenuDetailPanel.StampHostedGroups - rather than asking this repeatedly.
+	static RK29_ResolvedGroup HostedAttachmentOn(array<ref RK29_ResolvedGroup> offer, string garmentSlot)
+	{
+		if (!offer || garmentSlot == "")
+			return null;
+
+		foreach (RK29_ResolvedGroup g : offer)
+		{
+			if (!g || !g.IsGarmentAttachmentGroup() || g.m_sGarmentSlot != garmentSlot)
+				continue;
+
+			if (SelectableCount(g) > 1 || BlockedByHost(g))
+				return g;
+		}
+
+		return null;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! What a group currently amounts to, as one line under its own caption: the state on the right,
+	//! where a budget header puts its total. What an empty group is stamped with in place of the
+	//! 64-pixel plate it had nothing to put in - flares nobody took cost 92 pixels to say nothing,
+	//! where a caption and this cost 54. The caption stays a caption, stamped by the caller: a column
+	//! whose section names sometimes lead and sometimes sit inside a row reads as two lists.
+	//!
+	//! The name clip is left standing and empty on purpose. It is the Fill that pushes the note over
+	//! to the right - hiding it would drop the note back against the left edge, under the caption's
+	//! first word.
+	//!
+	//! Null where the row could not be created, and every caller must stop there: a booked index with
+	//! no row behind it is a click routed into a hole.
+	static Widget StampSlimRow(Widget parent, string note)
+	{
+		if (!parent)
+			return null;
+
+		Widget row = GetGame().GetWorkspace().CreateWidgets(ROW_LAYOUT, parent);
+		if (!row)
+			return null;
+
+		SizeLayoutWidget rowSize = SizeLayoutWidget.Cast(row);
+		if (rowSize)
+			rowSize.SetHeightOverride(SLIM_ROW_HEIGHT);
+
+		TrimRowColumns(row);
+
+		if (note != "")
+		{
+			TextWidget noteText = TextWidget.Cast(row.FindAnyWidget("RowStateNote"));
+			if (noteText)
+			{
+				noteText.SetText(note);
+				noteText.SetVisible(true);
+			}
+		}
+
+		return row;
 	}
 
 	//------------------------------------------------------------------------------------------------
