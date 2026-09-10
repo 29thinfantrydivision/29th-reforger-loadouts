@@ -1,0 +1,113 @@
+SizeLayoutWidgetClass {
+ Name "KitHeader"
+ Slot LayoutSlot "{AB29C0FFEEB21701}" {
+  Padding 0 0 0 2
+ }
+ AllowHeightOverride 1
+ HeightOverride 26
+ {
+  HorizontalLayoutWidgetClass "{AB29C0FFEEB22480}" {
+   Name "HeaderLine"
+   Slot AlignableSlot "{AB29C0FFEEB22481}" {
+    HorizontalAlign 3
+    VerticalAlign 3
+    Padding 4 0 0 0
+   }
+   {
+    RichTextWidgetClass "{AB29C0FFEEB21702}" {
+     Name "HeaderText"
+     Slot LayoutSlot "{AB29C0FFEEB21703}" {
+      VerticalAlign 1
+     }
+     Color 0.741 0.741 0.737 1
+     Text ""
+     "Font Size" 16
+     "Min Font Size" 14
+     FontProperties FontProperties "{AB29C0FFEEB21704}" {
+      Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+     }
+     "Horizontal Alignment" Left
+     "Vertical Alignment" Center
+    }
+    SizeLayoutWidgetClass "{AB29C0FFEEB22524}" {
+     Name "HeaderLockSize"
+     Slot LayoutSlot "{AB29C0FFEEB22525}" {
+      VerticalAlign 1
+      Padding 6 0 0 0
+     }
+     "Is Visible" 0
+     AllowWidthOverride 1
+     WidthOverride 20
+     {
+      ImageWidgetClass "{AB29C0FFEEB22526}" {
+       Name "HeaderLockIcon"
+       Slot AlignableSlot "{AB29C0FFEEB22527}" {
+        HorizontalAlign 0
+        VerticalAlign 1
+       }
+       "Is Visible" 0
+       Opacity 0.45
+       Color 0.741 0.741 0.737 1
+       Texture "{2EFEA2AF1F38E7F0}UI/Textures/Icons/icons_wrapperUI-64.imageset"
+       Image "server-locked"
+       Size 16 16
+      }
+     }
+    }
+    HorizontalLayoutWidgetClass "{AB29C0FFEEB40010}" {
+     Name "HeaderSpacer"
+     Slot LayoutSlot "{AB29C0FFEEB40011}" {
+      VerticalAlign 1
+      SizeMode Fill
+     }
+    }
+    HorizontalLayoutWidgetClass "{AB29C0FFEEB40012}" {
+     Name "HeaderSupplyZone"
+     Slot LayoutSlot "{AB29C0FFEEB40013}" {
+      VerticalAlign 1
+     }
+     "Is Visible" 0
+     {
+      RichTextWidgetClass "{AB29C0FFEEB4001C}" {
+       Name "HeaderTotal"
+       Slot LayoutSlot "{AB29C0FFEEB4001D}" {
+        VerticalAlign 1
+        Padding 0 0 5 0
+       }
+       Color 0.741 0.741 0.737 1
+       Text ""
+       "Font Size" 16
+       "Min Font Size" 14
+       FontProperties FontProperties "{AB29C0FFEEB4001E}" {
+        Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+       }
+       "Horizontal Alignment" Right
+       "Vertical Alignment" Center
+      }
+      SizeLayoutWidgetClass "{AB29C0FFEEB22482}" {
+       Name "HeaderSupplySize"
+       Slot LayoutSlot "{AB29C0FFEEB22483}" {
+        VerticalAlign 1
+        Padding 0 0 8 0
+       }
+       AllowWidthOverride 1
+       WidthOverride 20
+       {
+        ImageWidgetClass "{AB29C0FFEEB22484}" {
+         Name "HeaderSupplyIcon"
+         Slot AlignableSlot "{AB29C0FFEEB22485}" {
+          HorizontalAlign 1
+          VerticalAlign 1
+         }
+         Color 0.741 0.741 0.737 1
+         Texture "{40D7A3144129A56F}UI/Textures/InventoryIcons/Supplies-stored.edds"
+         Size 18 18
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}

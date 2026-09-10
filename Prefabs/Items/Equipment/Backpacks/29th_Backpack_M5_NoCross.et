@@ -1,0 +1,34 @@
+GenericEntity : "{4805E67E2AE30F8D}Prefabs/Items/Equipment/Backpacks/Backpack_Medical_M5.et" {
+ ID "511E9C6ADE70F798"
+ components {
+  MeshObject "{511E9C6ADE70F7BD}" {
+   Materials {
+    MaterialAssignClass "{AB29C0FFEE29E013}" {
+     SourceMaterial "Backpack_Medical_M5"
+     AssignedMaterial "{AB29C0FFEE29E011}Assets/Items/Equipment/Backpacks/29th_Backpack_M5/Data/29th_Backpack_M5_NoCross.emat"
+    }
+   }
+  }
+  SCR_UniversalInventoryStorageComponent "{5222CB03A40528FA}" {
+   Attributes SCR_ItemAttributeCollection "{5222CB039E9715D1}" {
+    ItemDisplayName UIInfo "{5222CB03904B414C}" {
+     Name "M5 Backpack"
+     Description "Olive M5 field pack."
+    }
+    CustomAttributes {
+     PreviewRenderAttributes "{52BCBDD2B54658EC}" {
+      PreviewWornModel 1
+     }
+    }
+   }
+  }
+  BaseLoadoutClothComponent "{511E9C6ADE70F7BB}" {
+   WornMaterialsOverride {
+    "{AB29C0FFEE29E011}Assets/Items/Equipment/Backpacks/29th_Backpack_M5/Data/29th_Backpack_M5_NoCross.emat"
+   }
+   ItemMaterialsOverride {
+    "{AB29C0FFEE29E011}Assets/Items/Equipment/Backpacks/29th_Backpack_M5/Data/29th_Backpack_M5_NoCross.emat"
+   }
+  }
+ }
+}

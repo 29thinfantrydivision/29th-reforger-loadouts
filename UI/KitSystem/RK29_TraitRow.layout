@@ -1,0 +1,102 @@
+SizeLayoutWidgetClass {
+ Name "KitTraitRow"
+ Slot LayoutSlot "{AB29C0FFEEB2230F}" {
+  Padding 0 0 0 4
+ }
+ AllowHeightOverride 1
+ HeightOverride 40
+ {
+  ButtonWidgetClass "{AB29C0FFEEB22301}" {
+   Name "RowButton"
+   Slot AlignableSlot "{AB29C0FFEEB22302}" {
+    HorizontalAlign 3
+    VerticalAlign 3
+   }
+   components {
+    SCR_ModularButtonComponent "{AB29C0FFEEB3001B}" {
+     m_aEffects {
+      SCR_ButtonEffectColor "{AB29C0FFEEB3001C}" : "{C5E2E5A4650334DC}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Color_ButtonBackground.conf" {
+       m_eEvents 6159
+       m_sWidgetName "RowBase"
+       m_cDefault 0 0 0 0.502
+       m_cHovered 0.761 0.386 0.08 0.35
+       m_cActivated 0 0 0 0.502
+       m_cActivatedHovered 0.761 0.386 0.08 0.35
+       m_cFocusGained 0.761 0.386 0.08 0.35
+       m_cFocusLost 0 0 0 0.502
+       m_cToggledOn 0 0 0 0.502
+       m_cToggledOff 0 0 0 0.502
+      }
+      SCR_ButtonEffectSound "{AB29C0FFEEB3001D}" : "{D0EF588033B1793A}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Confirm.conf" {
+      }
+      SCR_ButtonEffectSound "{AB29C0FFEEB3001E}" : "{A96BD3D75E106FC5}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Focused.conf" {
+      }
+      SCR_ButtonEffectSound "{AB29C0FFEEB3001F}" : "{F66E5F9DD84911A8}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Hovered.conf" {
+      }
+     }
+     m_eEventReturnValue 2147483599
+     m_bCanBeToggled 0
+    }
+   }
+   style blank
+   "no focus" 1
+   {
+    OverlayWidgetClass "{AB29C0FFEEB22303}" {
+     Name "RowFrame"
+     Slot ButtonWidgetSlot "{AB29C0FFEEB22304}" {
+      HorizontalAlign 3
+      VerticalAlign 3
+     }
+     {
+      ImageWidgetClass "{AB29C0FFEEB22305}" {
+       Name "RowBase"
+       Slot OverlayWidgetSlot "{AB29C0FFEEB22306}" {
+        HorizontalAlign 3
+        VerticalAlign 3
+       }
+       Opacity 0.4
+       Color 0 0 0 0.502
+      }
+      HorizontalLayoutWidgetClass "{AB29C0FFEEB22307}" {
+       Name "RowLine"
+       Slot OverlayWidgetSlot "{AB29C0FFEEB22308}" {
+        HorizontalAlign 3
+        VerticalAlign 3
+        Padding 8 0 8 0
+       }
+       {
+        ImageWidgetClass "{AB29C0FFEEB22309}" {
+         Name "RowIcon"
+         Slot LayoutSlot "{AB29C0FFEEB2230A}" {
+          HorizontalAlign 0
+          VerticalAlign 1
+          Padding 0 0 8 0
+         }
+         "Is Visible" 0
+         "Inherit Color" 1
+         Size 34 34
+        }
+        RichTextWidgetClass "{AB29C0FFEEB2230B}" {
+         Name "RowName"
+         Slot LayoutSlot "{AB29C0FFEEB2230C}" {
+          HorizontalAlign 3
+          VerticalAlign 1
+          SizeMode Fill
+         }
+         Color 1 1 1 1
+         Text ""
+         "Font Size" 18
+         "Min Font Size" 15
+         FontProperties FontProperties "{AB29C0FFEEB2230D}" {
+          Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+         }
+         "Vertical Alignment" Center
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}
