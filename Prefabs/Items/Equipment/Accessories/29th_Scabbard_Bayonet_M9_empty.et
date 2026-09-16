@@ -1,0 +1,12 @@
+GenericEntity : "{64A970D059436047}Prefabs/Items/Equipment/Accessories/Scabbard_Bayonet_M9/Scabbard_Bayonet_M9_base.et" {
+ ID "521AC0491712FB3A"
+ components {
+  SCR_EquipmentStorageComponent "{5526DABF40B24F9D}" {
+   InitialStorageSlots {
+    SCR_EquipmentStorageSlot BayonetSlot {
+     Prefab ""
+    }
+   }
+  }
+ }
+}
