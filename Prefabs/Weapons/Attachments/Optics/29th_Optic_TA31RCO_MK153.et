@@ -1,0 +1,51 @@
+GameEntity : "{2518CA6044D6BBDD}Prefabs/Weapons/Attachments/Optics/ta31rco/Optic_TA31RCO.et" {
+ ID "4BA426CBAED42A14"
+ components {
+  InventoryItemComponent "{52627A1F45CD4EB6}" {
+   Attributes SCR_ItemAttributeCollection "{52627A1EBB0698FD}" {
+    ItemDisplayName UIInfo "{5AB966CA8E939F41}" {
+     Name "#RK29-Item_M7RCO_Name"
+     Description "#RK29-Item_M7RCO_Description"
+    }
+   }
+  }
+  RHS_2DPIPSightsComponent "{5D0CC83435B55855}" {
+   SightsPosition PointInfo "{5ACCB8DCC7666BED}" {
+    Offset 0 0 0.05
+   }
+   SightsRanges {
+    SightRangeInfo "{AB29C0FFEE29AC10}" {
+     Range 0.39551 100
+    }
+    SightRangeInfo "{AB29C0FFEE29AC11}" {
+     Range 0.83496 200
+    }
+    SightRangeInfo "{AB29C0FFEE29AC12}" {
+     Range 1.27441 300
+    }
+    SightRangeInfo "{AB29C0FFEE29AC13}" {
+     Range 1.75781 400
+    }
+    SightRangeInfo "{AB29C0FFEE29AC14}" {
+     Range 2.19727 500
+    }
+   }
+   ZeroingGenerator SCR_2DPiPScopeZeroingGenerator "{AB29C0FFEE29AC20}" {
+    m_sReferenceProjectile "{3B800D8AC5EA12EF}Prefabs/Weapons/Ammo/Rocket_83mm_MK153_HEAA.et"
+   }
+   m_eZeroingType EPZ_CAMERA_TURN
+  }
+  SightsComponent "{604D32A6174F91B7}" {
+   Enabled 0
+  }
+  SlotManagerComponent "{AB29C0FFEE29AC06}" {
+   Slots {
+    EntitySlotInfo weaver {
+     PivotID "snap_weapon"
+     Offset 0 -0.0235 -0.025
+     Prefab "{5D00C138E2510EDC}Prefabs/Weapons/Attachments/Mounts/Mount_WeaverCarryhandle.et"
+    }
+   }
+  }
+ }
+}
