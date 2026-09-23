@@ -10,7 +10,7 @@ carries.
 - **Kit menu keybind:** `F4` · **Apply kit:** `Space` (both rebindable, category *Kits - 29th ID*;
   rebinds are backed up to `$profile:RK29_Keybinds.json` and restored if a session without the
   mod wipes them from the engine's input settings)
-- **Factions:** US, USSR · **Classes:** 12 US (incl. Parade), 11 USSR
+- **Factions:** US, USSR · **Classes:** 11 US (incl. Parade), 10 USSR
 - **Default kit** for a player who has not picked one: US *29th Parade*, USSR *Rifleman*
 
 ## Dependencies
@@ -21,6 +21,7 @@ carries.
 | `595F2BF2F44836FB` | RHS: Status Quo |
 | `1337C0DE5DABBEEF` | RHS: Status Quo — Content Pack 01 |
 | `BADC0DEDABBEDA5E` | RHS: Status Quo — Content Pack 02 |
+| `60C4C12DAE90727B` | ACE Medical Core |
 
 ## Repo layout
 
@@ -54,6 +55,22 @@ replaces the shared group on that slot. There are no fixed clothing or item list
 
 Only the two *Current Kit* rows go through the kit system. The *29th TP* rows are plain
 vanilla loadouts spawned from their body prefab and never appear in the kit menu.
+
+## Saved kits
+
+Players can save their picks as named kits (up to 12 per class) and load them from the kit
+menu. They live client-side in the player's profile, never on the server:
+
+| File | Holds |
+| --- | --- |
+| `$profile:RK29_KitPresets_v2.json` | every saved kit, every class |
+| `$profile:RK29_KitLastUsed.json` | per class, the name of the saved kit last applied |
+
+A saved kit stores the full pick list, so a later config change cannot silently alter it; a kit
+the config has moved under since it was saved is flagged in the menu. On each session the last
+applied saved kit is seeded for that class, unless it was deleted, renamed or changed by the
+config, in which case the class starts at its Standard defaults. Kits built but never saved are
+not remembered. The first run imports the old `RK29_KitPresets.json` once and leaves it untouched.
 
 ## Round phase
 
