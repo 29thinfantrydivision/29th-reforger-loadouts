@@ -419,10 +419,15 @@ class RK29_KitPresetStorage
 	//------------------------------------------------------------------------------------------------
 	//! Null for anything that is not a record this build wrote. The tail is rejoined rather than
 	//! taken as one field, because Split cuts at every separator and a typed "|" is legal in a name.
+	//!
+	//! skipEmptyEntries is FALSE and must stay false: a preset saved with every choice at its
+	//! authored default holds the empty picks wire, so its record has an empty middle field, and
+	//! skipping that field leaves the record one short of RECORD_FIELDS - the preset is silently
+	//! dropped on the next load and erased by the next write.
 	protected static RK29_KitPreset DecodeRecord(string record)
 	{
 		array<string> parts = {};
-		record.Split("|", parts, true);
+		record.Split("|", parts, false);
 		if (parts.Count() < RECORD_FIELDS)
 			return null;
 
