@@ -966,22 +966,70 @@ class RK29_MenuRowKit
 
 	//------------------------------------------------------------------------------------------------
 	//! "" for a row with no problem to report - AttachHoverTip takes an empty string as "attach
-	//! nothing", so a healthy preset answers the cursor with silence.
-	static string PresetTipOf(bool loadable, int stale)
+	//! nothing", so a healthy preset answers the cursor with silence. changedSections is
+	//! ChangedSectionsOf's answer. An outdated kit's tip is authored line by line and attached with
+	//! keepLines, so every fixed line here stays inside RK29_HoverTip.TIP_CHARS_PER_LINE by hand.
+	static string PresetTipOf(bool loadable, string changedSections)
 	{
 		if (!loadable)
 			return "Saved by an older build in a picks format this one cannot read. It can only be"
 				+ " deleted.";
 
-		if (stale == 1)
-			return "1 pick no longer valid - loading this preset drops or adjusts it; save again"
-				+ " to clear this.";
+		if (changedSections == "")
+			return "";
 
-		if (stale > 1)
-			return stale.ToString() + " picks no longer valid - loading this preset drops or"
-				+ " adjusts them; save again to clear this.";
+		return "Changed since you saved this:\n" + changedSections
+			+ "\n\nLoad it to see the kit as it is\nnow; save again to clear this.";
+	}
 
-		return "";
+	//------------------------------------------------------------------------------------------------
+	//! One line per changed SECTION, not per item - a removed entry has no name left to give. Labels
+	//! are deduplicated; groups the offer no longer has fold into one count line.
+	static string ChangedSectionsOf(notnull array<ref RK29_ResolvedGroup> changed, int gone,
+		RK29_ClassSetup cls, RK29_KitSetup setup)
+	{
+		array<string> lines = {};
+		foreach (RK29_ResolvedGroup g : changed)
+		{
+			string label = SectionLabelOf(g, cls, setup);
+			if (!lines.Contains(label))
+				lines.Insert(label);
+		}
+
+		if (gone == 1)
+			lines.Insert("1 option no longer in this kit");
+		else if (gone > 1)
+			lines.Insert(gone.ToString() + " options no longer in this kit");
+
+		string text;
+		foreach (int i, string line : lines)
+		{
+			if (i > 0)
+				text += "\n";
+			text += line;
+		}
+		return text;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The group's own caption, with the owning gun's name in front for weapon-owned groups:
+	//! "Magazines" and "Optic" repeat across every gun a kit can carry.
+	protected static string SectionLabelOf(notnull RK29_ResolvedGroup g, RK29_ClassSetup cls,
+		RK29_KitSetup setup)
+	{
+		string label = g.m_sDisplayName;
+		if (label == "")
+			label = g.m_sId;
+
+		if (g.m_sOwnerWeapon == "" || !cls || !setup)
+			return label;
+
+		string gun = RK29_ItemNames.Get(RK29_KitResolve.WeaponPrefabOfId(setup, g.m_sOwnerWeapon,
+			cls.m_sSideFactionKey));
+		if (gun == "")
+			return label;
+
+		return gun + " " + label;
 	}
 
 	//============================================================================================

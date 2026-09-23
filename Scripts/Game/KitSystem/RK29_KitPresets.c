@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------------------------
-//! Saved kit presets: a player's own named pick sets, per class, in $profile:RK29_KitPresets.json.
+//! Saved kit presets: a player's own named pick sets, per class, in $profile:RK29_KitPresets_v2.json.
 //!
 //! DO NOT move this back into a ModuleGameSettings. The engine parses ReforgerGameSettings.conf
 //! once per script instance, and joining or leaving a modded server bounces the client through a
@@ -12,20 +12,23 @@
 //! was in the file at 14:07:11 with the mod unloaded, and the save 0.3s later erased it. Same root
 //! cause as the keybind wipe RK29_KeybindPrefs exists to undo; a profile file is the fix for both.
 //!
-//! A preset stores only the wire string - group/entry ids and counts, never a ResourceName - and is
-//! re-resolved and re-clamped against the current offer, then re-clamped again server-side. A
-//! hand-edited profile file is no more dangerous than a typed chat command.
+//! A preset stores the FULL expanded pick list (RK29_KitResolve.ExpandPicks) - an explicit answer
+//! for every group its own picks offer - so a default moved in config cannot reach it. Whether
+//! today's config would answer it differently is one comparison, RK29_KitResolve.ChangedCount.
+//! Group/entry ids and counts only, never a ResourceName, and re-resolved server-side like any
+//! other request: a hand-edited profile file is no more dangerous than a typed chat command.
+//!
+//! One file per store version, and a store writes ONLY its own. A new record shape is a new file
+//! suffix with a converter from the one before, never a bump of the in-file VERSION: the old build
+//! keeps reading and writing its own file, so running both or rolling back cannot wipe anything.
 //------------------------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------------------------
 //! One saved pick set. Keyed by class as well as by name, because presets of every class share the
 //! one flat array.
 //!
-//! Two version numbers guard different things. RK29_KitPresetStorage.VERSION is the file shape: a
-//! mismatch means the whole file is from another era, so ReadFromStorage discards every preset at
-//! once. m_iFormat is the wire dialect of m_sPicks (the grammar EncodePicks/ParsePicks agree on): a
-//! mismatch is one preset's problem, refused by CanLoad with the row left listed and deletable.
-//! They move independently.
+//! m_iFormat is the record's dialect; anything but PICKS_FORMAT is refused a load by CanLoad, with
+//! the row left listed and deletable, and is written back exactly as it was read (m_sRaw).
 class RK29_KitPreset
 {
 	//! trimmed and capped - see RK29_KitPresetStorage.Save
@@ -37,15 +40,20 @@ class RK29_KitPreset
 	//! exactly as RK29_KitResolve.EncodePicks wrote them
 	string m_sPicks;
 
-	//! Zero is what a hand-added record without the field reads as, and is refused a load like any
-	//! other dialect this build does not speak.
 	int m_iFormat;
+
+	//! Trailing "key=value" fields this build does not know, kept verbatim and written back, so a
+	//! later per-kit field can ship without a new file.
+	ref array<string> m_aExtra = {};
+
+	//! The record as read, for one this build cannot speak: it goes back to disk untouched.
+	string m_sRaw;
 }
 
 //------------------------------------------------------------------------------------------------
 //! The on-disk shape, modelled on RK29_KeybindPrefs: a version and a flat array of records, because
 //! JsonApiStruct auto-processes registered scalars and string arrays and nothing else without
-//! hand-written pack/expand events. One record is "format|kitName|picks|name" - see EncodeRecord.
+//! hand-written pack/expand events. Shared by every store version; each owns its own file.
 class RK29_KitPresetFile : JsonApiStruct
 {
 	int m_iVersion;
@@ -64,24 +72,41 @@ class RK29_KitPresetFile : JsonApiStruct
 class RK29_KitPresetStorage
 {
 	//! Save order, and the order the section lists rows in.
-	protected ref array<ref RK29_KitPreset> m_aPresets;
+	protected ref array<ref RK29_KitPreset> m_aPresets = {};
 
-	//! File shape this build writes. See RK29_KitPreset for what it does not guard.
+	//! Records that could not be decoded at all, written back after the presets. Never dropped: the
+	//! next write would erase them for good.
+	protected ref array<string> m_aUndecodable = {};
+
+	//! The file's shape. Never bumped - see the header; a new shape is a new PRESETS_FILE.
 	static const int VERSION = 1;
 
-	//! Wire dialect this build speaks. Public where VERSION need not be, because the menu names it
-	//! when it refuses a preset.
-	static const int PICKS_FORMAT = 1;
+	//! Record dialect this build writes and loads: the full expanded list.
+	static const int PICKS_FORMAT = 2;
 
-	protected static const string PRESETS_FILE = "$profile:RK29_KitPresets.json";
+	protected static const string PRESETS_FILE = "$profile:RK29_KitPresets_v2.json";
 
-	//! Fields in a record. The name is last so a typed "|" cannot shift the ones before it.
+	//! The newest older store, imported ONCE when PRESETS_FILE does not exist and never touched.
+	//! Only v1 today; the next version adds its predecessor here, newest first, and drops the oldest.
+	protected static const string V1_FILE = "$profile:RK29_KitPresets.json";
+	protected static const int V1_PICKS_FORMAT = 1;
+
+	//! Fields before the optional trailing "key=value" ones: format, kit, picks, escaped name.
 	protected static const int RECORD_FIELDS = 4;
 
-	//! Per class. Capped because the section is stamped into the info band, which does not scroll.
+	//! Per class shown and savable. Capped because the section is stamped into the info band, which
+	//! does not scroll; records past it (a text editor's doing) are kept but not listed.
 	static const int MAX_PER_KIT = 12;
 
 	static const int MAX_NAME_LENGTH = 24;
+
+	//! Loading waits for the kit setup, which the import needs, so it happens on the first public
+	//! call that has one rather than at construction.
+	protected bool m_bLoaded;
+
+	//! Our own file exists and would not read: nothing may be written over it, and nothing is
+	//! imported over it either.
+	protected bool m_bReadOnly;
 
 	//! One instance per session is what keeps the in-RAM array and the file from disagreeing.
 	protected static ref RK29_KitPresetStorage s_Instance;
@@ -96,26 +121,18 @@ class RK29_KitPresetStorage
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! Reads the file into RAM at construction: every mutation writes the whole file back, so this
-	//! must start out being all of it.
-	void RK29_KitPresetStorage()
-	{
-		ReadFromStorage();
-	}
-
-	//------------------------------------------------------------------------------------------------
 	//! Out-param holds the live objects, not copies, and is cleared first so a caller reusing one
-	//! array across two classes cannot accumulate.
+	//! array across two classes cannot accumulate. At most MAX_PER_KIT, the first saved.
 	void PresetsFor(string kitName, notnull array<RK29_KitPreset> outPresets)
 	{
 		outPresets.Clear();
 
-		if (kitName == "" || !m_aPresets)
+		if (kitName == "" || !EnsureLoaded())
 			return;
 
 		foreach (RK29_KitPreset preset : m_aPresets)
 		{
-			if (preset && preset.m_sKitName == kitName)
+			if (preset && preset.m_sKitName == kitName && outPresets.Count() < MAX_PER_KIT)
 				outPresets.Insert(preset);
 		}
 	}
@@ -131,15 +148,13 @@ class RK29_KitPresetStorage
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! Which saved kit of this class holds exactly these picks, "" when none does. The comparison is
-	//! sound because both sides are EncodePicks output: an applied kit's wire is the very string the
-	//! Save row stored. Twins - two names over one wire - answer with the first, and that is not a
-	//! coin toss worth resolving here: either name seeds the same kit, and the loser only matters
-	//! once one of them is edited apart from the other. A dialect this build cannot read is passed
-	//! over rather than named, since nothing could be seeded from it.
+	//! Which saved kit of this class answers to these picks, "" when none does: one holding exactly
+	//! this wire, or one whose re-expansion under today's config is this wire - the second is what
+	//! keeps an outdated kit's name when the player applies what it now loads as. Twins answer with
+	//! the first; either name seeds the same kit. A dialect this build cannot read is passed over.
 	string NameForPicks(string kitName, string picksWire)
 	{
-		if (kitName == "" || picksWire == "" || !m_aPresets)
+		if (kitName == "" || picksWire == "" || !EnsureLoaded())
 			return "";
 
 		foreach (RK29_KitPreset preset : m_aPresets)
@@ -149,18 +164,30 @@ class RK29_KitPresetStorage
 				return preset.m_sName;
 		}
 
+		RK29_KitSetup setup = SetupOrNull();
+		if (!setup)
+			return "";
+
+		RK29_ClassSetup cls = setup.FindClass(kitName);
+		foreach (RK29_KitPreset preset : m_aPresets)
+		{
+			if (preset && preset.m_sKitName == kitName && CanLoad(preset)
+				&& RK29_KitResolve.CachedExpandedWire(cls, setup, preset.m_sPicks) == picksWire)
+				return preset.m_sName;
+		}
+
 		return "";
 	}
 
 	//------------------------------------------------------------------------------------------------
 	//! Saves one pick set and persists immediately. The name is trimmed then capped rather than
 	//! refused for length; two names colliding only after the cap are one name. An existing name is
-	//! overwritten in place so the row keeps its position. The cap refuses rather than evicts -
-	//! false, and nothing changed, is what the menu turns into a visible refusal. A blank name
-	//! returns false too.
+	//! overwritten in place so the row keeps its position, and keeps any fields this build does not
+	//! know. The cap refuses rather than evicts - false, and nothing changed, is what the menu turns
+	//! into a visible refusal. A blank name, or a store that is read-only, returns false too.
 	bool Save(string kitName, string name, string picksWire)
 	{
-		if (kitName == "")
+		if (kitName == "" || !EnsureWritable())
 			return false;
 
 		// the return value, not the receiver: string.Trim answers a new string rather than
@@ -171,9 +198,6 @@ class RK29_KitPresetStorage
 
 		if (trimmed.Length() > MAX_NAME_LENGTH)
 			trimmed = trimmed.Substring(0, MAX_NAME_LENGTH);
-
-		if (!m_aPresets)
-			m_aPresets = {};
 
 		int index = IndexOf(kitName, trimmed);
 		if (index < 0 && CountFor(kitName) >= MAX_PER_KIT)
@@ -190,9 +214,15 @@ class RK29_KitPresetStorage
 		preset.m_iFormat = PICKS_FORMAT;
 
 		if (index >= 0)
+		{
+			if (m_aPresets[index].m_sRaw == "")
+				preset.m_aExtra = m_aPresets[index].m_aExtra;
 			m_aPresets.Set(index, preset);
+		}
 		else
+		{
 			m_aPresets.Insert(preset);
+		}
 
 		WriteToStorage();
 		return true;
@@ -210,6 +240,9 @@ class RK29_KitPresetStorage
 	//! one whenever a preset moves down its list.
 	bool Reorder(string kitName, string name, int newPos)
 	{
+		if (!EnsureWritable())
+			return false;
+
 		array<int> indices = {};
 		KitIndices(kitName, indices);
 
@@ -255,7 +288,7 @@ class RK29_KitPresetStorage
 	{
 		outIndices.Clear();
 
-		if (kitName == "" || !m_aPresets)
+		if (kitName == "")
 			return;
 
 		foreach (int i, RK29_KitPreset preset : m_aPresets)
@@ -270,6 +303,9 @@ class RK29_KitPresetStorage
 	//! and this array's order is the order the section lists its rows in.
 	bool Delete(string kitName, string name)
 	{
+		if (!EnsureWritable())
+			return false;
+
 		int index = IndexOf(kitName, name);
 		if (index < 0)
 			return false;
@@ -293,7 +329,7 @@ class RK29_KitPresetStorage
 	//------------------------------------------------------------------------------------------------
 	protected int CountFor(string kitName)
 	{
-		if (kitName == "" || !m_aPresets)
+		if (kitName == "")
 			return 0;
 
 		int count = 0;
@@ -310,7 +346,7 @@ class RK29_KitPresetStorage
 	//! -1 when absent. Both keys matter: two classes may each hold a preset called "AT loadout".
 	protected int IndexOf(string kitName, string name)
 	{
-		if (kitName == "" || name == "" || !m_aPresets)
+		if (kitName == "" || name == "" || !EnsureLoaded())
 			return -1;
 
 		foreach (int i, RK29_KitPreset preset : m_aPresets)
@@ -323,108 +359,124 @@ class RK29_KitPresetStorage
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! An absent or unreadable file is the first run and answers as an empty store; nothing is
-	//! written back here, the next Save persists. A file of another shape is discarded whole, which
-	//! is what VERSION is for.
-	//!
-	//! The file is plain text and user-editable, so the walk that follows treats nothing in it as
-	//! proven: a malformed or nameless record is dropped, and more than MAX_PER_KIT of one class -
-	//! which only a text editor can produce - loses the overflow from the end, keeping the presets
-	//! saved first.
-	protected void ReadFromStorage()
+	protected static RK29_KitSetup SetupOrNull()
 	{
-		m_aPresets = {};
+		RK29_KitManager mgr = RK29_KitManager.GetInstance();
+		if (!mgr)
+			return null;
 
-		RK29_KitPresetFile file = new RK29_KitPresetFile();
-		if (!file.LoadFromFile(PRESETS_FILE))
+		return mgr.Setup();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! False while nothing could be loaded yet - only an import needs the setup, so that is the one
+	//! case that waits; every caller answers "no presets" meanwhile rather than guessing.
+	protected bool EnsureLoaded()
+	{
+		if (m_bLoaded)
+			return true;
+
+		if (FileIO.FileExists(PRESETS_FILE))
 		{
-			RK29_Log.Trace("[RK29] kit presets: " + PRESETS_FILE + " did not load - starting empty"
-				+ " (first run, or the file is unreadable)");
-			return;
+			ReadOwnFile();
+			m_bLoaded = true;
+			return true;
 		}
 
-		if (file.m_iVersion != VERSION)
+		RK29_KitSetup setup = SetupOrNull();
+		if (!setup)
+			return false;
+
+		m_bLoaded = true;
+		ImportOlder(setup);
+		return true;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected bool EnsureWritable()
+	{
+		if (!EnsureLoaded())
+			return false;
+
+		if (m_bReadOnly)
 		{
-			Print(string.Format("[RK29] kit presets: %1 is file version %2 and this build writes"
-				+ " %3 - stored presets discarded", PRESETS_FILE, file.m_iVersion, VERSION),
-				LogLevel.WARNING);
+			Print("[RK29] kit presets: " + PRESETS_FILE + " could not be read this session - saved"
+				+ " kits are read-only until it is fixed or removed", LogLevel.WARNING);
+			return false;
+		}
+
+		return true;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Our own file. One that exists and does not read, or reads as another shape, makes the store
+	//! read-only for the session: overwriting it would erase whatever is in it, and re-importing
+	//! over it would bring back kits the player has deleted since.
+	protected void ReadOwnFile()
+	{
+		RK29_KitPresetFile file = new RK29_KitPresetFile();
+		if (!file.LoadFromFile(PRESETS_FILE) || file.m_iVersion != VERSION)
+		{
+			m_bReadOnly = true;
+			Print("[RK29] kit presets: " + PRESETS_FILE + " exists but could not be read - saved kits"
+				+ " are read-only this session and the file is left as it is", LogLevel.WARNING);
 			return;
 		}
 
 		if (!file.m_aRecords)
 			return;
 
-		map<string, int> perKit = new map<string, int>();
-		bool dropped = false;
-
 		foreach (string record : file.m_aRecords)
 		{
 			RK29_KitPreset preset = DecodeRecord(record);
-			if (!preset)
-			{
-				dropped = true;
-				continue;
-			}
-
-			int held = 0;
-			perKit.Find(preset.m_sKitName, held);
-			if (held >= MAX_PER_KIT)
-			{
-				dropped = true;
-				continue;
-			}
-
-			perKit.Set(preset.m_sKitName, held + 1);
-			m_aPresets.Insert(preset);
-		}
-
-		if (dropped)
-		{
-			Print("[RK29] kit presets: " + PRESETS_FILE + " held unusable records - they were"
-				+ " dropped on load", LogLevel.NORMAL);
-		}
-	}
-
-	//------------------------------------------------------------------------------------------------
-	//! Writes the whole store. PackToFile, not SaveToFile: SaveToFile only rewrites data a previous
-	//! load left on the struct, and a struct just built by hand has none.
-	protected void WriteToStorage()
-	{
-		RK29_KitPresetFile file = new RK29_KitPresetFile();
-		file.m_iVersion = VERSION;
-
-		foreach (RK29_KitPreset preset : m_aPresets)
-		{
 			if (preset)
-				file.m_aRecords.Insert(EncodeRecord(preset));
-		}
-
-		if (!file.PackToFile(PRESETS_FILE))
-		{
-			Print("[RK29] kit presets: could not write " + PRESETS_FILE
-				+ " - presets are session-only", LogLevel.WARNING);
+				m_aPresets.Insert(preset);
+			else
+				m_aUndecodable.Insert(record);
 		}
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! "format|kitName|picks|name". The first three fields are machine-written and hold no "|" -
-	//! the picks wire is built from ";", "=" and ":" alone - so the name, the one field a player
-	//! types, goes last and keeps whatever it holds.
-	protected static string EncodeRecord(notnull RK29_KitPreset preset)
+	//! Our own file does not exist: take the newest older store once, convert it and write our own.
+	//! The older file is never written, so the build that owns it keeps working. One that exists but
+	//! does not read imports nothing and writes nothing - the next Save starts our file.
+	protected void ImportOlder(notnull RK29_KitSetup setup)
 	{
-		return preset.m_iFormat.ToString() + "|" + preset.m_sKitName + "|" + preset.m_sPicks + "|"
-			+ preset.m_sName;
+		if (!FileIO.FileExists(V1_FILE))
+			return;
+
+		RK29_KitPresetFile file = new RK29_KitPresetFile();
+		if (!file.LoadFromFile(V1_FILE) || file.m_iVersion != 1 || !file.m_aRecords)
+		{
+			Print("[RK29] kit presets: " + V1_FILE + " could not be read - nothing imported",
+				LogLevel.WARNING);
+			return;
+		}
+
+		foreach (string record : file.m_aRecords)
+		{
+			RK29_KitPreset preset = ConvertV1Record(record, setup);
+			if (preset)
+				m_aPresets.Insert(preset);
+			else
+				m_aUndecodable.Insert(record);
+		}
+
+		Print(string.Format("[RK29] kit presets: imported %1 record(s) from %2 into %3",
+			file.m_aRecords.Count(), V1_FILE, PRESETS_FILE), LogLevel.NORMAL);
+		WriteToStorage();
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! Null for anything that is not a record this build wrote. The tail is rejoined rather than
-	//! taken as one field, because Split cuts at every separator and a typed "|" is legal in a name.
+	//! v1 record "1|kitName|picks|name", name last and unescaped. Null for one that does not decode
+	//! (kept raw by the caller). One of another dialect, or of a class this config has no longer,
+	//! is carried raw rather than converted: it cannot be expanded, and it must not be lost.
 	//!
-	//! skipEmptyEntries is FALSE and must stay false: a preset saved with every choice at its
-	//! authored default holds the empty picks wire, so its record has an empty middle field, and
-	//! skipping that field leaves the record one short of RECORD_FIELDS - the preset is silently
-	//! dropped on the next load and erased by the next write.
-	protected static RK29_KitPreset DecodeRecord(string record)
+	//! The overlay is what keeps a converted kit honest: expanding alone would bake today's fallback
+	//! for every v1 pick the config no longer honours into the kit and call it unchanged. Putting the
+	//! v1 pick back over the expansion leaves ChangedCount to see the difference. v1 picks for groups
+	//! outside the offer are dropped - indistinguishable from the other rifle's inert leftovers.
+	protected static RK29_KitPreset ConvertV1Record(string record, notnull RK29_KitSetup setup)
 	{
 		array<string> parts = {};
 		record.Split("|", parts, false);
@@ -443,6 +495,146 @@ class RK29_KitPresetStorage
 		preset.m_sKitName = parts[1];
 		preset.m_sPicks = parts[2];
 		preset.m_sName = name;
+
+		RK29_ClassSetup cls = setup.FindClass(preset.m_sKitName);
+		if (preset.m_iFormat != V1_PICKS_FORMAT || !cls)
+		{
+			preset.m_sRaw = record;
+			return preset;
+		}
+
+		array<ref RK29_ChoicePick> old = {};
+		RK29_KitResolve.ParsePicks(preset.m_sPicks, old);
+
+		array<ref RK29_ResolvedGroup> offer = {};
+		RK29_KitResolve.BuildOffer(cls, setup, old, offer);
+
+		array<ref RK29_ChoicePick> full = {};
+		RK29_KitResolve.ExpandPicks(offer, old, full);
+
+		foreach (RK29_ChoicePick pick : old)
+		{
+			if (!pick)
+				continue;
+
+			RK29_ResolvedGroup g = RK29_KitResolve.FindGroup(offer, pick.m_sGroup);
+			if (!g)
+				continue;
+
+			bool counted = !g.m_bLoaded && !g.IsWeaponGroup() && !g.IsAttachmentGroup()
+				&& g.m_eKind != RK29_EChoiceKind.EXCLUSIVE;
+			for (int j = full.Count() - 1; j >= 0; j--)
+			{
+				if (full[j].m_sGroup == pick.m_sGroup && (!counted || full[j].m_sEntry == pick.m_sEntry))
+					full.RemoveOrdered(j);
+			}
+			full.Insert(pick);
+		}
+
+		preset.m_sPicks = RK29_KitResolve.EncodePicks(full);
+		preset.m_iFormat = PICKS_FORMAT;
 		return preset;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Writes the whole store. PackToFile, not SaveToFile: SaveToFile only rewrites data a previous
+	//! load left on the struct, and a struct just built by hand has none.
+	protected void WriteToStorage()
+	{
+		if (m_bReadOnly)
+			return;
+
+		RK29_KitPresetFile file = new RK29_KitPresetFile();
+		file.m_iVersion = VERSION;
+
+		foreach (RK29_KitPreset preset : m_aPresets)
+		{
+			if (preset)
+				file.m_aRecords.Insert(EncodeRecord(preset));
+		}
+
+		foreach (string raw : m_aUndecodable)
+			file.m_aRecords.Insert(raw);
+
+		if (!file.PackToFile(PRESETS_FILE))
+		{
+			Print("[RK29] kit presets: could not write " + PRESETS_FILE
+				+ " - presets are session-only", LogLevel.WARNING);
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! "2|kitName|picks|name[|key=value]...". The kit name and picks are machine-written and hold no
+	//! "|" (RK29_KitLint refuses one in any authored id or kit name); the name is typed, so it is
+	//! escaped instead.
+	protected static string EncodeRecord(notnull RK29_KitPreset preset)
+	{
+		if (preset.m_sRaw != "")
+			return preset.m_sRaw;
+
+		string record = preset.m_iFormat.ToString() + "|" + preset.m_sKitName + "|" + preset.m_sPicks
+			+ "|" + EscapeName(preset.m_sName);
+		foreach (string extra : preset.m_aExtra)
+			record += "|" + extra;
+
+		return record;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Null for anything that is not a record at all. A record of another dialect decodes as far as
+	//! its name, for the row, and keeps its raw text for the write.
+	//!
+	//! skipEmptyEntries is FALSE and must stay false: a picks field can be empty, and skipping it
+	//! shifts every field after it - the Split bug that silently dropped kits saved at defaults.
+	protected static RK29_KitPreset DecodeRecord(string record)
+	{
+		array<string> parts = {};
+		record.Split("|", parts, false);
+		if (parts.Count() < RECORD_FIELDS)
+			return null;
+
+		string name = UnescapeName(parts[RECORD_FIELDS - 1]);
+		if (name == "" || parts[1] == "")
+			return null;
+
+		RK29_KitPreset preset = new RK29_KitPreset();
+		preset.m_iFormat = parts[0].ToInt();
+		preset.m_sKitName = parts[1];
+		preset.m_sPicks = parts[2];
+		preset.m_sName = name;
+
+		if (preset.m_iFormat != PICKS_FORMAT)
+		{
+			preset.m_sRaw = record;
+			return preset;
+		}
+
+		for (int i = RECORD_FIELDS; i < parts.Count(); i++)
+		{
+			if (parts[i] != "")
+				preset.m_aExtra.Insert(parts[i]);
+		}
+
+		return preset;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! "%" first, so the "%" an escape writes is never escaped again.
+	protected static string EscapeName(string name)
+	{
+		string escaped = name;
+		escaped.Replace("%", "%25");
+		escaped.Replace("|", "%7C");
+		return escaped;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The reverse order: "%7C" before "%25", or a typed "%7C" (stored "%257C") would come back "|".
+	protected static string UnescapeName(string escaped)
+	{
+		string name = escaped;
+		name.Replace("%7C", "|");
+		name.Replace("%25", "%");
+		return name;
 	}
 }

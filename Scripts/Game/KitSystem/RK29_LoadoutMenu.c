@@ -652,13 +652,16 @@ class RK29_LoadoutMenu
 			return;
 		}
 
-		// Parsed, not trusted: the wire is from a profile file and may name a catalog that has since
-		// moved. RebuildOffer's DropBlockedPicks bounds and drops whatever the offer no longer has,
-		// the same treatment a loaded preset gets. An empty wire parses to nothing, which is the
-		// defaults.
+		// Only a kit WireFor would also seed: one the config has moved under starts the menu at the
+		// defaults, its row marked outdated for the player to load deliberately. Still parsed, not
+		// trusted - the wire is from a profile file. An empty wire parses to nothing, the defaults.
 		RK29_KitLastUsedStore store = RK29_KitLastUsedStore.GetInstance();
-		if (store)
-			RK29_KitResolve.ParsePicks(store.WireFor(cls.m_sKitName), m_aPicks);
+		if (!store)
+			return;
+
+		RK29_ELastUsedStatus status;
+		string presetName;
+		RK29_KitResolve.ParsePicks(store.WireFor(cls.m_sKitName, status, presetName), m_aPicks);
 	}
 
 	//============================================================================================
@@ -700,6 +703,24 @@ class RK29_LoadoutMenu
 	void SetPicks(array<ref RK29_ChoicePick> picks)
 	{
 		m_aPicks = picks;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The kit on screen as the full list every apply sends and every saved kit stores - never
+	//! EncodePicks(Picks()) for either, or a saved kit leans on today's defaults again. The menu's
+	//! own offer, so no extra build.
+	string CurrentWire()
+	{
+		array<ref RK29_ChoicePick> full = {};
+		RK29_KitResolve.ExpandPicks(m_aOffer, m_aPicks, full);
+		return RK29_KitResolve.EncodePicks(full);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! What CurrentWire reads while this class stands at its authored defaults - the Standard row.
+	string StandardWire(RK29_ClassSetup cls)
+	{
+		return RK29_KitResolve.StandardWire(cls, RK29_MenuRowKit.Setup());
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -807,10 +828,10 @@ class RK29_LoadoutMenu
 	//------------------------------------------------------------------------------------------------
 	//! A pick the offer has since ruled out is thrown away rather than kept. Keeping it works, but a
 	//! vest quietly returning several picks later reads as the menu acting by itself, and losing it
-	//! is one click to recover. This is also what makes a loaded preset honest: everything
-	//! CountPresetStale counts against a saved wire is dropped or bounded here, so the live picks
-	//! after a load are what the kit issues, and re-saving clears the "(outdated)" mark. Mirror
-	//! that counter when adding a category. A group the offer lacks is kept untouched: the other
+	//! is one click to recover. This is also what an outdated saved kit loads through: whatever
+	//! RK29_KitResolve.ChangedCount finds today's config answering differently is dropped or bounded
+	//! here, so the live picks after a load are what the kit issues, and re-saving clears the
+	//! "(outdated)" mark. A group the offer lacks is kept untouched: the other
 	//! rifle's ammo counts come back on a switch and nothing reads them meanwhile. RemoveOrdered,
 	//! not Remove: a swap-remove would scramble the pick order.
 	protected bool DropBlockedPicks()
@@ -1584,6 +1605,11 @@ class RK29_LoadoutMenu
 				g.m_iBudgetMin, spend));
 		}
 
+		// over the wire's caps the server refuses the whole list and issues every default in silence.
+		// The list's length is the offer's, not the player's doing, so this is a config fault to report
+		if (!RK29_KitResolve.WireFits(CurrentWire()))
+			outReasons.Insert("This kit is too large to send - please report it to the mod team");
+
 		// the dress the preview just ran is what answers this: anything it could not place is gear the
 		// player would spawn without, which is exactly what the weight row goes red about
 		array<string> dropped = {};
@@ -1655,7 +1681,7 @@ class RK29_LoadoutMenu
 		if (!pc)
 			return;
 
-		string wire = RK29_KitResolve.EncodePicks(m_aPicks);
+		string wire = CurrentWire();
 		pc.RK29_RequestKit(cls.m_sKitName, wire);
 		RK29_Log.Trace(string.Format("[RK29] loadout menu: applying '%1' picks='%2'",
 			cls.m_sKitName, wire));
