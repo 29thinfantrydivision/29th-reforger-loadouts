@@ -19,6 +19,81 @@ class RK29_KitLint
 		VerifyExclusions(setup);
 		VerifyGarmentAttachments(setup);
 		VerifyChamberIds(setup);
+		VerifyWireIds(setup);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Authored ids ride the pick wire ("group=entry:count;...") and the saved-kit record
+	//! ("format|kit|picks|name"), neither of which escapes them, so a reserved character in one
+	//! splits a pick or a record in two and the kit silently loses it. Per position: kit names "|";
+	//! group ids ";" "=" "|"; entry ids ";" ":" "|". Player-typed kit names are escaped, not linted.
+	protected static void VerifyWireIds(notnull RK29_KitSetup setup)
+	{
+		int bad = 0;
+		foreach (RK29_ClassSetup cls : setup.m_aClasses)
+		{
+			if (cls)
+				bad += ComplainIfReserved("kit name", cls.m_sKitName, "|", "roster");
+		}
+
+		foreach (RK29_ChoiceGroup g : setup.m_aChoiceGroups)
+			bad += ComplainIfGroupReserved(g, "catalog");
+
+		if (setup.m_aWeaponDefs)
+		{
+			foreach (RK29_WeaponDef wdef : setup.m_aWeaponDefs)
+			{
+				if (wdef)
+					bad += ComplainIfGroupReserved(wdef.m_AmmoGroup, "weapon '" + wdef.m_sId + "' ammo");
+			}
+		}
+
+		array<RK29_ChoiceGroup> inlineGroups = {};
+		array<string> inlineKits = {};
+		CollectInlineGroups(setup, inlineGroups, inlineKits);
+		foreach (int i, RK29_ChoiceGroup inlined : inlineGroups)
+			bad += ComplainIfGroupReserved(inlined, "kit '" + inlineKits[i] + "' inline group");
+
+		if (bad > 0)
+			Print(string.Format("[RK29] config ERROR - %1 id(s) hold a character the pick wire"
+				+ " reserves", bad), LogLevel.ERROR);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected static int ComplainIfGroupReserved(RK29_ChoiceGroup g, string where)
+	{
+		if (!g)
+			return 0;
+
+		int bad = ComplainIfReserved("group id", g.m_sId, ";=|", where);
+		if (!g.m_aEntries)
+			return bad;
+
+		foreach (RK29_ChoiceEntryBase e : g.m_aEntries)
+		{
+			if (e)
+				bad += ComplainIfReserved("entry id", RK29_KitResolve.EntryIdOf(e), ";:|",
+					where + " '" + g.m_sId + "'");
+		}
+		return bad;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! One complaint per id, naming the first reserved character found.
+	protected static int ComplainIfReserved(string what, string id, string reserved, string where)
+	{
+		for (int i = 0, n = reserved.Length(); i < n; i++)
+		{
+			string c = reserved.Get(i);
+			if (id.IndexOf(c) < 0)
+				continue;
+
+			Print(string.Format("[RK29] config ERROR - %1 %2 '%3' holds '%4', which the pick wire"
+				+ " reserves - saved kits and applies would split it", where, what, id, c),
+				LogLevel.ERROR);
+			return 1;
+		}
+		return 0;
 	}
 
 	//------------------------------------------------------------------------------------------------

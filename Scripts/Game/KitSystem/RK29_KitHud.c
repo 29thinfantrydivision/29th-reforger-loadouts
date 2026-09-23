@@ -6,10 +6,13 @@ class RK29_KitHud
 	protected static const ResourceName HUD_LAYOUT = "{AB29C0FFEEB20033}UI/KitSystem/RK29_KitHud.layout";
 	protected static const int TICK_MS = 1000;
 	protected static const int HEADER_ROW_HEIGHT = 24;
+	protected static const float BAND_BOTTOM_MARGIN = 16;
 
 	protected static ref RK29_KitHud s_Instance;
 
 	protected Widget m_wRoot;
+	protected Widget m_wBand;
+	protected float m_fBandTopY;
 	protected Widget m_wRows;
 	protected TextWidget m_wTitle;
 	protected Widget m_wTimerCell;
@@ -89,6 +92,8 @@ class RK29_KitHud
 		if (!m_bRowsPainted)
 			Rebuild();
 
+		PlaceBand();
+
 		if (!s_bShownReported && m_wRows)
 		{
 			s_bShownReported = true;
@@ -152,6 +157,9 @@ class RK29_KitHud
 			s_bLayoutWarned = true;
 			return;
 		}
+		m_wBand   = m_wRoot.FindAnyWidget("HudBand");
+		if (m_wBand)
+			m_fBandTopY = FrameSlot.GetPosY(m_wBand);
 		m_wRows   = m_wRoot.FindAnyWidget("HudRows");
 		m_wTitle  = TextWidget.Cast(m_wRoot.FindAnyWidget("HudTitle"));
 		m_wTimerCell = m_wRoot.FindAnyWidget("HudTimerCell");
@@ -160,6 +168,33 @@ class RK29_KitHud
 		m_wFooterRow = m_wRoot.FindAnyWidget("HudFooterRow");
 		m_wHeaderRow = m_wRoot.FindAnyWidget("HudHeaderRow");
 		BuildHeaderRow();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The layout's top edge sits under the lowest point vanilla's VoN list can reach (chat 300 +
+	//! VoN content 232 reference px; that content is not clipped to its 200 px slot). A table too
+	//! tall for the space below rides up just far enough to keep its bottom on screen - covering
+	//! VoN beats losing rows. Measured, never estimated: a height of zero means not laid out yet,
+	//! so a rebuild's growth lands on the next tick.
+	protected void PlaceBand()
+	{
+		if (!m_wBand)
+			return;
+
+		WorkspaceWidget ws = GetGame().GetWorkspace();
+		float bandW, bandH, rootW, rootH;
+		m_wBand.GetScreenSize(bandW, bandH);
+		m_wRoot.GetScreenSize(rootW, rootH);
+		if (bandH <= 0 || rootH <= 0)
+			return;
+
+		float y = ws.DPIUnscale(rootH) - ws.DPIUnscale(bandH) - BAND_BOTTOM_MARGIN;
+		if (y > m_fBandTopY)
+			y = m_fBandTopY;
+		if (y < 0)
+			y = 0;
+
+		FrameSlot.SetPosY(m_wBand, y);
 	}
 
 	//------------------------------------------------------------------------------------------------

@@ -9,15 +9,21 @@ class RK29_KitResolve
 	//! merged WeaponSlotType per weapon prefab - the answer cannot change inside a session
 	protected static ref map<ResourceName, string> s_mSlotTypeCache = new map<ResourceName, string>();
 
+	//! "<kit>|<wire>" -> ExpandedWire, and kit -> the empty list's expansion. Config cannot change
+	//! inside a session; each uncached answer builds a whole offer.
+	protected static ref map<string, string> s_mExpandedWires = new map<string, string>();
+	protected static ref map<string, string> s_mStandardWires = new map<string, string>();
+
 	//! The sanity ceiling that cannot be forgotten in config: no request, however built, turns into
 	//! an absurd number of entities. Config is exactly where a cap gets omitted.
 	static const int COUNT_HARD_CEILING = 100;
 
-	//! The door on a pick wire, which arrives from a client: a real request is ~26 picks and ~1.2 KB
-	//! at the very worst the config allows. Over either cap the wire is refused whole, so a hostile
-	//! string cannot buy log lines or picks in proportion to its length.
+	//! The door on a pick wire, which arrives from a client. Every apply and saved kit sends the FULL
+	//! expanded list (ExpandPicks), estimated at ~50 picks for the biggest class. Over either cap the
+	//! wire is refused whole, so a hostile string cannot buy log lines or picks in proportion to its
+	//! length - which is also why the client checks WireFits before it sends or saves.
 	static const int WIRE_MAX_CHARS = 4096;
-	static const int WIRE_MAX_PICKS = 64;
+	static const int WIRE_MAX_PICKS = 128;
 
 	//! An unset m_iMax implies "about what this row already carries" - never unlimited. Two is the
 	//! ratio the config itself uses where a cap is stated (the rifle ball row is 2/6/12).
@@ -1049,6 +1055,8 @@ class RK29_KitResolve
 	{
 		s_aComplained.Clear();
 		s_mSlotTypeCache.Clear();
+		s_mExpandedWires.Clear();
+		s_mStandardWires.Clear();
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -2066,6 +2074,315 @@ class RK29_KitResolve
 		if (clamped > 0)
 			Print(string.Format("[RK29] %1 pick count(s) out of range - held to bounds", clamped),
 				LogLevel.WARNING);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Would this wire pass ParsePicks' door? Over either cap the server refuses the whole list and
+	//! issues every default without a word, so Save and Apply ask this first and refuse loudly.
+	static bool WireFits(string wire)
+	{
+		if (wire.Length() > WIRE_MAX_CHARS)
+			return false;
+
+		array<string> parts = {};
+		wire.Split(";", parts, true);
+		return parts.Count() <= WIRE_MAX_PICKS;
+	}
+
+	//============================================================================================
+	// Saved kits
+	//============================================================================================
+
+	//------------------------------------------------------------------------------------------------
+	//! The full answer these picks give: one explicit pick per group of the offer, each exactly what
+	//! the issue path reads for that group, so a moved default can never reach a kit saved from it.
+	//! offer must be the one BuildOffer made from these same picks. Groups not in the offer (the other
+	//! rifle's ammo the menu keeps inert) are not emitted.
+	//!
+	//! Explicit == absent rests on the three presence-sensitive reads and nothing else:
+	//! ExclusiveAnswer's bare test, SeatedLoadedEntry's empty flag and HasExplicitBarePick. A new
+	//! reader of FindPick/HasExplicitBarePick that treats a pick differently from its absence breaks
+	//! every saved kit silently - add its branch here first.
+	//!
+	//! Attachment groups are the one place explicit and absent differ: no pick says NOTHING (the gun
+	//! keeps what it has), "g=" EMPTIES THE SEAT (AttachmentOrderFor). An unanswered attachment group
+	//! with no default is therefore left unwritten, never written bare, or it would strip sights.
+	static void ExpandPicks(notnull array<ref RK29_ResolvedGroup> offer, array<ref RK29_ChoicePick> picks,
+		notnull array<ref RK29_ChoicePick> outFull)
+	{
+		outFull.Clear();
+
+		// "group" for one-answer groups, "group|entry" for counted rows: a class carrying two grenade
+		// launchers offers ugl_grenades twice, and both copies read the same picks
+		array<string> emitted = {};
+
+		foreach (RK29_ResolvedGroup g : offer)
+		{
+			if (!g)
+				continue;
+
+			bool counted = g.m_eKind == RK29_EChoiceKind.COUNTED || g.m_eKind == RK29_EChoiceKind.BUDGETED;
+			if (counted && !g.m_bLoaded && !g.IsWeaponGroup() && !g.IsAttachmentGroup())
+			{
+				if (g.m_eGroupType != RK29_EGroupType.ITEM)
+				{
+					ComplainUnpinnable(g);
+					continue;
+				}
+
+				array<int> counts = {};
+				int overspend;
+				ResolveCounts(g, picks, counts, overspend);
+				foreach (int i, RK29_ResolvedEntry row : g.m_aEntries)
+				{
+					if (row && !emitted.Contains(g.m_sId + "|" + row.m_sId))
+					{
+						emitted.Insert(g.m_sId + "|" + row.m_sId);
+						AddPick(outFull, g.m_sId, row.m_sId, counts[i]);
+					}
+				}
+				continue;
+			}
+
+			if (emitted.Contains(g.m_sId))
+				continue;
+			emitted.Insert(g.m_sId);
+
+			if (g.m_bLoaded)
+			{
+				RK29_ResolvedEntry mark = PickedEntry(g, picks);
+				if (!mark)
+					continue;
+
+				// the empty flag travels only on the row it was put on - SeatedLoadedEntry's own test
+				int flag = 1;
+				RK29_ChoicePick held = FindPick(picks, g.m_sId);
+				if (held && held.m_sEntry == mark.m_sId && held.m_iCount == LOADED_PICK_EMPTY)
+					flag = LOADED_PICK_EMPTY;
+
+				AddPick(outFull, g.m_sId, mark.m_sId, flag);
+				continue;
+			}
+
+			if (g.IsWeaponGroup())
+			{
+				AddAnswer(outFull, g, PickedWeaponEntry(g, picks));
+				continue;
+			}
+
+			if (g.IsAttachmentGroup())
+			{
+				if (HasExplicitBarePick(picks, g.m_sId))
+				{
+					AddPick(outFull, g.m_sId, "", 1);
+					continue;
+				}
+
+				RK29_ResolvedEntry chosen = PickedEntry(g, picks);
+				if (chosen && chosen.m_bBlocked)
+					chosen = g.DefaultEntry();
+				if (chosen && !chosen.m_bBlocked)
+					AddPick(outFull, g.m_sId, chosen.m_sId, 1);
+				continue;
+			}
+
+			if (g.m_eKind == RK29_EChoiceKind.EXCLUSIVE && (g.m_eGroupType == RK29_EGroupType.ITEM
+				|| g.IsClothingGroup() || g.IsGarmentAttachmentGroup()))
+			{
+				AddAnswer(outFull, g, ExclusiveAnswer(g, picks));
+				continue;
+			}
+
+			ComplainUnpinnable(g);
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A group type or kind ExpandPicks has no branch for is left out of every saved kit, so its
+	//! default moving would reach them unannounced. Never skipped silently: types do get added
+	//! (GARMENT_ATTACHMENT arrived with NVG).
+	protected static void ComplainUnpinnable(notnull RK29_ResolvedGroup g)
+	{
+		ComplainOnce(string.Format("[RK29] saved kits cannot pin group '%1' (type %2, kind %3) - add"
+			+ " its branch to RK29_KitResolve.ExpandPicks", g.m_sId,
+			typename.EnumToString(RK29_EGroupType, g.m_eGroupType),
+			typename.EnumToString(RK29_EChoiceKind, g.m_eKind)), LogLevel.ERROR);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A one-answer group's answer, with None written bare only where None is an answer the group
+	//! allows - elsewhere a null answer means every row is blocked, and bare would not say that.
+	protected static void AddAnswer(notnull array<ref RK29_ChoicePick> outFull,
+		notnull RK29_ResolvedGroup g, RK29_ResolvedEntry answer)
+	{
+		if (answer)
+			AddPick(outFull, g.m_sId, answer.m_sId, 1);
+		else if (g.NoneAllowed())
+			AddPick(outFull, g.m_sId, "", 1);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected static void AddPick(notnull array<ref RK29_ChoicePick> outFull, string group, string entry,
+		int count)
+	{
+		RK29_ChoicePick pick = new RK29_ChoicePick();
+		pick.m_sGroup = group;
+		pick.m_sEntry = entry;
+		pick.m_iCount = count;
+		outFull.Insert(pick);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A wire re-expanded under today's config: its own offer, its own answers, encoded. What a saved
+	//! kit loads as - equal to the stored wire exactly when the kit is unchanged. "" with no class or
+	//! setup, which no caller may read as the defaults.
+	static string ExpandedWire(RK29_ClassSetup cls, RK29_KitSetup setup, string wire)
+	{
+		if (!cls || !setup)
+			return "";
+
+		array<ref RK29_ChoicePick> picks = {};
+		ParsePicks(wire, picks);
+
+		array<ref RK29_ResolvedGroup> offer = {};
+		BuildOffer(cls, setup, picks, offer);
+
+		array<ref RK29_ChoicePick> full = {};
+		ExpandPicks(offer, picks, full);
+		return EncodePicks(full);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! ExpandedWire, cached per class and wire for the session. "" is never cached: it is the answer
+	//! with no class or setup, and a later call may have both.
+	static string CachedExpandedWire(RK29_ClassSetup cls, RK29_KitSetup setup, string wire)
+	{
+		if (!cls)
+			return "";
+
+		string key = cls.m_sKitName + "|" + wire;
+		string known;
+		if (s_mExpandedWires.Find(key, known))
+			return known;
+
+		string expanded = ExpandedWire(cls, setup, wire);
+		if (expanded != "")
+			s_mExpandedWires.Set(key, expanded);
+		return expanded;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The class at its authored defaults, as a full list: what the Standard row stands for, and what
+	//! an apply of it sends. The empty list is no longer that - every apply sends a full list.
+	static string StandardWire(RK29_ClassSetup cls, RK29_KitSetup setup)
+	{
+		if (!cls)
+			return "";
+
+		string known;
+		if (s_mStandardWires.Find(cls.m_sKitName, known))
+			return known;
+
+		string standard = ExpandedWire(cls, setup, "");
+		if (standard != "")
+			s_mStandardWires.Set(cls.m_sKitName, standard);
+		return standard;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! How many picks of a saved wire today's config would answer differently: the saved list against
+	//! its own re-expansion. 0 is a kit that loads exactly as saved; -1 is no answer (no class or
+	//! setup), which callers must not read as either.
+	//!
+	//! outChanged gets the offer groups involved, once per id; outGone the number of distinct groups
+	//! the offer no longer has. Pool minimums are deliberately not a term: Save does not check them,
+	//! so a work-in-progress kit would read outdated the moment it was saved.
+	static int ChangedCount(RK29_ClassSetup cls, RK29_KitSetup setup, string savedWire,
+		notnull array<ref RK29_ResolvedGroup> outChanged, out int outGone)
+	{
+		outChanged.Clear();
+		outGone = 0;
+
+		if (!cls || !setup)
+			return -1;
+
+		array<ref RK29_ChoicePick> saved = {};
+		ParsePicks(savedWire, saved);
+
+		array<ref RK29_ResolvedGroup> offer = {};
+		BuildOffer(cls, setup, saved, offer);
+
+		array<ref RK29_ChoicePick> expanded = {};
+		ExpandPicks(offer, saved, expanded);
+
+		array<string> savedKeys = {};
+		array<string> savedGroups = {};
+		ComparisonKeys(offer, saved, savedKeys, savedGroups);
+
+		array<string> expandedKeys = {};
+		array<string> expandedGroups = {};
+		ComparisonKeys(offer, expanded, expandedKeys, expandedGroups);
+
+		int changed = 0;
+		array<string> involved = {};
+		foreach (int i, string key : savedKeys)
+		{
+			if (expandedKeys.Contains(key))
+				continue;
+			changed++;
+			if (!involved.Contains(savedGroups[i]))
+				involved.Insert(savedGroups[i]);
+		}
+		foreach (int j, string added : expandedKeys)
+		{
+			if (savedKeys.Contains(added))
+				continue;
+			changed++;
+			if (!involved.Contains(expandedGroups[j]))
+				involved.Insert(expandedGroups[j]);
+		}
+
+		foreach (string groupId : involved)
+		{
+			RK29_ResolvedGroup g = FindGroup(offer, groupId);
+			if (g)
+				outChanged.Insert(g);
+			else
+				outGone++;
+		}
+
+		return changed;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! One "group=entry:count" key per pick that issues something, deduplicated, with the group each
+	//! key came from index-aligned. A zero count issues nothing. A bare pick of an offered group that
+	//! is not an attachment issues nothing either - kept, a None-default slot added to the config would
+	//! turn every kit outdated. A bare attachment pick empties a seat, and a bare pick of a group the
+	//! offer lost is the change itself, so both stay.
+	protected static void ComparisonKeys(notnull array<ref RK29_ResolvedGroup> offer,
+		notnull array<ref RK29_ChoicePick> picks, notnull array<string> outKeys,
+		notnull array<string> outGroups)
+	{
+		foreach (RK29_ChoicePick pick : picks)
+		{
+			if (!pick || pick.m_iCount == 0)
+				continue;
+
+			if (pick.m_sEntry == "")
+			{
+				RK29_ResolvedGroup g = FindGroup(offer, pick.m_sGroup);
+				if (g && !g.IsAttachmentGroup())
+					continue;
+			}
+
+			string key = pick.m_sGroup + "=" + pick.m_sEntry + ":" + pick.m_iCount.ToString();
+			if (outKeys.Contains(key))
+				continue;
+
+			outKeys.Insert(key);
+			outGroups.Insert(pick.m_sGroup);
+		}
 	}
 
 	//============================================================================================

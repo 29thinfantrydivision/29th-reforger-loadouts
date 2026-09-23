@@ -4,12 +4,12 @@ FrameWidgetClass {
   SizeLayoutWidgetClass "{AB29C0FFEE292001}" {
    Name "HudBand"
    Slot FrameWidgetSlot "{AB29C0FFEE292002}" {
-    Anchor 0.015 0.5 0.015 0.5
+    Anchor 0.015 0 0.015 0
     PositionX 0
     OffsetLeft 0
-    PositionY 0
-    OffsetTop 0
-    Alignment 0 0.5
+    PositionY 548
+    OffsetTop 548
+    Alignment 0 0
     SizeToContent 1
    }
    AllowWidthOverride 1
