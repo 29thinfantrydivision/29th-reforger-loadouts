@@ -239,13 +239,15 @@ class RK29_KitLastUsedStore
 	//------------------------------------------------------------------------------------------------
 	//! False for anything that is not a record this build can read. The tail is rejoined rather than
 	//! taken as one field, because Split cuts at every separator and a typed "|" is legal in a name.
+	//! skipEmptyEntries is false for the same reason RK29_KitPresetStorage.DecodeRecord keeps it
+	//! false: a skipped empty field shifts every field after it and shortens the record.
 	protected static bool DecodeRecord(string record, out string kitName, out string presetName)
 	{
 		kitName = "";
 		presetName = "";
 
 		array<string> parts = {};
-		record.Split("|", parts, true);
+		record.Split("|", parts, false);
 		if (parts.Count() < RECORD_FIELDS)
 			return false;
 
