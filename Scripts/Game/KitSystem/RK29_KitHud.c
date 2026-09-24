@@ -171,8 +171,8 @@ class RK29_KitHud
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! The layout's top edge sits under the lowest point vanilla's VoN list can reach (chat 300 +
-	//! VoN content 232 reference px; that content is not clipped to its 200 px slot). A table too
+	//! The layout's top edge (420 reference px) clears vanilla's VoN list with two speakers: chat 300 +
+	//! selected-channel row 40 + 32 per speaker. A third speaker overlaps, by owner ruling. A table too
 	//! tall for the space below rides up just far enough to keep its bottom on screen - covering
 	//! VoN beats losing rows. Measured, never estimated: a height of zero means not laid out yet,
 	//! so a rebuild's growth lands on the next tick.
