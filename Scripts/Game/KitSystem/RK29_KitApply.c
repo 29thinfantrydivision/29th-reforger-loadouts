@@ -112,11 +112,15 @@ class RK29_KitApply
 	//! would place by last session's size.
 	protected static ref map<ResourceName, float> s_mDimCache = new map<ResourceName, float>();
 
+	//! Mass of one live copy per prefab, -1 where no copy would spawn - see LiveWeight.
+	protected static ref map<ResourceName, float> s_mLiveWeight = new map<ResourceName, float>();
+
 	//------------------------------------------------------------------------------------------------
 	static void ClearCaches()
 	{
 		s_mDimCache.Clear();
 		s_mMountFit.Clear();
+		s_mLiveWeight.Clear();
 	}
 
 	// ============================================================================ placement route
@@ -224,7 +228,73 @@ class RK29_KitApply
 		if (slotId >= 0)
 			return MountAccepts(storage, slotId, prefab);
 
-		return storage.CanStoreResource(prefab, slotId);
+		if (!storage.CanStoreResource(prefab, slotId))
+			return false;
+
+		return TakesLiveWeight(storage, prefab);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! CanStoreResource weighs a prefab by GetWeightFromResource, which reads the EMPTY item: a belt
+	//! box is 0.25 kg there and 3.15 kg alive, a hand flare 0.7 and 0.95. A pouch near its
+	//! m_fMaxWeight therefore says yes to what the real insert refuses - a drop on the client route,
+	//! and on the authority an accepted order whose item never lands, so every later copy was sent
+	//! to the same pouch and lost there. These are vanilla's two weight tests again
+	//! (SCR_UniversalInventoryStorageComponent.CanStoreResource), asked with the live mass.
+	protected static bool TakesLiveWeight(notnull BaseInventoryStorageComponent storage,
+		ResourceName prefab)
+	{
+		SCR_UniversalInventoryStorageComponent universal = SCR_UniversalInventoryStorageComponent.Cast(storage);
+		IEntity owner = storage.GetOwner();
+		if (!universal || !owner)
+			return true;
+
+		float weight = LiveWeight(prefab, owner);
+		if (weight < 0)
+			return true;
+
+		if (!universal.IsAdditionalWeightOk(weight))
+			return false;
+
+		// vanilla's CheckParentWeightLimit: a pouch also answers to the vest it hangs on
+		IEntity parent = owner.GetParent();
+		if (!parent || ChimeraCharacter.Cast(parent))
+			return true;
+
+		SCR_UniversalInventoryStorageComponent parentStorage = SCR_UniversalInventoryStorageComponent.Cast(
+			parent.FindComponent(SCR_UniversalInventoryStorageComponent));
+		if (!parentStorage)
+			return true;
+
+		return parentStorage.IsAdditionalWeightOk(weight);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! What one copy of `prefab` weighs alive - the only honest answer, since every static ask is the
+	//! empty item. Spawned once, weighed, deleted, cached for the session; -1 when no copy would spawn,
+	//! which is not remembered. The probe spawns on whichever machine is placing - see MountAccepts.
+	protected static float LiveWeight(ResourceName prefab, notnull IEntity near)
+	{
+		float weight;
+		if (s_mLiveWeight.Find(prefab, weight))
+			return weight;
+
+		Resource res = Resource.Load(prefab);
+		if (!res || !res.IsValid())
+			return -1;
+
+		IEntity probe = GetGame().SpawnEntityPrefabLocal(res, near.GetWorld());
+		if (!probe)
+			return -1;
+
+		weight = -1;
+		InventoryItemComponent item = InventoryItemComponent.Cast(probe.FindComponent(InventoryItemComponent));
+		if (item)
+			weight = item.GetTotalWeight();
+		SCR_EntityHelper.DeleteEntityAndChildren(probe);
+
+		s_mLiveWeight.Set(prefab, weight);
+		return weight;
 	}
 
 	//------------------------------------------------------------------------------------------------
