@@ -1,0 +1,8 @@
+GameEntity : "{2518CA6044D6BBDD}Prefabs/Weapons/Attachments/Optics/ta31rco/Optic_TA31RCO.et" {
+ ID "4BA426CBAED42A14"
+ components {
+  SightsComponent "{604D32A6174F91B7}" {
+   Enabled 0
+  }
+ }
+}

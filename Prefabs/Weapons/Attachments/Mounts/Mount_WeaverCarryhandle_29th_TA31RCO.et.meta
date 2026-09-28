@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{7922CE2F861E194E}Prefabs/Weapons/Attachments/Mounts/29th_Mount_WeaverCarryhandle_TA31RCO.et"
+ Configurations {
+  EntityTemplateResourceClass PC {
+  }
+  EntityTemplateResourceClass XBOX_ONE : PC {
+  }
+  EntityTemplateResourceClass XBOX_SERIES : PC {
+  }
+  EntityTemplateResourceClass PS4 : PC {
+  }
+  EntityTemplateResourceClass PS5 : PC {
+  }
+  EntityTemplateResourceClass HEADLESS : PC {
+  }
+ }
+}

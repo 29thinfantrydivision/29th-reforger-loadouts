@@ -1,0 +1,73 @@
+GameEntity : "{5D00C138E2510EDC}Prefabs/Weapons/Attachments/Mounts/Mount_WeaverCarryhandle.et" {
+ ID "4BA426CBAED42A14"
+ components {
+  AttachmentSlotComponent "{6A7820D4A161560A}" {
+   AttachmentSlot InventoryStorageSlot Optic {
+    Offset 0 0.024 -0.0062
+   }
+   AttachmentType AttachmentOpticsRIS1913 "{6A7820D4AE21B3C4}" {
+   }
+   ShowInInspection 1
+  }
+  InventoryItemComponent "{52627A1F45CD4EB6}" {
+   Enabled 1
+   Attributes SCR_ItemAttributeCollection "{52627A1EBB0698FD}" {
+    ItemDisplayName UIInfo "{6A7820D6B88B7D62}" {
+     Name "#RHS-Item_M7RCO_Name"
+     Description "#RHS-Item_M7RCO_Description"
+    }
+    ItemPhysAttributes ItemPhysicalAttributes "{6A7820D683A6AB1E}" {
+     Weight 0.448
+     SizeSetupStrategy Manual
+     ItemVolume 400
+     RestingUP Right
+    }
+    CustomAttributes {
+     WeaponAttachmentAttributes "{5284D858FFF9BE66}" {
+      AttachmentType AttachmentOpticsCarryHandle "{6A7820D576000F52}" {
+      }
+     }
+     PreviewRenderAttributes "{52D69389645B4E4D}" {
+      CameraPreset Right
+      CameraDistanceToItem 0.55
+      FOV 20
+      ShowAllChildrens 1
+     }
+     CharacterModifierAttributes "{6A7820D55328DE29}" {
+      ADSSpeedLimit 1.5
+      SpeedLimitHighready 1.7
+     }
+    }
+    m_Size SLOT_1x1
+   }
+  }
+  ActionsManagerComponent "{5284E0EFF569AD07}" {
+   Enabled 1
+   additionalActions {
+    SCR_AttachItemFromInventoryAction "{6A7820D50E563676}" {
+     ParentContextList {
+      "optic"
+     }
+     UIInfo SCR_ActionUIInfo "{6A7820D5E2D4DA74}" {
+      Name "#AR-UserAction_Attach"
+      m_sIconName "optics"
+     }
+     Duration 0.5
+     CanAggregate 1
+     "Inventory action" 1
+    }
+    SCR_AttachementAction "{6A7820D5C83B99E2}" {
+     ParentContextList {
+      "user"
+     }
+     UIInfo SCR_ActionUIInfo "{6A7820D5D05829C2}" {
+      Name "#AR-UserAction_Detach"
+      m_sIconName "optics"
+     }
+     Duration 0.5
+     CanAggregate 1
+    }
+   }
+  }
+ }
+}
