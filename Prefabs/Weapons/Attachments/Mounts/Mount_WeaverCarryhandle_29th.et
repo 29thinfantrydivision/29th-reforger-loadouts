@@ -4,6 +4,7 @@ GameEntity : "{5D00C138E2510EDC}Prefabs/Weapons/Attachments/Mounts/Mount_WeaverC
   AttachmentSlotComponent "{6A7820D4A161560A}" {
    AttachmentSlot InventoryStorageSlot Optic {
     Offset 0 0.024 -0.0062
+    Angles -0.09 0 0
    }
    AttachmentType AttachmentOpticsRIS1913 "{6A7820D4AE21B3C4}" {
    }
