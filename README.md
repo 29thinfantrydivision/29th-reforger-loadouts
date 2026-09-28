@@ -21,7 +21,31 @@ carries.
 | `595F2BF2F44836FB` | RHS: Status Quo |
 | `1337C0DE5DABBEEF` | RHS: Status Quo — Content Pack 01 |
 | `BADC0DEDABBEDA5E` | RHS: Status Quo — Content Pack 02 |
-| `60C4C12DAE90727B` | ACE Medical Core |
+
+RHS is a hard dependency: the scripts mod and extend RHS classes, and the mod's own prefabs
+inherit from RHS prefabs. Nothing else is.
+
+## Content from other mods
+
+The kit config may name prefabs from **any** mod, dependency or not — ACE Medical's epinephrine
+is one (`Catalogs/RK29_Aliases.conf`). Whatever does not load in a session is left out of every
+kit as if it were parked: the row never appears, overrides and exclusions naming it do nothing,
+and a group left with nothing (a kit's own hat group whose every helmet is missing) is not
+offered and leaves the group it was written to replace in place. A default that is missing hands
+its flag to the first row left, and a budget floor comes down to what the remaining defaults spend.
+
+- **Add a mod's gear:** put the mod on the server's mod list and name its prefabs in the
+  catalogs or kits. Do **not** add it to `addon.gproj`.
+- **Drop a mod:** take it off the server's mod list. Its rows drop out on their own; saved kits
+  that used them are flagged as changed until it returns.
+- **Authoring in Workbench:** add the mod to your local project to browse its prefabs, and leave
+  that `addon.gproj` change uncommitted.
+- **Rules:** only config may name optional content. A 29th prefab must never inherit from, and a
+  script must never name a class from, a mod that is not a dependency above.
+
+On boot the server log names every prefab the config references that did not load, one line
+each, then one warning with the count. A mistyped GUID looks the same as a mod that is not
+running, so check that list after changing the config.
 
 ## Repo layout
 

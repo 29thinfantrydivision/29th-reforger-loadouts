@@ -45,8 +45,14 @@ class RK29_KitResolve
 	//! own. Call order:
 	//!   CollectKitLevelGroups -> CollectOverrideAdds -> ApplyOverrides -> DropZeroCeilingEntries
 	//!   -> EnforceExclusions (weapon targets only) -> PullWeaponOwnedGroups -> FinalisePasses
-	//!   (ApplyOverrides, DropZeroCeilingEntries, EnforceAttachmentLegality, EnforceExclusions (the
-	//!   rest), OfferLoadedSelectors, DropEmptyGroups, SortOfferByOrder).
+	//!   (ApplyOverrides, DropZeroCeilingEntries, SettleShedFloors, EnforceAttachmentLegality,
+	//!   EnforceExclusions (the rest), OfferLoadedSelectors, DropEmptyGroups, SortOfferByOrder).
+	//!
+	//! Content from a mod this session does not run is not a pass: ResolveGroup never copies an
+	//! entry whose prefab does not load (IsEntryUnloaded), exactly as it never copies a parked one,
+	//! so overrides and exclusions naming it find nothing and do nothing. A group left with no entry
+	//! by that is not offered and evicts nothing (IsWhollyShed); SettleShedFloors is the one pass
+	//! that answers for what was shed.
 	//!
 	//! What each kind of pass may do:
 	//!   Remove - PruneUnmountable and, through it, PruneMissingVariants drop entries (only over a
@@ -129,6 +135,108 @@ class RK29_KitResolve
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! Is this entry content the session does not have - a prefab from a mod the server is not
+	//! running? Treated as parked, silently: which optional mods run is the server's mod list, not
+	//! a config mistake, and the boot lint (ReportUnloadedContent) lists every such prefab once.
+	//! A prefab that resolves to nothing is not this question - an unresolved alias or variant
+	//! stays in the offer and is complained about where it always was.
+	//!
+	//! Asked through RK29_KitCompose.PrefabReadable, so each prefab is loaded once per session and
+	//! the answer is a cache read after that. Server and client agree without a word on the wire:
+	//! a client can only join with the server's mod set.
+	protected static bool IsEntryUnloaded(notnull RK29_ChoiceEntryBase e, string ownerWeapon,
+		string factionKey, notnull RK29_KitSetup setup)
+	{
+		ResourceName prefab = EntryPrefabOf(e, ownerWeapon, factionKey, setup);
+		if (prefab == ResourceName.Empty)
+			return false;
+		return !RK29_KitCompose.PrefabReadable(prefab);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The prefab an entry issues, by the same precedence the emit path uses, or empty wherever
+	//! that cannot be told here. Silent throughout: an unknown weapon or attachment id is
+	//! complained about by the pass that reads it, not twice.
+	protected static ResourceName EntryPrefabOf(notnull RK29_ChoiceEntryBase e, string ownerWeapon,
+		string factionKey, notnull RK29_KitSetup setup)
+	{
+		RK29_EntryWeapon weapon = RK29_EntryWeapon.Cast(e);
+		if (weapon)
+		{
+			// asked first because WeaponPrefabOfId complains about an unknown id
+			if (!setup.FindWeaponDef(weapon.m_sWeapon))
+				return ResourceName.Empty;
+			return WeaponPrefabOfId(setup, weapon.m_sWeapon, factionKey);
+		}
+
+		RK29_EntryAttachment att = RK29_EntryAttachment.Cast(e);
+		if (att)
+		{
+			RK29_AttachmentDef adef = setup.FindAttachmentDef(att.m_sAttachment);
+			if (!adef)
+				return ResourceName.Empty;
+			return adef.m_sPrefab;
+		}
+
+		RK29_EntryItem item = RK29_EntryItem.Cast(e);
+		if (!item)
+			return ResourceName.Empty;
+		if (item.m_sPrefab != ResourceName.Empty)
+			return item.m_sPrefab;
+
+		// a variant, or the gun's own magazine, resolves through the owning gun; a kit-level row
+		// has none, and only its alias can be answered
+		RK29_WeaponDef ownerDef = null;
+		ResourceName ownerPrefab = ResourceName.Empty;
+		if (ownerWeapon != "")
+		{
+			ownerDef = setup.FindWeaponDef(ownerWeapon);
+			if (!ownerDef)
+				return ResourceName.Empty;
+			ownerPrefab = WeaponPrefabOfId(setup, ownerWeapon, factionKey);
+			if (ownerPrefab == ResourceName.Empty)
+				return ResourceName.Empty;
+		}
+		else if (item.m_sAlias == "")
+		{
+			return ResourceName.Empty;
+		}
+
+		return ResolveItemPrefabFor(item, ownerPrefab, ownerDef, factionKey, setup);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A group that lost every entry to unloaded content resolves as if parked: not offered, and it
+	//! evicts nothing. Only the shed ones - an authored entry-less group (the worn slot that exists
+	//! to go empty) keeps its meaning.
+	protected static bool IsWhollyShed(notnull RK29_ResolvedGroup g)
+	{
+		return g.m_bShedUnloaded && g.m_aEntries.IsEmpty();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The flagged default was shed and nothing surviving is flagged: the first row takes the flag.
+	//! Without this a group that allows None would answer None by default - a rifle slot arriving
+	//! empty because the author's first choice is not loaded - and a chamber would lose its
+	//! standing round. An override flagging a default later still wins; it runs after this.
+	protected static void InheritShedDefault(notnull RK29_ResolvedGroup g)
+	{
+		foreach (RK29_ResolvedEntry flagged : g.m_aEntries)
+		{
+			if (flagged && flagged.m_bDefault)
+				return;
+		}
+		foreach (RK29_ResolvedEntry first : g.m_aEntries)
+		{
+			if (first)
+			{
+				first.m_bDefault = true;
+				return;
+			}
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! One group per worn slot: a later clothing group on the same slot replaces the earlier one.
 	//! Kit-level groups are collected in authored order and weapon-owned groups after all of them,
 	//! so a kit's own hat beats the shared hat it was written after - this is the only override
@@ -155,9 +263,15 @@ class RK29_KitResolve
 		if (FindGroup(outGroups, def.m_sId))
 			return;
 
+		// resolved before the eviction: a kit's own hat group whose every helmet is missing this
+		// session must leave the shared hat it was written to replace in place
+		RK29_ResolvedGroup g = ResolveGroup(def, "", factionKey, setup);
+		if (IsWhollyShed(g))
+			return;
+
 		EvictSameSlot(outGroups, def);
 
-		outGroups.Insert(ResolveGroup(def, "", factionKey, setup));
+		outGroups.Insert(g);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -337,6 +451,8 @@ class RK29_KitResolve
 			return;
 
 		RK29_ResolvedGroup ammoGroup = ResolveGroup(ammoDef, def.m_sId, factionKey, setup);
+		if (IsWhollyShed(ammoGroup))
+			return;
 		if (ammoGroup.m_sId == "")
 		{
 			ammoGroup.m_sId = AmmoIdOf(def.m_sId);
@@ -393,6 +509,8 @@ class RK29_KitResolve
 			if (IsParked(gdef))
 				continue;
 			RK29_ResolvedGroup weaponGroup = ResolveGroup(gdef, def.m_sId, factionKey, setup);
+			if (IsWhollyShed(weaponGroup))
+				continue;
 
 			// what makes broad group refs safe to author: an M60 given the rifle optics group
 			// simply shows no optic section
@@ -413,6 +531,7 @@ class RK29_KitResolve
 	{
 		ApplyOverrides(comp, setup, outGroups);
 		DropZeroCeilingEntries(outGroups);
+		SettleShedFloors(outGroups);
 		EnforceAttachmentLegality(outGroups, picks, setup, factionKey);
 		EnforceGarmentSlots(outGroups, picks, setup, factionKey);
 		EnforceExclusions(outGroups, picks, comp, false);
@@ -1071,8 +1190,9 @@ class RK29_KitResolve
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! Catalog group -> runtime view: entries copied, so the numbers become adjustable. Wrong-faction
-	//! and parked entries never make the copy, so nothing downstream can know they were authored.
+	//! Catalog group -> runtime view: entries copied, so the numbers become adjustable. Wrong-faction,
+	//! parked and unloaded entries never make the copy, so nothing downstream can know they were
+	//! authored.
 	protected static RK29_ResolvedGroup ResolveGroup(notnull RK29_ChoiceGroup def, string ownerWeapon,
 		string factionKey, notnull RK29_KitSetup setup)
 	{
@@ -1086,6 +1206,7 @@ class RK29_KitResolve
 
 		CopyGroupShape(def, g);
 
+		bool shedDefault = false;
 		if (def.m_aEntries)
 		{
 			foreach (RK29_ChoiceEntryBase e : def.m_aEntries)
@@ -1102,14 +1223,27 @@ class RK29_KitResolve
 				string ownId = EntryIdOf(e);
 				if (ownId != "" && g.FindEntry(ownId))
 					continue;
+				// after the twin test: a twin was never going to be offered, so it sheds nothing
+				if (IsEntryUnloaded(e, ownerWeapon, factionKey, setup))
+				{
+					g.m_bShedUnloaded = true;
+					if (e.m_bDefault)
+						shedDefault = true;
+					continue;
+				}
 				g.m_aEntries.Insert(ResolveEntry(e));
 			}
 		}
 
-		MergeIncludedGroups(def, g, factionKey, setup);
+		if (MergeIncludedGroups(def, g, factionKey, setup))
+			shedDefault = true;
 
 		// entries are final here, and this is the one place their order is decided
 		SortEntriesByOrder(g);
+
+		// after the sort, so the flag lands on the row the player reads first
+		if (shedDefault)
+			InheritShedDefault(g);
 
 		// last: the seat is read off the entries the includes have only just finished contributing
 		DeriveSeatTypes(g, setup);
@@ -1181,12 +1315,14 @@ class RK29_KitResolve
 	//------------------------------------------------------------------------------------------------
 	//! Included catalog groups contribute their entries after this group's own. First duplicate id
 	//! wins; the first default flag in merged order is the default. one level only - an include that
-	//! itself includes is skipped with a complaint rather than recursed.
-	protected static void MergeIncludedGroups(notnull RK29_ChoiceGroup def,
+	//! itself includes is skipped with a complaint rather than recursed. True when an entry flagged
+	//! as the default was shed as unloaded - see ResolveGroup.
+	protected static bool MergeIncludedGroups(notnull RK29_ChoiceGroup def,
 		notnull RK29_ResolvedGroup g, string factionKey, notnull RK29_KitSetup setup)
 	{
+		bool shedDefault = false;
 		if (!def.m_aIncludeGroups)
-			return;
+			return shedDefault;
 
 		foreach (string includeId : def.m_aIncludeGroups)
 		{
@@ -1222,10 +1358,18 @@ class RK29_KitResolve
 				RK29_ResolvedEntry merged = ResolveEntry(incEntry);
 				if (g.FindEntry(merged.m_sId))
 					continue;
+				if (IsEntryUnloaded(incEntry, g.m_sOwnerWeapon, factionKey, setup))
+				{
+					g.m_bShedUnloaded = true;
+					if (incEntry.m_bDefault)
+						shedDefault = true;
+					continue;
+				}
 				merged.m_sFromGroup = inc.m_sId;
 				g.m_aEntries.Insert(merged);
 			}
 		}
+		return shedDefault;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -1478,6 +1622,29 @@ class RK29_KitResolve
 				if (e && e.m_iMax == 0)
 					g.m_aEntries.RemoveOrdered(i);
 			}
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A BUDGETED floor is authored against every row the group holds, and the authored defaults
+	//! must reach it or every fresh kit is refused (the lint holds the authoring to that). Rows shed
+	//! as unloaded take their share of the defaults with them, so the floor comes down to what the
+	//! surviving defaults spend - never further, and only on a group that shed something: a floor
+	//! the full authoring cannot reach is the lint's to report, not this pass's to hide. After the
+	//! overrides, whose budget adjusts would otherwise put it back; before the exclusions, so a
+	//! ruling blocking a row cannot lower it.
+	protected static void SettleShedFloors(notnull array<ref RK29_ResolvedGroup> groups)
+	{
+		foreach (RK29_ResolvedGroup g : groups)
+		{
+			if (!g || !g.m_bShedUnloaded || g.m_eKind != RK29_EChoiceKind.BUDGETED)
+				continue;
+			if (g.m_iBudgetMin <= 0)
+				continue;
+
+			int standard = SpendOf(g, null);
+			if (standard < g.m_iBudgetMin)
+				g.m_iBudgetMin = standard;
 		}
 	}
 

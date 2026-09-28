@@ -10,6 +10,7 @@ class RK29_KitLint
 	//! keep, so this costs loads the first offer build would pay anyway.
 	static void Run(notnull RK29_KitSetup setup)
 	{
+		ReportUnloadedContent(setup);
 		VerifyAttachmentSeats(setup);
 		VerifySubstitutions(setup);
 		VerifyOverrideTargets(setup);
@@ -20,6 +21,139 @@ class RK29_KitLint
 		VerifyGarmentAttachments(setup);
 		VerifyChamberIds(setup);
 		VerifyWireIds(setup);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Every prefab the config names that does not load this session, once each, and where it is
+	//! named. The kit config may name content from any mod, dependency or not: the resolver leaves
+	//! out whatever does not load (RK29_KitResolve.IsEntryUnloaded), silently, so this list is the
+	//! one place a mod left off the server's mod list - or a mistyped GUID, which looks the same -
+	//! shows. Also warms RK29_KitCompose.PrefabReadable, so no offer build pays the first loads.
+	protected static void ReportUnloadedContent(notnull RK29_KitSetup setup)
+	{
+		array<ResourceName> seen = {};
+		int unloaded = 0;
+
+		if (setup.m_aAliases)
+		{
+			foreach (RK29_ItemAlias alias : setup.m_aAliases)
+			{
+				if (!alias || !alias.m_aPerFaction)
+					continue;
+				foreach (RK29_ItemAliasEntry aliasEntry : alias.m_aPerFaction)
+				{
+					if (aliasEntry)
+						unloaded += ReportIfUnloaded(aliasEntry.m_sPrefab, "alias '" + alias.m_sAlias + "'", seen);
+				}
+			}
+		}
+
+		if (setup.m_aMagazineSets)
+		{
+			foreach (RK29_MagazineSet magSet : setup.m_aMagazineSets)
+			{
+				if (!magSet || !magSet.m_aVariants)
+					continue;
+				foreach (RK29_MagVariant magVariant : magSet.m_aVariants)
+				{
+					if (magVariant)
+						unloaded += ReportIfUnloaded(magVariant.m_sPrefab, "magazine variant '"
+							+ magVariant.m_sName + "' of " + magSet.m_sMagazineWell, seen);
+				}
+			}
+		}
+
+		if (setup.m_aAttachments)
+		{
+			foreach (RK29_AttachmentDef adef : setup.m_aAttachments)
+			{
+				if (adef)
+					unloaded += ReportIfUnloaded(adef.m_sPrefab, "attachment '" + adef.m_sId + "'", seen);
+			}
+		}
+
+		if (setup.m_aWeaponDefs)
+		{
+			foreach (RK29_WeaponDef wdef : setup.m_aWeaponDefs)
+			{
+				if (!wdef)
+					continue;
+				string weaponWhere = "weapon '" + wdef.m_sId + "'";
+				unloaded += ReportIfUnloaded(wdef.m_sPrefab, weaponWhere, seen);
+				if (wdef.m_aPerFaction)
+				{
+					foreach (RK29_WeaponFactionPrefab pf : wdef.m_aPerFaction)
+					{
+						if (pf)
+							unloaded += ReportIfUnloaded(pf.m_sPrefab, weaponWhere, seen);
+					}
+				}
+				if (wdef.m_aAmmo)
+				{
+					foreach (RK29_WeaponAmmoDef ammo : wdef.m_aAmmo)
+					{
+						if (ammo)
+							unloaded += ReportIfUnloaded(ammo.m_sPrefab, weaponWhere + " ammo '"
+								+ ammo.m_sAlias + "'", seen);
+					}
+				}
+				unloaded += ReportGroupIfUnloaded(wdef.m_AmmoGroup, weaponWhere + " ammo", seen);
+			}
+		}
+
+		foreach (RK29_ChoiceGroup g : setup.m_aChoiceGroups)
+			unloaded += ReportGroupIfUnloaded(g, "catalog", seen);
+
+		array<RK29_ChoiceGroup> inlineGroups = {};
+		array<string> inlineKits = {};
+		CollectInlineGroups(setup, inlineGroups, inlineKits);
+		foreach (int i, RK29_ChoiceGroup inlined : inlineGroups)
+			unloaded += ReportGroupIfUnloaded(inlined, "kit '" + inlineKits[i] + "' inline", seen);
+
+		if (unloaded > 0)
+			Print(string.Format("[RK29] %1 prefab(s) the kit config names are not loaded this"
+				+ " session - every entry offering one is left out of every kit. Expected when the"
+				+ " mod supplying them is not on the server's mod list; otherwise the GUID is wrong",
+				unloaded), LogLevel.WARNING);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The literal prefabs of one group's entries. Alias, variant and weapon entries resolve
+	//! through the catalogs swept above. Parked authoring is skipped - it is not offered either way.
+	protected static int ReportGroupIfUnloaded(RK29_ChoiceGroup g, string where,
+		notnull array<ResourceName> seen)
+	{
+		if (!g || !g.m_bEnabled || !g.m_aEntries)
+			return 0;
+
+		int unloaded = 0;
+		foreach (RK29_ChoiceEntryBase e : g.m_aEntries)
+		{
+			if (!e || !e.m_bEnabled)
+				continue;
+			RK29_EntryItem item = RK29_EntryItem.Cast(e);
+			if (item)
+				unloaded += ReportIfUnloaded(item.m_sPrefab, where + " group '" + g.m_sId + "'", seen);
+		}
+		return unloaded;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! 1 and one line the first time an unloadable prefab is met, 0 otherwise. An empty name is not
+	//! an unloaded one.
+	protected static int ReportIfUnloaded(ResourceName prefab, string where,
+		notnull array<ResourceName> seen)
+	{
+		if (prefab == ResourceName.Empty || seen.Contains(prefab))
+			return 0;
+		seen.Insert(prefab);
+
+		if (RK29_KitCompose.PrefabReadable(prefab))
+			return 0;
+
+		Print(string.Format("[RK29] not loaded, not offered - %1 (%2)", prefab, where),
+			LogLevel.NORMAL);
+		return 1;
 	}
 
 	//------------------------------------------------------------------------------------------------
