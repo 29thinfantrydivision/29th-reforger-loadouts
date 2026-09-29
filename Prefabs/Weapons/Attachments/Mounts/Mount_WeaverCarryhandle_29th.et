@@ -70,5 +70,8 @@ GameEntity : "{5D00C138E2510EDC}Prefabs/Weapons/Attachments/Mounts/Mount_WeaverC
     }
    }
   }
+  RplComponent "{5284E0EF1E579B75}" {
+   "Parent Node From Parent Entity" 0
+  }
  }
 }
