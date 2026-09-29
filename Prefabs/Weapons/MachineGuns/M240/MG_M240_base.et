@@ -1,0 +1,14 @@
+GenericEntity : "{F54F6C453A8CB478}Prefabs/Weapons/Core/MachineGun_Base.et" {
+ ID "CFBAA4B725411E45"
+ components {
+  WeaponComponent "{CFBAA4B706BA66E8}" {
+   components {
+    WeaponAnimationComponent "{60B4EA76EB15F6E0}" {
+     AnimCommandsToBind {
+      ""
+     }
+    }
+   }
+  }
+ }
+}
