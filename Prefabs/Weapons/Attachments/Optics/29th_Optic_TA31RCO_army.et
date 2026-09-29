@@ -1,0 +1,40 @@
+GameEntity : "{50475BC9E6A7ABD0}Prefabs/Weapons/Attachments/Optics/ta31rco/Optic_TA31RCO_army.et" {
+ ID "4BA426CBAED42A14"
+ components {
+  InventoryItemComponent "{52627A1F45CD4EB6}" {
+   Attributes SCR_ItemAttributeCollection "{52627A1EBB0698FD}" {
+    ItemDisplayName UIInfo "{5AB966CA8E939F41}" {
+     Name "#RK29-Item_M150RCO_Name"
+     Description "#RK29-Item_M150RCO_Description"
+    }
+    CustomAttributes {
+     WeaponAttachmentAttributes "{5284D858FFF9BE66}" {
+      AttachmentType AttachmentOpticsRIS1913Short "{6A7B1C0696985B50}" {
+      }
+     }
+    }
+   }
+  }
+  RHS_2DPIPSightsComponent "{5D0CC83435B55855}" {
+   SightsPosition PointInfo "{5ACCB8DCC7666BED}" {
+    Offset 0 0 0.05
+   }
+   ZeroingGenerator SCR_2DPiPScopeZeroingGenerator "{6A7B1C0625AEBD42}" {
+    m_sReferenceProjectile "{3B800D8AC5EA12EF}Prefabs/Weapons/Ammo/Rocket_83mm_MK153_HEAA.et"
+   }
+   m_eZeroingType EPZ_CAMERA_TURN
+  }
+  SightsComponent "{604D32A6174F91B7}" {
+   Enabled 0
+  }
+  SlotManagerComponent "{6A7B1C0625AEBD4F}" {
+   Slots {
+    EntitySlotInfo weaver {
+     PivotID "snap_weapon"
+     Offset 0 -0.0241 0
+     Prefab "{5D00C138E2510EDC}Prefabs/Weapons/Attachments/Mounts/Mount_WeaverCarryhandle.et"
+    }
+   }
+  }
+ }
+}
