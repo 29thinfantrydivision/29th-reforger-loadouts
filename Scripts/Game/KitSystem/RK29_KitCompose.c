@@ -37,6 +37,7 @@ class RK29_KitCompose
 	protected static ref map<ResourceName, ResourceName> s_mDefaultMagCache = new map<ResourceName, ResourceName>();
 	protected static ref map<ResourceName, ref array<string>> s_mWellsCache = new map<ResourceName, ref array<string>>();
 	protected static ref map<ResourceName, bool> s_mMagazineCache = new map<ResourceName, bool>();
+	protected static ref map<ResourceName, int> s_mMagCapacityCache = new map<ResourceName, int>();
 	protected static ref map<ResourceName, string> s_mMagWellCache = new map<ResourceName, string>();
 	protected static ref map<ResourceName, ref array<string>> s_mSeatedWellsCache = new map<ResourceName, ref array<string>>();
 	protected static ref map<ResourceName, ref array<string>> s_mWeaponAttachTypeCache = new map<ResourceName, ref array<string>>();
@@ -708,6 +709,7 @@ class RK29_KitCompose
 		s_mDefaultMagCache.Clear();
 		s_mWellsCache.Clear();
 		s_mMagazineCache.Clear();
+		s_mMagCapacityCache.Clear();
 		s_mMagWellCache.Clear();
 		s_mSeatedWellsCache.Clear();
 		s_mWeaponAttachTypeCache.Clear();
@@ -1023,6 +1025,37 @@ class RK29_KitCompose
 
 		s_mMagazineCache.Set(prefab, magazine);
 		return magazine;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! MaxAmmo off a magazine prefab's own source, cached; 0 when it cannot be read.
+	static int MagazineCapacityOf(ResourceName magazine)
+	{
+		if (magazine == ResourceName.Empty)
+			return 0;
+
+		int capacity;
+		if (s_mMagCapacityCache.Find(magazine, capacity))
+			return capacity;
+
+		capacity = 0;
+		Resource res = Resource.Load(magazine);
+		if (res.IsValid())
+		{
+			IEntitySource src = res.GetResource().ToEntitySource();
+			if (src)
+			{
+				for (int i = 0, n = src.GetComponentCount(); i < n; i++)
+				{
+					IEntityComponentSource comp = src.GetComponent(i);
+					if (comp && IsMagazineClass(comp.GetClassName()) && comp.Get("MaxAmmo", capacity))
+						break;
+				}
+			}
+		}
+
+		s_mMagCapacityCache.Set(magazine, capacity);
+		return capacity;
 	}
 
 	//------------------------------------------------------------------------------------------------

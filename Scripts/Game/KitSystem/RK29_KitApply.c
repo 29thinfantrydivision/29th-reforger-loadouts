@@ -1596,7 +1596,7 @@ class RK29_KitApply
 		notnull IEntity weapon, notnull BaseInventoryStorageComponent storage, notnull RK29_LoadedPick pick)
 	{
 		// "empty this muzzle", not "no instruction" - the targeting below is the same either way
-		bool clearOnly = pick.m_sPrefab == ResourceName.Empty;
+		bool clearOnly = pick.m_sPrefab == ResourceName.Empty && !pick.m_Loader;
 
 		BaseInventoryStorageComponent destStorage = storage;
 		InventoryStorageSlot magSlot;
@@ -1618,6 +1618,22 @@ class RK29_KitApply
 				Note(string.Format(
 					"[RK29] loaded magazine skipped - no magazine well on %1",
 					FileNameOf(weapon)), LogLevel.WARNING);
+			return;
+		}
+
+		// the gun's own loader seats its order its own way; nothing is deleted or spawned here
+		if (pick.m_Loader)
+		{
+			RK29_SeatContext ctx = new RK29_SeatContext();
+			ctx.m_Weapon = weapon;
+			ctx.m_Seated = magSlot.GetAttachedEntity();
+			ctx.m_Order = pick;
+			if (pick.m_Loader.Seat(ctx))
+				Note(string.Format("[RK29] %1 loaded by %2 with %3 round(s)", FileNameOf(weapon),
+					pick.m_Loader.Type().ToString(), pick.m_iRounds), LogLevel.NORMAL);
+			else
+				Note(string.Format("[RK29] %1 did not seat %2 round(s) in %3", pick.m_Loader.Type().ToString(),
+					pick.m_iRounds, FileNameOf(weapon)), LogLevel.WARNING);
 			return;
 		}
 

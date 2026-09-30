@@ -535,7 +535,7 @@ class RK29_KitResolve
 		EnforceAttachmentLegality(outGroups, picks, setup, factionKey);
 		EnforceGarmentSlots(outGroups, picks, setup, factionKey);
 		EnforceExclusions(outGroups, picks, comp, false);
-		OfferLoadedSelectors(outGroups);
+		OfferLoadedSelectors(outGroups, setup);
 		DropEmptyGroups(outGroups);
 		SortOfferByOrder(outGroups);
 	}
@@ -951,7 +951,8 @@ class RK29_KitResolve
 	//!
 	//! Only a weapon-owned group can earn one: DeriveGroupLoadedSeat leaves a kit-level group at NONE
 	//! (nothing to chamber into), and an EXCLUSIVE group states no total for a seated round to come
-	//! out of - which is also what keeps a weapon's attachment points out.
+	//! out of - which is also what keeps a weapon's attachment points out. Nor does a chamber its
+	//! gun's loader takes over (RK29_WeaponLoader.TakesOver).
 	//!
 	//! Directly after its totals group, not appended: the pair shares an m_iOrder, so their array
 	//! order is what the stable SortOfferByOrder preserves, and Apply emits in that same order.
@@ -961,13 +962,18 @@ class RK29_KitResolve
 	//! the first one earned, so three pools share one loaded mark, one seat order and one
 	//! deduction. The selector keeps the first group's id and place; the lint holds every pool a
 	//! gun owns to one entry-id space, which is what lets a row be found by id alone.
-	protected static void OfferLoadedSelectors(notnull array<ref RK29_ResolvedGroup> groups)
+	protected static void OfferLoadedSelectors(notnull array<ref RK29_ResolvedGroup> groups,
+		notnull RK29_KitSetup setup)
 	{
 		for (int i = 0; i < groups.Count(); i++)
 		{
 			RK29_ResolvedGroup g = groups[i];
 			if (!g || g.m_bLoaded || g.m_eLoadedSeat == RK29_ELoadedSeat.NONE
 				|| g.m_eKind == RK29_EChoiceKind.EXCLUSIVE)
+				continue;
+
+			RK29_WeaponLoader loader = LoaderOf(setup, g.m_sOwnerWeapon);
+			if (loader && loader.TakesOver(g.m_eLoadedSeat))
 				continue;
 
 			RK29_ResolvedGroup shared = FindLoadedSelector(groups, g.m_sOwnerWeapon, g.m_eLoadedSeat);
@@ -1097,7 +1103,8 @@ class RK29_KitResolve
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! Null when the offer carries no selector for this group - its counts are then plain spares.
+	//! Null when the offer carries no selector for this group - its counts are then plain spares,
+	//! or, where the gun's loader takes over the chamber, totals that loader fills the gun from.
 	//! By chamber, not by name: the selector over a gun's muzzle is shared by every counted group
 	//! feeding it, and only the first of them gave it its id.
 	static RK29_ResolvedGroup LoadedSiblingOf(notnull array<ref RK29_ResolvedGroup> groups, notnull RK29_ResolvedGroup g)
@@ -1120,6 +1127,50 @@ class RK29_KitResolve
 				return g;
 		}
 		return null;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The gun's own loader, or null for the standard loading steps (and for an ownerless group).
+	protected static RK29_WeaponLoader LoaderOf(notnull RK29_KitSetup setup, string weaponId)
+	{
+		RK29_WeaponDef def = setup.FindWeaponDef(weaponId);
+		if (!def)
+			return null;
+		return def.m_Loader;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! One loader order per chamber: a second pool feeding it would load it twice, the last Seat winning.
+	protected static bool HasLoaderOrder(notnull map<int, ref array<ref RK29_LoadedPick>> loadedMags,
+		int slot, bool underbarrel)
+	{
+		array<ref RK29_LoadedPick> forSlot = loadedMags.Get(slot);
+		if (!forSlot)
+			return false;
+		foreach (RK29_LoadedPick pick : forSlot)
+		{
+			if (pick && pick.m_Loader && pick.m_bUnderbarrel == underbarrel)
+				return true;
+		}
+		return false;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected static void AddLoaderOrder(notnull map<int, ref array<ref RK29_LoadedPick>> loadedMags,
+		int slot, notnull RK29_WeaponLoader loader, int rounds, bool underbarrel)
+	{
+		RK29_LoadedPick order = new RK29_LoadedPick();
+		order.m_Loader = loader;
+		order.m_iRounds = rounds;
+		order.m_bUnderbarrel = underbarrel;
+
+		array<ref RK29_LoadedPick> forSlot = loadedMags.Get(slot);
+		if (!forSlot)
+		{
+			forSlot = {};
+			loadedMags.Set(slot, forSlot);
+		}
+		forSlot.Insert(order);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -2631,10 +2682,10 @@ class RK29_KitResolve
 					StowUnfitted(kit, g, setup, ownerPrefab);
 				continue;
 			}
-			ApplyItemGroup(kit, g, groups, picks, setup, ownerPrefab);
+			ApplyItemGroup(kit, g, groups, picks, setup, ownerPrefab, weaponSlots, outLoadedMags);
 		}
 
-		ClearUnfedMuzzles(groups, weaponPrefabs, weaponSlots, outLoadedMags);
+		ClearUnfedMuzzles(groups, weaponPrefabs, weaponSlots, setup, outLoadedMags);
 
 		// Nothing is deducted from the kit's cargo for a mounted attachment: no kit authors an
 		// attachment as cargo, so the attachment group is the only source of one.
@@ -2713,10 +2764,11 @@ class RK29_KitResolve
 	//! muzzle and nothing else, so only a pool feeding that muzzle can stand in for it. A gun with
 	//! no magazine well at all is never cleared - the M72's rocket is not a magazine in a well
 	//! (SCR_MuzzleInMagComponent) and must not be touched; a prefab that cannot be read is NOT
-	//! taken as well-less, the guarantee holds and the clear runs.
+	//! taken as well-less, the guarantee holds and the clear runs. A gun whose loader takes over its
+	//! chamber is emptied by that loader (a zero-round order): a plain clear deletes what it loads into.
 	protected static void ClearUnfedMuzzles(notnull array<ref RK29_ResolvedGroup> groups,
 		notnull map<string, ResourceName> weaponPrefabs, notnull map<string, int> weaponSlots,
-		notnull map<int, ref array<ref RK29_LoadedPick>> outLoadedMags)
+		notnull RK29_KitSetup setup, notnull map<int, ref array<ref RK29_LoadedPick>> outLoadedMags)
 	{
 		array<int> coveredSlots = {};
 		foreach (RK29_ResolvedGroup g : groups)
@@ -2746,6 +2798,14 @@ class RK29_KitResolve
 			ResourceName prefab;
 			if (weaponPrefabs.Find(weaponId, prefab) && RK29_KitCompose.PresentsNoWell(prefab))
 				continue;
+
+			RK29_WeaponLoader loader = LoaderOf(setup, weaponId);
+			if (loader && loader.TakesOver(RK29_ELoadedSeat.OWN_MUZZLE))
+			{
+				if (!HasLoaderOrder(outLoadedMags, slot, false))
+					AddLoaderOrder(outLoadedMags, slot, loader, 0, false);
+				continue;
+			}
 
 			// an empty prefab and the gun's own muzzle: both fields already are that
 			RK29_LoadedPick clear = new RK29_LoadedPick();
@@ -3147,12 +3207,13 @@ class RK29_KitResolve
 	//! so every count resolves to zero).
 	protected static void ApplyItemGroup(notnull RK29_KitStruct kit, notnull RK29_ResolvedGroup g,
 		notnull array<ref RK29_ResolvedGroup> groups, array<ref RK29_ChoicePick> picks,
-		notnull RK29_KitSetup setup, ResourceName ownerPrefab)
+		notnull RK29_KitSetup setup, ResourceName ownerPrefab,
+		notnull map<string, int> weaponSlots, notnull map<int, ref array<ref RK29_LoadedPick>> outLoadedMags)
 	{
 		if (g.m_eKind == RK29_EChoiceKind.EXCLUSIVE)
 			ApplyExclusiveItemGroup(kit, g, picks, setup, ownerPrefab);
 		else
-			ApplyCountedItemGroup(kit, g, groups, picks, setup, ownerPrefab);
+			ApplyCountedItemGroup(kit, g, groups, picks, setup, ownerPrefab, weaponSlots, outLoadedMags);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -3183,10 +3244,12 @@ class RK29_KitResolve
 	//------------------------------------------------------------------------------------------------
 	//! A COUNTED or BUDGETED group's per-entry counts, issued as batches. Takes the whole offer
 	//! because a group with a loaded-magazine sibling states totals: the seated magazine comes off
-	//! the cargo count here, when one is seated at all.
+	//! the cargo count here, when one is seated at all. A gun with its own loader takes its rounds
+	//! off the count here too, and its order joins outLoadedMags for its Seat to carry out.
 	protected static void ApplyCountedItemGroup(notnull RK29_KitStruct kit,
 		notnull RK29_ResolvedGroup g, notnull array<ref RK29_ResolvedGroup> groups,
-		array<ref RK29_ChoicePick> picks, notnull RK29_KitSetup setup, ResourceName ownerPrefab)
+		array<ref RK29_ChoicePick> picks, notnull RK29_KitSetup setup, ResourceName ownerPrefab,
+		notnull map<string, int> weaponSlots, notnull map<int, ref array<ref RK29_LoadedPick>> outLoadedMags)
 	{
 		array<int> counts = {};
 		int overspend;
@@ -3216,6 +3279,28 @@ class RK29_KitResolve
 						counts[seatedIdx] = counts[seatedIdx] - 1;
 					break;
 				}
+			}
+		}
+
+		RK29_WeaponLoader loader = LoaderOf(setup, g.m_sOwnerWeapon);
+		bool underbarrel = g.m_eLoadedSeat == RK29_ELoadedSeat.UNDERBARREL;
+		int loaderSlot;
+		if (loader && loader.TakesOver(g.m_eLoadedSeat) && weaponSlots.Find(g.m_sOwnerWeapon, loaderSlot)
+			&& !HasLoaderOrder(outLoadedMags, loaderSlot, underbarrel))
+		{
+			RK29_LoadContext ctx = new RK29_LoadContext();
+			ctx.m_Setup = setup;
+			ctx.m_sWeaponId = g.m_sOwnerWeapon;
+			ctx.m_sWeapon = ownerPrefab;
+			ctx.m_eSeat = g.m_eLoadedSeat;
+			ctx.m_Group = g;
+			ctx.m_aCounts = counts;
+			// the core does the arithmetic: a loader can only move rounds the player picked
+			if (loader.PlanLoad(ctx) && counts.IsIndexValid(ctx.m_iEntry))
+			{
+				int rounds = Math.ClampInt(ctx.m_iRounds, 0, counts[ctx.m_iEntry]);
+				counts[ctx.m_iEntry] = counts[ctx.m_iEntry] - rounds;
+				AddLoaderOrder(outLoadedMags, loaderSlot, loader, rounds, underbarrel);
 			}
 		}
 
