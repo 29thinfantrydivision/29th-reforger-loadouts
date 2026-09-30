@@ -76,6 +76,7 @@ class RK29_KitCompose
 			kit.m_UIInfo = comp.m_UIInfo;
 
 		CopyTraits(comp, kit, cls.m_sComposition);
+		CopyFacePaint(comp, kit, cls.m_sComposition);
 
 		// Nothing else is seeded from the body: gear comes from the choice groups at resolve, and
 		// apply strips every garment and equipment slot first, so a slot no group answers ends up
@@ -102,6 +103,27 @@ class RK29_KitCompose
 			}
 			if (!kit.m_aTraits.Contains(trait))
 				kit.m_aTraits.Insert(trait);
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! NONE is the zero value, so an unfilled row reads as one and is logged as a config fault.
+	protected static void CopyFacePaint(notnull RK29_KitComposition comp, notnull RK29_KitStruct kit,
+		ResourceName composition)
+	{
+		if (!comp.m_aFacePaint)
+			return;
+
+		foreach (RK29_EFacePaint pattern : comp.m_aFacePaint)
+		{
+			if (pattern == RK29_EFacePaint.NONE)
+			{
+				Print(string.Format("[RK29] '%1' declares an unset face paint row in %2",
+					kit.m_sKitName, FilePath.StripPath(composition)), LogLevel.WARNING);
+				continue;
+			}
+			if (!kit.m_aFacePaint.Contains(pattern))
+				kit.m_aFacePaint.Insert(pattern);
 		}
 	}
 
