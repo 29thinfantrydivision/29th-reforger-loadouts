@@ -457,6 +457,7 @@ class RK29_KitApply
 			return false;
 
 		ApplyTraits_S(character, kit);
+		WashFacePaint_S(character);
 
 		Print(string.Format("[RK29] apply '%1' done", kit.m_sKitName), LogLevel.NORMAL);
 		return true;
@@ -593,6 +594,65 @@ class RK29_KitApply
 			named = " none";
 		// logged even when empty: "did the medic trait come off" is otherwise answered by timing a bandage
 		Print(string.Format("[RK29] traits:%1", named), LogLevel.NORMAL);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Back to the plain face when the head is one of the faction's Headcamo variants (what ACE
+	//! Facepaint swaps to). Every apply washes, a kit that carries face paint included: painting is
+	//! the player's act. The plain head comes from a reverse lookup in the faction's visual
+	//! identities, so no script names the optional mod.
+	protected static void WashFacePaint_S(notnull IEntity character)
+	{
+		CharacterIdentityComponent identityComp = CharacterIdentityComponent.Cast(
+			character.FindComponent(CharacterIdentityComponent));
+		if (!identityComp || !identityComp.GetIdentity())
+			return;
+
+		VisualIdentity visual = identityComp.GetIdentity().GetVisualIdentity();
+		SCR_CharacterFactionAffiliationComponent affiliation = SCR_CharacterFactionAffiliationComponent.Cast(
+			character.FindComponent(SCR_CharacterFactionAffiliationComponent));
+		if (!visual || !affiliation || !affiliation.GetAffiliatedFaction())
+			return;
+
+		FactionIdentity factionIdentity = affiliation.GetAffiliatedFaction().GetFactionIdentity();
+		if (!factionIdentity)
+			return;
+
+		ResourceName head = visual.GetHead();
+		array<ref VisualIdentity> candidates = {};
+		factionIdentity.GetVisualIdentities(candidates);
+		foreach (VisualIdentity candidate : candidates)
+		{
+			if (!IsCamoHeadOf(candidate, head))
+				continue;
+
+			visual.SetHead(candidate.GetHead());
+			identityComp.CommitChanges();
+			// SetIdentity is the documented replicating call; CommitChanges alone is not promised to
+			// reach proxies mid-life. Same sequence as ACE Facepaint's own apply.
+			identityComp.SetIdentity(identityComp.GetIdentity());
+			Print("[RK29] face paint washed", LogLevel.NORMAL);
+			return;
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! GetHeadCamo past the end of the list answers the FIRST entry again, never empty - so the walk
+	//! stops on a repeat, not on an empty answer alone.
+	protected static bool IsCamoHeadOf(notnull VisualIdentity candidate, ResourceName head)
+	{
+		ResourceName first = candidate.GetHeadCamo(0);
+		for (int i = 0; i < 16; i++)
+		{
+			ResourceName camo = candidate.GetHeadCamo(i);
+			if (camo.IsEmpty() || camo == candidate.GetHead() || (i > 0 && camo == first))
+				return false;
+
+			if (camo == head)
+				return true;
+		}
+
+		return false;
 	}
 
 	// ====================================================================== attachments
