@@ -13,6 +13,9 @@ class RK29_KitItemBatch
 	static const int KEEP_RANK_DEFAULT = 50;
 	int m_iKeepRank = KEEP_RANK_DEFAULT;
 
+	//! Never offered a named mount (RK29_ItemAlias.m_bCargoOnly).
+	bool m_bCargoOnly;
+
 	ref array<ResourceName> m_aPrefabs = {};
 }
 
@@ -86,6 +89,7 @@ class RK29_KitStruct
 			RK29_KitItemBatch nb = new RK29_KitItemBatch();
 			nb.m_aPreferred  = batch.m_aPreferred;
 			nb.m_iKeepRank   = batch.m_iKeepRank;
+			nb.m_bCargoOnly  = batch.m_bCargoOnly;
 			foreach (ResourceName item : batch.m_aPrefabs)
 				nb.m_aPrefabs.Insert(item);
 			if (!nb.m_aPrefabs.IsEmpty())

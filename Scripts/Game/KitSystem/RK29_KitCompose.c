@@ -188,6 +188,7 @@ class RK29_KitCompose
 		ResourceName round;
 		array<string> aliasPreferred = null;
 		int aliasRank = RK29_KitItemBatch.KEEP_RANK_DEFAULT;
+		bool cargoOnly = false;
 		bool viaAlias = false;
 		if (ammo.m_sPrefab != ResourceName.Empty)
 			round = ammo.m_sPrefab;
@@ -199,6 +200,7 @@ class RK29_KitCompose
 			// the same alias that produced the prefab, so a row is never placed by another
 			aliasPreferred = setup.ResolveAliasPreference(ammo.m_sAlias, kit.m_sFactionKey);
 			aliasRank = setup.ResolveAliasKeepRank(ammo.m_sAlias);
+			cargoOnly = setup.ResolveAliasCargoOnly(ammo.m_sAlias);
 			viaAlias = true;
 			if (round == ResourceName.Empty)
 				Print(string.Format("[RK29] config ERROR - ammo '%1' is neither declared by"
@@ -234,6 +236,8 @@ class RK29_KitCompose
 			batch.m_iKeepRank = aliasRank;
 		else if (def)
 			batch.m_iKeepRank = def.m_iKeepRank;
+
+		batch.m_bCargoOnly = cargoOnly;
 
 		for (int i = 0; i < rounds; i++)
 			batch.m_aPrefabs.Insert(round);

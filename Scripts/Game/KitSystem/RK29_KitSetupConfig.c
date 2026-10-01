@@ -320,6 +320,14 @@ class RK29_KitSetup
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! Authored m_bCargoOnly, or false for an alias that is not there.
+	bool ResolveAliasCargoOnly(string alias)
+	{
+		RK29_ItemAlias a = FindAlias(alias);
+		return a && a.m_bCargoOnly;
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! Alias-authored placement preference for this faction, or null. An item entry's own list beats
 	//! this - see the placement-precedence note on RK29_KitCompose.EmitAmmo.
 	array<string> ResolveAliasPreference(string alias, string factionKey)

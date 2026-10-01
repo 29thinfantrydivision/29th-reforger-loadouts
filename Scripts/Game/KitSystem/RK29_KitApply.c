@@ -30,6 +30,7 @@ class RK29_PlacementState
 	ref array<ResourceName> m_aItems = {};
 	ref array<ref array<string>> m_aPrefs = {};
 	ref array<int> m_aRanks = {};
+	ref array<bool> m_aCargoOnly = {};
 	ref array<ref array<int>> m_aEligible = {};
 	ref array<bool> m_aPlaced = {};
 	ref array<int> m_aHome = {};
@@ -1950,6 +1951,7 @@ class RK29_KitApply
 				st.m_aItems.Insert(item);
 				st.m_aPrefs.Insert(batch.m_aPreferred);
 				st.m_aRanks.Insert(batch.m_iKeepRank);
+				st.m_aCargoOnly.Insert(batch.m_bCargoOnly);
 			}
 		}
 
@@ -2190,6 +2192,8 @@ class RK29_KitApply
 			array<int> fits = {};
 			for (int c = 0; c < nCont; c++)
 			{
+				if (st.m_aCargoOnly[i] && st.m_aSlotIds[c] != -1)
+					continue;
 				if (CanTake(st.m_aItems[i], st.m_aContainers[c], st.m_aSlotIds[c]))
 					fits.Insert(c);
 			}
@@ -2626,10 +2630,14 @@ class RK29_KitApply
 			return false;
 
 		int moved = st.m_aSpawned.Find(occupant);
+		// this walk is not eligibility-filtered, so it must honour the cargo-only rule itself
+		bool cargoOnly = moved != -1 && st.m_aCargoOnly[moved];
 
 		for (int d = 0, n = st.m_aContainers.Count(); d < n; d++)
 		{
-			if (d == c || !CanTakeItem(occupant, st.m_aContainers[d], st.m_aSlotIds[d]))
+			if (d == c || (cargoOnly && st.m_aSlotIds[d] != -1))
+				continue;
+			if (!CanTakeItem(occupant, st.m_aContainers[d], st.m_aSlotIds[d]))
 				continue;
 
 			ForceDelete(manager, occupant);
