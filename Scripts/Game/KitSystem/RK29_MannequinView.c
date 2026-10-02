@@ -611,6 +611,8 @@ class RK29_MannequinView
 			return false;
 		}
 
+		RK29_MannequinDress.KeepOffEditorBudget(m_MannequinBody);
+
 		// the camera comes off the body itself and is the body prefab's own framing, so it is fetched
 		// here, on the one call that ever produces a body. It is also where the player's yaw is replayed.
 		FetchMannequinCamera(m_MannequinBody);

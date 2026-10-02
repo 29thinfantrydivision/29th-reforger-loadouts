@@ -159,6 +159,21 @@ class RK29_MannequinDress
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! Keeps a preview body out of the Game Master's budget. Spawned into the game world, it registers
+	//! as an editable character: vanilla adds its AI cost two frames later but subtracts on delete at
+	//! once, so a body deleted inside those frames (the re-dress Apply runs before the menu closes)
+	//! takes off a cost it never added - "GM Budget got clamped". Must run in the spawn's own frame,
+	//! before the deferred add reads the flag (SCR_EditableEntityCore.UpdateBudgets). NON_INTERACTIVE,
+	//! not LOCAL: LOCAL also flips IsServer/CanRpc/IsReplicated on the component.
+	static void KeepOffEditorBudget(notnull IEntity body)
+	{
+		SCR_EditableEntityComponent editable = SCR_EditableEntityComponent.Cast(
+			body.FindComponent(SCR_EditableEntityComponent));
+		if (editable)
+			editable.SetEntityFlag(EEditableEntityFlag.NON_INTERACTIVE, true);
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! Nothing selects a weapon on a freshly built mannequin, so it stands there with the rifle slung.
 	//! It leaves a binding nothing reachable from script can clear, which is why every caller must
 	//! stand a fresh body up for each dress - see ApplyLoaded.
