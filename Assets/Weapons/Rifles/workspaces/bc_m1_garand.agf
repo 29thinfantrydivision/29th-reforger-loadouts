@@ -78,19 +78,19 @@ AnimSrcGraphFile {
       AnimSrcNodeState MagReload {
        EditorPos 7.7 15.5
        Child "InsertMagAnim"
-       StartCondition "Empty || GetCommandI(CMD_Weapon_Reload) == 2 || GetCommandI(CMD_Weapon_Reload) == 3"
+       StartCondition "GetCommandI(CMD_Weapon_Reload) == 2 || GetCommandI(CMD_Weapon_Reload) == 3 || GetCommandI(CMD_Weapon_Reload) == 5"
        IsExit 1
       }
       AnimSrcNodeState MagNoBulletsSlideReload {
        EditorPos 12.6 15.6
        Child "MagReloadSTM"
-       StartCondition "!Empty && GetCommandI(CMD_Weapon_Reload) != 6 && GetCommandI(CMD_Weapon_Reload) != 2 && GetCommandI(CMD_Weapon_Reload) != 3"
+       StartCondition "GetCommandI(CMD_Weapon_Reload) != 6 && GetCommandI(CMD_Weapon_Reload) != 2 && GetCommandI(CMD_Weapon_Reload) != 3 && GetCommandI(CMD_Weapon_Reload) != 5"
        IsExit 1
       }
       AnimSrcNodeState "MagReload 27664" {
        EditorPos 8.4 14.5
        Child "RemoveMagAnim"
-       StartCondition "!Empty && GetCommandI(CMD_Weapon_Reload) ==6"
+       StartCondition "GetCommandI(CMD_Weapon_Reload) == 6"
        IsExit 1
       }
      }
