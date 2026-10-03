@@ -111,7 +111,8 @@ modded class SCR_GameModeEditor
 	//------------------------------------------------------------------------------------------------
 	//! Offer the server this side's default kit, built from the saved kit this client last wore it
 	//! as and as that saved kit reads NOW - a name, not a copy, is what the store holds, so one
-	//! edited or deleted since is seeded edited or not at all. Fires on every side change, not only
+	//! edited since is seeded edited, and one deleted since, or one today's config would answer
+	//! differently (RK29_KitLastUsedStore.WireFor), is not seeded at all. Fires on every side change, not only
 	//! the first, so switching sides seeds that side's kit rather than landing on bare defaults. The
 	//! SIDE DEFAULT and not the last class played: a session starts where the roster says it starts,
 	//! and only the personalisation of that kit is remembered.
@@ -134,13 +135,45 @@ modded class SCR_GameModeEditor
 		if (!store)
 			return;
 
-		string wire = store.WireFor(kitName);
+		RK29_ELastUsedStatus status;
+		string presetName;
+		string wire = store.WireFor(kitName, status, presetName);
 		if (wire == "")
+		{
+			RK29_HintUnseededKit(status, presetName);
 			return;
+		}
 
 		SCR_PlayerController local = SCR_PlayerController.Cast(GetGame().GetPlayerController());
 		if (local)
 			local.RK29_SeedKit(kitName, wire);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A remembered kit the player did not get, said once per side assignment until they re-save it:
+	//! starting them on the defaults unannounced is gear changing without a word. A MISSING kit
+	//! is not said - it was deleted or renamed by the player, who knows.
+	protected void RK29_HintUnseededKit(RK29_ELastUsedStatus status, string presetName)
+	{
+		string why;
+		switch (status)
+		{
+			case RK29_ELastUsedStatus.OUTDATED:
+				why = "has changed since you saved it";
+				break;
+			case RK29_ELastUsedStatus.UNREADABLE:
+				why = "was saved in a format this version cannot read";
+				break;
+			case RK29_ELastUsedStatus.SHORT_POOL:
+				why = "leaves a supply pool under its minimum";
+				break;
+			default:
+				return;
+		}
+
+		SCR_HintManagerComponent.ShowCustomHint(string.Format("Your saved kit '%1' %2, so you start"
+			+ " with the standard kit. Open the loadout menu to load it, then save it again.",
+			presetName, why), "SAVED KIT NOT USED", 12);
 	}
 
 	//------------------------------------------------------------------------------------------------

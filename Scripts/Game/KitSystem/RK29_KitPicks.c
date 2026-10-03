@@ -17,10 +17,13 @@ class RK29_ChoicePick
 //!
 //! An empty prefab is an order to clear the muzzle, not an absence: a freshly spawned weapon
 //! arrives with its own authored magazine already in the well, so sending nothing is not enough.
+//! Except on a loader's order (m_Loader set), which carries a round count and no prefab.
 class RK29_LoadedPick
 {
 	ResourceName m_sPrefab;
 	bool m_bUnderbarrel;
+	ref RK29_WeaponLoader m_Loader; // set = this order is the gun's loader's, carried out by its Seat
+	int m_iRounds;                  // a loader's order: how many rounds go into the gun
 }
 
 //------------------------------------------------------------------------------------------------

@@ -28,6 +28,9 @@ class RK29_ItemAlias
 
 	[Attribute("50", desc: "How important everything issued through this alias is when the kit does not fit: lower keeps its place, higher gives way to it. 50 is the default. Utilities sit at 10 and medical at 20, smokes and flares at 60, frags at 70, demolitions, mines and launcher rounds at 80. Placement itself is still solved by fit; this only decides what is taken out when something more important has no room. A choice group's own number overrides this, and an entry's overrides the group's", category: "29th")]
 	int m_iKeepRank;
+
+	[Attribute("0", desc: "Cargo only: never seated on a named mount such as a vest's FlashlightSlot, whatever the engine's type test says. For an item whose prefab claims a mount type it does not belong to - the Wirecutters mod types its cutters FLASHLIGHT, so every vest strap takes them and shows them. Dragging in game never picks the mount, which is why only the kit showed it", category: "29th")]
+	bool m_bCargoOnly;
 }
 
 [BaseContainerProps(configRoot: true)]

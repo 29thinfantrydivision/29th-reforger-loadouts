@@ -1,0 +1,16 @@
+GenericEntity : "{9713FE6DDCC9510D}Prefabs/Characters/Vests/Vest_Lifchik/29th_Vest_Lifchik.et" {
+ ID "50E0B40D7407B664"
+ components {
+  SCR_UniversalInventoryStorageComponent "{5222CB03D1147687}" {
+   Attributes SCR_ItemAttributeCollection "{5222CB03CBA95936}" {
+    ItemDisplayName UIInfo "{5222CB03C0C44D6C}" {
+     Name "Lifchik (Sapper)"
+     Description "From the outside, a standard Lifchik. Inside, the finest work of a Soviet engineer who was offered a choice between success and Siberia. It supplements the Soviet backpack, which remains perfect and has never required supplementing."
+    }
+   }
+   MaxCumulativeVolume 7000
+   MaxItemSize 15 15 15
+   m_fMaxWeight 30
+  }
+ }
+}

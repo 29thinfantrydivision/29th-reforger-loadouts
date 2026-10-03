@@ -13,6 +13,9 @@ class RK29_KitItemBatch
 	static const int KEEP_RANK_DEFAULT = 50;
 	int m_iKeepRank = KEEP_RANK_DEFAULT;
 
+	//! Never offered a named mount (RK29_ItemAlias.m_bCargoOnly).
+	bool m_bCargoOnly;
+
 	ref array<ResourceName> m_aPrefabs = {};
 }
 
@@ -46,6 +49,10 @@ class RK29_KitStruct
 	//! drops one.
 	ref array<RK29_ETrait> m_aTraits = {};
 
+	//! Composition-owned like the traits: the patterns the face may be painted with at apply, empty
+	//! washes it.
+	ref array<RK29_EFacePaint> m_aFacePaint = {};
+
 	//! Instanced at capture, shared read-only. Do not store the BaseContainer instead -
 	//! containers die with their resource even behind a held ref Resource.
 	ref SCR_UIInfo m_UIInfo;
@@ -65,6 +72,9 @@ class RK29_KitStruct
 		foreach (RK29_ETrait trait : m_aTraits)
 			c.m_aTraits.Insert(trait);
 
+		foreach (RK29_EFacePaint pattern : m_aFacePaint)
+			c.m_aFacePaint.Insert(pattern);
+
 		foreach (string eqSlot, ResourceName eqRes : m_mEquipment)
 			c.m_mEquipment.Set(eqSlot, eqRes);
 
@@ -79,6 +89,7 @@ class RK29_KitStruct
 			RK29_KitItemBatch nb = new RK29_KitItemBatch();
 			nb.m_aPreferred  = batch.m_aPreferred;
 			nb.m_iKeepRank   = batch.m_iKeepRank;
+			nb.m_bCargoOnly  = batch.m_bCargoOnly;
 			foreach (ResourceName item : batch.m_aPrefabs)
 				nb.m_aPrefabs.Insert(item);
 			if (!nb.m_aPrefabs.IsEmpty())

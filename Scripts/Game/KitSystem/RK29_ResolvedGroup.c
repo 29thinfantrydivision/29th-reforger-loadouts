@@ -41,6 +41,7 @@ class RK29_ResolvedGroup
 	string m_sGarmentSlot;           // GARMENT_ATTACHMENT groups: loadout slot of the host garment (Hat)
 	string m_sSlotOnGarment;         // GARMENT_ATTACHMENT groups: the slot ON that garment (NVG)
 	bool m_bSignpostInLoadout;       // GARMENT_ATTACHMENT groups: named in the Loadout tab too, as a link
+	bool m_bShedUnloaded;            // entries were dropped because their prefab does not load this session - see RK29_KitResolve.IsEntryUnloaded
 	ref array<ref RK29_ResolvedEntry> m_aEntries = {};
 
 	//! Catalog groups this one absorbed through m_aIncludeGroups, by id. An override or exclusion addressed

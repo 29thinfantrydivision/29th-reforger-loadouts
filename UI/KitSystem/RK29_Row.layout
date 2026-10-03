@@ -126,6 +126,7 @@ SizeLayoutWidgetClass {
             OverlayWidgetClass "{AB29C0FFEEB22470}" {
              Name "NameContent"
              Slot FrameWidgetSlot "{AB29C0FFEEB22471}" {
+              Anchor 0 0.5 0 0.5
               PositionX 0
               OffsetLeft 0
               OffsetTop 0
@@ -133,6 +134,7 @@ SizeLayoutWidgetClass {
               OffsetRight 0
               SizeY 0
               OffsetBottom 0
+              Alignment 0 0.5
               SizeToContent 1
              }
              {

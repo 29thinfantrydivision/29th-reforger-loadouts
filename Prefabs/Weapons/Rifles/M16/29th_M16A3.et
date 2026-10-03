@@ -18,6 +18,10 @@ GenericEntity : "{3E413771E1834D2F}Prefabs/Weapons/Rifles/M16/Rifle_M16A2.et" {
   }
   WeaponComponent "{CFBAA4B706BA66E8}" {
    components {
+    AttachmentSlotComponent "{5534745C44D1EF58}" {
+     AttachmentSlot InventoryStorageSlot optics {
+     }
+    }
     MuzzleComponent "{CA6BE4D6B867541F}" {
      FireModes {
       BaseFireMode "{619AB45BF76565F3}" {
@@ -34,4 +38,5 @@ GenericEntity : "{3E413771E1834D2F}Prefabs/Weapons/Rifles/M16/Rifle_M16A2.et" {
    }
   }
  }
+ coords -0.093 -0.001 -0.531
 }

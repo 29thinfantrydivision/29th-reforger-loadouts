@@ -1,0 +1,34 @@
+GenericEntity : "{F54F6C453A8CB478}Prefabs/Weapons/Core/MachineGun_Base.et" {
+ ID "CFBAA4B725411E45"
+ components {
+  WeaponComponent "{CFBAA4B706BA66E8}" {
+   components {
+    AttachmentSlotComponent "{60FF5961466DAFF8}" {
+     AttachmentSlot RHS_SlidingInventoryStorageSlot optic {
+      Angles -0.09 0 0
+     }
+    }
+    SightsComponent "{BB23A637957CFFF8}" {
+     SightsPosition PointInfo "{BB23A63796688E69}" {
+      Offset 0 0 0
+     }
+     SightsPointFront PointInfo "{60FF5966B3DFBFD2}" {
+      PivotID "w_sight"
+      Offset -0.0003 0.0083 0.8103
+     }
+     SightsPointRear PointInfo "{60FF5966B3DFBFD4}" {
+      PivotID "w_sight_slider"
+     }
+    }
+    MuzzleComponent "{50F64C4591CD7AA6}" {
+     "LEFT HAND TARGET" DeploymentPointInfo lht {
+      PivotID "snap_hand_left"
+     }
+     BUTSTOCK_TRANSFORMATION DeploymentPointInfo bt {
+      Offset 0 0.0427 -0.4307
+     }
+    }
+   }
+  }
+ }
+}

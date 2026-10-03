@@ -30,6 +30,7 @@ class RK29_PlacementState
 	ref array<ResourceName> m_aItems = {};
 	ref array<ref array<string>> m_aPrefs = {};
 	ref array<int> m_aRanks = {};
+	ref array<bool> m_aCargoOnly = {};
 	ref array<ref array<int>> m_aEligible = {};
 	ref array<bool> m_aPlaced = {};
 	ref array<int> m_aHome = {};
@@ -112,11 +113,15 @@ class RK29_KitApply
 	//! would place by last session's size.
 	protected static ref map<ResourceName, float> s_mDimCache = new map<ResourceName, float>();
 
+	//! Mass of one live copy per prefab, -1 where no copy would spawn - see LiveWeight.
+	protected static ref map<ResourceName, float> s_mLiveWeight = new map<ResourceName, float>();
+
 	//------------------------------------------------------------------------------------------------
 	static void ClearCaches()
 	{
 		s_mDimCache.Clear();
 		s_mMountFit.Clear();
+		s_mLiveWeight.Clear();
 	}
 
 	// ============================================================================ placement route
@@ -224,7 +229,73 @@ class RK29_KitApply
 		if (slotId >= 0)
 			return MountAccepts(storage, slotId, prefab);
 
-		return storage.CanStoreResource(prefab, slotId);
+		if (!storage.CanStoreResource(prefab, slotId))
+			return false;
+
+		return TakesLiveWeight(storage, prefab);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! CanStoreResource weighs a prefab by GetWeightFromResource, which reads the EMPTY item: a belt
+	//! box is 0.25 kg there and 3.15 kg alive, a hand flare 0.7 and 0.95. A pouch near its
+	//! m_fMaxWeight therefore says yes to what the real insert refuses - a drop on the client route,
+	//! and on the authority an accepted order whose item never lands, so every later copy was sent
+	//! to the same pouch and lost there. These are vanilla's two weight tests again
+	//! (SCR_UniversalInventoryStorageComponent.CanStoreResource), asked with the live mass.
+	protected static bool TakesLiveWeight(notnull BaseInventoryStorageComponent storage,
+		ResourceName prefab)
+	{
+		SCR_UniversalInventoryStorageComponent universal = SCR_UniversalInventoryStorageComponent.Cast(storage);
+		IEntity owner = storage.GetOwner();
+		if (!universal || !owner)
+			return true;
+
+		float weight = LiveWeight(prefab, owner);
+		if (weight < 0)
+			return true;
+
+		if (!universal.IsAdditionalWeightOk(weight))
+			return false;
+
+		// vanilla's CheckParentWeightLimit: a pouch also answers to the vest it hangs on
+		IEntity parent = owner.GetParent();
+		if (!parent || ChimeraCharacter.Cast(parent))
+			return true;
+
+		SCR_UniversalInventoryStorageComponent parentStorage = SCR_UniversalInventoryStorageComponent.Cast(
+			parent.FindComponent(SCR_UniversalInventoryStorageComponent));
+		if (!parentStorage)
+			return true;
+
+		return parentStorage.IsAdditionalWeightOk(weight);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! What one copy of `prefab` weighs alive - the only honest answer, since every static ask is the
+	//! empty item. Spawned once, weighed, deleted, cached for the session; -1 when no copy would spawn,
+	//! which is not remembered. The probe spawns on whichever machine is placing - see MountAccepts.
+	protected static float LiveWeight(ResourceName prefab, notnull IEntity near)
+	{
+		float weight;
+		if (s_mLiveWeight.Find(prefab, weight))
+			return weight;
+
+		Resource res = Resource.Load(prefab);
+		if (!res || !res.IsValid())
+			return -1;
+
+		IEntity probe = GetGame().SpawnEntityPrefabLocal(res, near.GetWorld());
+		if (!probe)
+			return -1;
+
+		weight = -1;
+		InventoryItemComponent item = InventoryItemComponent.Cast(probe.FindComponent(InventoryItemComponent));
+		if (item)
+			weight = item.GetTotalWeight();
+		SCR_EntityHelper.DeleteEntityAndChildren(probe);
+
+		s_mLiveWeight.Set(prefab, weight);
+		return weight;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -387,6 +458,7 @@ class RK29_KitApply
 			return false;
 
 		ApplyTraits_S(character, kit);
+		ApplyFacePaint(character, kit.m_aFacePaint, false);
 
 		Print(string.Format("[RK29] apply '%1' done", kit.m_sKitName), LogLevel.NORMAL);
 		return true;
@@ -523,6 +595,126 @@ class RK29_KitApply
 			named = " none";
 		// logged even when empty: "did the medic trait come off" is otherwise answered by timing a bandage
 		Print(string.Format("[RK29] traits:%1", named), LogLevel.NORMAL);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The kit decides the face on every apply: an empty list washes any Headcamo head (what ACE
+	//! Facepaint swaps to) back to the plain face, otherwise a face not already wearing a listed
+	//! pattern is painted with one of them at random. Heads resolve by reverse lookup in the
+	//! faction's visual identities, so no script names the optional mod. `preview` is the
+	//! mannequins: a local body, the first listed pattern so it does not re-roll per dress, quiet,
+	//! no SetIdentity.
+	static void ApplyFacePaint(notnull IEntity character, notnull array<RK29_EFacePaint> patterns,
+		bool preview)
+	{
+		CharacterIdentityComponent identityComp = CharacterIdentityComponent.Cast(
+			character.FindComponent(CharacterIdentityComponent));
+		if (!identityComp || !identityComp.GetIdentity())
+			return;
+
+		VisualIdentity visual = identityComp.GetIdentity().GetVisualIdentity();
+		SCR_CharacterFactionAffiliationComponent affiliation = SCR_CharacterFactionAffiliationComponent.Cast(
+			character.FindComponent(SCR_CharacterFactionAffiliationComponent));
+		if (!visual || !affiliation || !affiliation.GetAffiliatedFaction())
+			return;
+
+		FactionIdentity factionIdentity = affiliation.GetAffiliatedFaction().GetFactionIdentity();
+		if (!factionIdentity)
+			return;
+
+		ResourceName head = visual.GetHead();
+		array<ref VisualIdentity> candidates = {};
+		factionIdentity.GetVisualIdentities(candidates);
+		foreach (VisualIdentity candidate : candidates)
+		{
+			array<ResourceName> camos = {};
+			CamoHeadsOf(candidate, camos);
+			bool painted = camos.Contains(head);
+			if (!painted && candidate.GetHead() != head)
+				continue;
+
+			if (patterns.IsEmpty())
+			{
+				if (painted)
+					SetHead(identityComp, visual, candidate.GetHead(), "washed", preview);
+				return;
+			}
+
+			array<ResourceName> offered = {};
+			foreach (RK29_EFacePaint pattern : patterns)
+			{
+				string suffix = SuffixOf(pattern);
+				foreach (ResourceName camo : camos)
+				{
+					if (!suffix.IsEmpty() && camo.EndsWith(suffix))
+						offered.Insert(camo);
+				}
+			}
+
+			if (offered.Contains(head))
+				return;
+
+			if (offered.IsEmpty())
+			{
+				if (!preview)
+					Print(string.Format("[RK29] face paint: %1 has none of the kit's patterns",
+						FilePath.StripPath(candidate.GetHead())), LogLevel.WARNING);
+				return;
+			}
+
+			ResourceName pick = offered[0];
+			if (!preview)
+				pick = offered[Math.RandomInt(0, offered.Count())];
+			SetHead(identityComp, visual, pick, "applied", preview);
+			return;
+		}
+
+		if (!patterns.IsEmpty() && !preview)
+			Print("[RK29] face paint: head is not in the faction's visual identities", LogLevel.WARNING);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected static string SuffixOf(RK29_EFacePaint pattern)
+	{
+		switch (pattern)
+		{
+			case RK29_EFacePaint.PATTERN_01:
+				return "_01.et";
+			case RK29_EFacePaint.PATTERN_02:
+				return "_02.et";
+		}
+
+		return string.Empty;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected static void SetHead(notnull CharacterIdentityComponent identityComp,
+		notnull VisualIdentity visual, ResourceName head, string verb, bool preview)
+	{
+		visual.SetHead(head);
+		identityComp.CommitChanges();
+		if (preview)
+			return;
+
+		// SetIdentity is the documented replicating call; CommitChanges alone is not promised to
+		// reach proxies mid-life. Same sequence as ACE Facepaint's own apply.
+		identityComp.SetIdentity(identityComp.GetIdentity());
+		Print(string.Format("[RK29] face paint %1", verb), LogLevel.NORMAL);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! GetHeadCamo past the end of the list answers the FIRST entry again, never empty - so the walk
+	//! stops on a repeat, not on an empty answer alone.
+	protected static void CamoHeadsOf(notnull VisualIdentity candidate, notnull array<ResourceName> outCamos)
+	{
+		for (int i = 0; i < 16; i++)
+		{
+			ResourceName camo = candidate.GetHeadCamo(i);
+			if (camo.IsEmpty() || camo == candidate.GetHead() || outCamos.Contains(camo))
+				return;
+
+			outCamos.Insert(camo);
+		}
 	}
 
 	// ====================================================================== attachments
@@ -1526,7 +1718,7 @@ class RK29_KitApply
 		notnull IEntity weapon, notnull BaseInventoryStorageComponent storage, notnull RK29_LoadedPick pick)
 	{
 		// "empty this muzzle", not "no instruction" - the targeting below is the same either way
-		bool clearOnly = pick.m_sPrefab == ResourceName.Empty;
+		bool clearOnly = pick.m_sPrefab == ResourceName.Empty && !pick.m_Loader;
 
 		BaseInventoryStorageComponent destStorage = storage;
 		InventoryStorageSlot magSlot;
@@ -1548,6 +1740,22 @@ class RK29_KitApply
 				Note(string.Format(
 					"[RK29] loaded magazine skipped - no magazine well on %1",
 					FileNameOf(weapon)), LogLevel.WARNING);
+			return;
+		}
+
+		// the gun's own loader seats its order its own way; nothing is deleted or spawned here
+		if (pick.m_Loader)
+		{
+			RK29_SeatContext ctx = new RK29_SeatContext();
+			ctx.m_Weapon = weapon;
+			ctx.m_Seated = magSlot.GetAttachedEntity();
+			ctx.m_Order = pick;
+			if (pick.m_Loader.Seat(ctx))
+				Note(string.Format("[RK29] %1 loaded by %2 with %3 round(s)", FileNameOf(weapon),
+					pick.m_Loader.Type().ToString(), pick.m_iRounds), LogLevel.NORMAL);
+			else
+				Note(string.Format("[RK29] %1 did not seat %2 round(s) in %3", pick.m_Loader.Type().ToString(),
+					pick.m_iRounds, FileNameOf(weapon)), LogLevel.WARNING);
 			return;
 		}
 
@@ -1743,6 +1951,7 @@ class RK29_KitApply
 				st.m_aItems.Insert(item);
 				st.m_aPrefs.Insert(batch.m_aPreferred);
 				st.m_aRanks.Insert(batch.m_iKeepRank);
+				st.m_aCargoOnly.Insert(batch.m_bCargoOnly);
 			}
 		}
 
@@ -1983,6 +2192,8 @@ class RK29_KitApply
 			array<int> fits = {};
 			for (int c = 0; c < nCont; c++)
 			{
+				if (st.m_aCargoOnly[i] && st.m_aSlotIds[c] != -1)
+					continue;
 				if (CanTake(st.m_aItems[i], st.m_aContainers[c], st.m_aSlotIds[c]))
 					fits.Insert(c);
 			}
@@ -2419,10 +2630,14 @@ class RK29_KitApply
 			return false;
 
 		int moved = st.m_aSpawned.Find(occupant);
+		// this walk is not eligibility-filtered, so it must honour the cargo-only rule itself
+		bool cargoOnly = moved != -1 && st.m_aCargoOnly[moved];
 
 		for (int d = 0, n = st.m_aContainers.Count(); d < n; d++)
 		{
-			if (d == c || !CanTakeItem(occupant, st.m_aContainers[d], st.m_aSlotIds[d]))
+			if (d == c || (cargoOnly && st.m_aSlotIds[d] != -1))
+				continue;
+			if (!CanTakeItem(occupant, st.m_aContainers[d], st.m_aSlotIds[d]))
 				continue;
 
 			ForceDelete(manager, occupant);

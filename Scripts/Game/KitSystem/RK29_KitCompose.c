@@ -37,6 +37,7 @@ class RK29_KitCompose
 	protected static ref map<ResourceName, ResourceName> s_mDefaultMagCache = new map<ResourceName, ResourceName>();
 	protected static ref map<ResourceName, ref array<string>> s_mWellsCache = new map<ResourceName, ref array<string>>();
 	protected static ref map<ResourceName, bool> s_mMagazineCache = new map<ResourceName, bool>();
+	protected static ref map<ResourceName, int> s_mMagCapacityCache = new map<ResourceName, int>();
 	protected static ref map<ResourceName, string> s_mMagWellCache = new map<ResourceName, string>();
 	protected static ref map<ResourceName, ref array<string>> s_mSeatedWellsCache = new map<ResourceName, ref array<string>>();
 	protected static ref map<ResourceName, ref array<string>> s_mWeaponAttachTypeCache = new map<ResourceName, ref array<string>>();
@@ -75,6 +76,7 @@ class RK29_KitCompose
 			kit.m_UIInfo = comp.m_UIInfo;
 
 		CopyTraits(comp, kit, cls.m_sComposition);
+		CopyFacePaint(comp, kit, cls.m_sComposition);
 
 		// Nothing else is seeded from the body: gear comes from the choice groups at resolve, and
 		// apply strips every garment and equipment slot first, so a slot no group answers ends up
@@ -101,6 +103,27 @@ class RK29_KitCompose
 			}
 			if (!kit.m_aTraits.Contains(trait))
 				kit.m_aTraits.Insert(trait);
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! NONE is the zero value, so an unfilled row reads as one and is logged as a config fault.
+	protected static void CopyFacePaint(notnull RK29_KitComposition comp, notnull RK29_KitStruct kit,
+		ResourceName composition)
+	{
+		if (!comp.m_aFacePaint)
+			return;
+
+		foreach (RK29_EFacePaint pattern : comp.m_aFacePaint)
+		{
+			if (pattern == RK29_EFacePaint.NONE)
+			{
+				Print(string.Format("[RK29] '%1' declares an unset face paint row in %2",
+					kit.m_sKitName, FilePath.StripPath(composition)), LogLevel.WARNING);
+				continue;
+			}
+			if (!kit.m_aFacePaint.Contains(pattern))
+				kit.m_aFacePaint.Insert(pattern);
 		}
 	}
 
@@ -165,6 +188,7 @@ class RK29_KitCompose
 		ResourceName round;
 		array<string> aliasPreferred = null;
 		int aliasRank = RK29_KitItemBatch.KEEP_RANK_DEFAULT;
+		bool cargoOnly = false;
 		bool viaAlias = false;
 		if (ammo.m_sPrefab != ResourceName.Empty)
 			round = ammo.m_sPrefab;
@@ -176,6 +200,7 @@ class RK29_KitCompose
 			// the same alias that produced the prefab, so a row is never placed by another
 			aliasPreferred = setup.ResolveAliasPreference(ammo.m_sAlias, kit.m_sFactionKey);
 			aliasRank = setup.ResolveAliasKeepRank(ammo.m_sAlias);
+			cargoOnly = setup.ResolveAliasCargoOnly(ammo.m_sAlias);
 			viaAlias = true;
 			if (round == ResourceName.Empty)
 				Print(string.Format("[RK29] config ERROR - ammo '%1' is neither declared by"
@@ -211,6 +236,8 @@ class RK29_KitCompose
 			batch.m_iKeepRank = aliasRank;
 		else if (def)
 			batch.m_iKeepRank = def.m_iKeepRank;
+
+		batch.m_bCargoOnly = cargoOnly;
 
 		for (int i = 0; i < rounds; i++)
 			batch.m_aPrefabs.Insert(round);
@@ -708,6 +735,7 @@ class RK29_KitCompose
 		s_mDefaultMagCache.Clear();
 		s_mWellsCache.Clear();
 		s_mMagazineCache.Clear();
+		s_mMagCapacityCache.Clear();
 		s_mMagWellCache.Clear();
 		s_mSeatedWellsCache.Clear();
 		s_mWeaponAttachTypeCache.Clear();
@@ -1023,6 +1051,37 @@ class RK29_KitCompose
 
 		s_mMagazineCache.Set(prefab, magazine);
 		return magazine;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! MaxAmmo off a magazine prefab's own source, cached; 0 when it cannot be read.
+	static int MagazineCapacityOf(ResourceName magazine)
+	{
+		if (magazine == ResourceName.Empty)
+			return 0;
+
+		int capacity;
+		if (s_mMagCapacityCache.Find(magazine, capacity))
+			return capacity;
+
+		capacity = 0;
+		Resource res = Resource.Load(magazine);
+		if (res.IsValid())
+		{
+			IEntitySource src = res.GetResource().ToEntitySource();
+			if (src)
+			{
+				for (int i = 0, n = src.GetComponentCount(); i < n; i++)
+				{
+					IEntityComponentSource comp = src.GetComponent(i);
+					if (comp && IsMagazineClass(comp.GetClassName()) && comp.Get("MaxAmmo", capacity))
+						break;
+				}
+			}
+		}
+
+		s_mMagCapacityCache.Set(magazine, capacity);
+		return capacity;
 	}
 
 	//------------------------------------------------------------------------------------------------

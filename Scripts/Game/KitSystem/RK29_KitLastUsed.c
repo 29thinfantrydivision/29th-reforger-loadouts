@@ -2,23 +2,34 @@
 //! Which SAVED KIT each class was last applied from, per kit, in $profile:RK29_KitLastUsed.json -
 //! so a player who built a kit once does not rebuild it every session.
 //!
-//! A separate file from RK29_KitPresets.json on purpose. That store's ReadFromStorage discards
-//! every record when m_iVersion does not match and has no migration branch, so adding a field to it
-//! would wipe every player's saved kits on the update; its record grammar has no room either, since
-//! DecodeRecord rejoins everything past the name to keep a typed "|" legal. Two files, no shared
-//! failure.
+//! A separate file from the preset store on purpose, and unversioned by suffix: it stores names,
+//! and names carry across that store's one-shot import from one file version to the next.
 //!
 //! Stores the saved kit's NAME, never the wire it held when it was worn. The name is what the
 //! player chose, and it keeps meaning what they mean by it: a saved kit edited since it was last
 //! worn is seeded as it now reads rather than as a copy taken when it was, and one deleted or
 //! renamed since is not seeded at all - the class starts at its authored defaults, which is the
 //! Standard row. The wire is read back out of the preset store at the moment it is wanted, so
-//! nothing here can hold a stale kit.
+//! nothing here can hold a stale kit - and a kit the config has moved under is not seeded at all
+//! (see WireFor), since seeding it would change the player's gear without a word.
 //!
 //! A kit applied from picks no saved kit holds - anything built in the columns and never saved -
 //! is deliberately not remembered: there is no name to remember it under, and the record is cleared
 //! so the next session starts at Standard rather than at a kit the player walked away from.
 //------------------------------------------------------------------------------------------------
+
+//------------------------------------------------------------------------------------------------
+//! What RK29_KitLastUsedStore.WireFor made of a class's memory. Everything but SEEDED and NONE is a
+//! remembered kit the player did NOT get, and the only ones the player can act on are said to them.
+enum RK29_ELastUsedStatus
+{
+	NONE,			// nothing remembered for this class
+	SEEDED,			// the wire answered is the saved kit, as saved
+	MISSING,		// the remembered name is no longer a saved kit (deleted or renamed)
+	UNREADABLE,		// saved in a dialect this build cannot read
+	OUTDATED,		// today's config answers it differently from how it was saved
+	SHORT_POOL,		// a pool is under its minimum, which Apply would refuse
+}
 
 //------------------------------------------------------------------------------------------------
 //! The on-disk shape, modelled on RK29_KitPresetFile: JsonApiStruct auto-processes registered
@@ -82,19 +93,16 @@ class RK29_KitLastUsedStore
 	//------------------------------------------------------------------------------------------------
 	//! Remember which saved kit this class was applied from. Called from the server's own
 	//! confirmation, so the wire asked about is what the server settled on rather than what the menu
-	//! asked for; the name stored is the saved kit holding exactly that wire, and picks no saved kit
-	//! holds clear the record. A kit saved while the class stood at its defaults holds the empty
-	//! wire and is cleared rather than named - seeding nothing reaches the same defaults.
+	//! asked for; the name stored is the saved kit answering to that wire (NameForPicks), and picks no
+	//! saved kit answers to clear the record.
+	//!
+	//! An EMPTY wire is ignored, never read as "cleared": every player apply sends a full list, so an
+	//! empty echo only comes from the server seeding its own default (SeedDefaultSelection_S) - which
+	//! is exactly what happens when a remembered kit was NOT seeded, and must not erase the memory.
 	void Mark(string kitName, string picksWire)
 	{
-		if (kitName == "")
+		if (kitName == "" || picksWire == "")
 			return;
-
-		if (picksWire == "")
-		{
-			MarkPreset(kitName, "");
-			return;
-		}
 
 		RK29_KitPresetStorage presets = RK29_KitPresetStorage.GetInstance();
 		if (!presets)
@@ -138,12 +146,16 @@ class RK29_KitLastUsedStore
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! What that saved kit holds NOW - which is why the name is what is stored. "" when this class
-	//! was never applied from a saved kit, when the one it names has since been deleted or renamed,
-	//! or when that kit is in a dialect this build cannot read. Callers treat "" exactly as they
-	//! treat no memory at all: the authored defaults, the Standard row.
-	string WireFor(string kitName)
+	//! The saved kit this class was last applied from, when it may be seeded without asking: it reads
+	//! in this build, today's config answers it exactly as saved (RK29_KitResolve.ChangedCount is 0),
+	//! and no pool is under its minimum. "" otherwise, with outStatus saying why and outPresetName
+	//! naming the kit - the caller tells the player, since the menu is where they can fix it. Callers
+	//! treat "" exactly as no memory at all: the authored defaults, the Standard row.
+	string WireFor(string kitName, out RK29_ELastUsedStatus outStatus, out string outPresetName)
 	{
+		outStatus = RK29_ELastUsedStatus.NONE;
+		outPresetName = "";
+
 		if (kitName == "")
 			return "";
 
@@ -151,14 +163,43 @@ class RK29_KitLastUsedStore
 		if (!m_mPresets.Find(kitName, presetName))
 			return "";
 
+		outPresetName = presetName;
+		outStatus = RK29_ELastUsedStatus.MISSING;
+
 		RK29_KitPresetStorage presets = RK29_KitPresetStorage.GetInstance();
 		if (!presets)
 			return "";
 
 		RK29_KitPreset preset = presets.Find(kitName, presetName);
-		if (!preset || !RK29_KitPresetStorage.CanLoad(preset))
+		if (!preset)
 			return "";
 
+		outStatus = RK29_ELastUsedStatus.UNREADABLE;
+		if (!RK29_KitPresetStorage.CanLoad(preset))
+			return "";
+
+		RK29_KitManager mgr = RK29_KitManager.GetInstance();
+		RK29_KitSetup setup;
+		if (mgr)
+			setup = mgr.Setup();
+		RK29_ClassSetup cls;
+		if (setup)
+			cls = setup.FindClass(kitName);
+
+		// no class or setup is no answer, and no answer does not seed
+		outStatus = RK29_ELastUsedStatus.OUTDATED;
+		array<ref RK29_ResolvedGroup> changedGroups = {};
+		int gone;
+		if (RK29_KitResolve.ChangedCount(cls, setup, preset.m_sPicks, changedGroups, gone) != 0)
+			return "";
+
+		array<ref RK29_ChoicePick> picks = {};
+		RK29_KitResolve.ParsePicks(preset.m_sPicks, picks);
+		outStatus = RK29_ELastUsedStatus.SHORT_POOL;
+		if (RK29_KitResolve.FirstUnderMinGroup(cls, setup, picks) != "")
+			return "";
+
+		outStatus = RK29_ELastUsedStatus.SEEDED;
 		return preset.m_sPicks;
 	}
 
@@ -239,13 +280,15 @@ class RK29_KitLastUsedStore
 	//------------------------------------------------------------------------------------------------
 	//! False for anything that is not a record this build can read. The tail is rejoined rather than
 	//! taken as one field, because Split cuts at every separator and a typed "|" is legal in a name.
+	//! skipEmptyEntries is false for the same reason RK29_KitPresetStorage.DecodeRecord keeps it
+	//! false: a skipped empty field shifts every field after it and shortens the record.
 	protected static bool DecodeRecord(string record, out string kitName, out string presetName)
 	{
 		kitName = "";
 		presetName = "";
 
 		array<string> parts = {};
-		record.Split("|", parts, true);
+		record.Split("|", parts, false);
 		if (parts.Count() < RECORD_FIELDS)
 			return false;
 

@@ -6,6 +6,16 @@
 //------------------------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------------------------
+//! A face paint pattern, matched by the name ending of the faction's Headcamo heads - never by
+//! list position: vanilla's Head_White_08 lists _02 before _01.
+enum RK29_EFacePaint
+{
+	NONE,			//!< nothing - a fresh row reads as unset rather than as a pattern
+	PATTERN_01,		//!< the "_camo_<faction>_01" heads
+	PATTERN_02		//!< the "_camo_<faction>_02" heads
+}
+
+//------------------------------------------------------------------------------------------------
 //! Compositions may inherit each other (conf-from-conf).
 [BaseContainerProps(configRoot: true)]
 class RK29_KitComposition : RK29_ChoiceGroupSet
@@ -21,4 +31,7 @@ class RK29_KitComposition : RK29_ChoiceGroupSet
 
 	[Attribute(uiwidget: UIWidgets.ComboBox, desc: "What this role is qualified at - a medic dresses wounds faster, a sapper builds faster. Declared on the shared role file so every faction's kits inherit it; a faction kit restating the list REPLACES it, and '+' appends. Applied to the body at kit apply, so re-kitting to another class drops them", enums: ParamEnumArray.FromEnum(RK29_ETrait), category: "29th")]
 	ref array<RK29_ETrait> m_aTraits;
+
+	[Attribute(uiwidget: UIWidgets.ComboBox, desc: "Face paint patterns this kit may wear, applied at kit apply: one at random when several are listed, and a face already wearing a listed pattern keeps it. Empty washes any face paint back to the plain face, so re-kitting to another class takes it off. Preview mannequins show the first listed. A faction kit restating the list REPLACES it", enums: ParamEnumArray.FromEnum(RK29_EFacePaint), category: "29th")]
+	ref array<RK29_EFacePaint> m_aFacePaint;
 }

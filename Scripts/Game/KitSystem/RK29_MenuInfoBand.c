@@ -59,9 +59,10 @@ class RK29_MenuInfoBand
 	protected ref array<Widget> m_aPresetAnchors = {};
 	protected ref array<ref RK29_LoadoutRowHandler> m_aInfoHandlers = {};
 
-	//! Preset wire under a class -> its stale count. Cached: it was rebuilding one full offer per
-	//! preset on every stepper click.
+	//! Preset wire under a class -> its changed count and the tip naming the changed sections.
+	//! Cached: each answer builds a whole offer, and the band restamps on every stepper click.
 	protected ref map<string, int> m_mPresetStaleCache = new map<string, int>();
+	protected ref map<string, string> m_mPresetStaleTips = new map<string, string>();
 	protected ref array<ref RK29_HoverTipHandler> m_aInfoTipHandlers = {};
 
 	//! Not a ref: the menu owns this panel, and a reference back would be an unfreeable cycle.
@@ -86,6 +87,7 @@ class RK29_MenuInfoBand
 		m_aPresetRows.Clear();
 		m_aPresetAnchors.Clear();
 		m_mPresetStaleCache.Clear();
+		m_mPresetStaleTips.Clear();
 
 		m_wColInfo = null;
 	}
@@ -248,7 +250,8 @@ class RK29_MenuInfoBand
 	//! defaults back, one row per saved preset, and the name box that saves what is on screen.
 	//! Stamped on every BuildInfoPanel, not only on a class change, and that is not waste: which row
 	//! is highlighted is computed, never remembered - a row lights when the string it stands for is
-	//! the picks' own wire ("" for Standard), so nudging a count after a load lights nothing.
+	//! the kit's full wire (StandardWire for Standard), so nudging a count after a load lights nothing.
+	//! An outdated kit never lights once loaded: what loads is not what it holds.
 	//! Stamped even when the store holds nothing - the Standard row and the name box are what an
 	//! empty section is for.
 	protected void BuildPresetSection(notnull RK29_ClassSetup cls)
@@ -260,14 +263,14 @@ class RK29_MenuInfoBand
 		if (!store)
 			return;
 
-		string currentWire = RK29_KitResolve.EncodePicks(m_Menu.Picks());
+		string currentWire = m_Menu.CurrentWire();
 
 		array<RK29_KitPreset> presets = {};
 		store.PresetsFor(cls.m_sKitName, presets);
 
 		// Exactly one row lights, and which one is computed from the picks - not remembered - so a
 		// count nudged after a load lights nothing. Two rows CAN hold the same wire, though: a kit
-		// saved while the class stood at its defaults holds the empty wire, Standard's own condition,
+		// saved while the class stood at its defaults holds StandardWire, Standard's own condition,
 		// and saving a loaded kit under a second name makes an exact twin. Pointing at both says
 		// nothing, so: a saved kit outranks Standard, the kit the player actually chose outranks its
 		// twins (m_sChosenPreset), the first match stands in when they have chosen none of them, and
@@ -296,7 +299,7 @@ class RK29_MenuInfoBand
 		if (caption)
 			m_Menu.HoverTip().AttachHoverTip(caption, PRESETS_HINT, m_aInfoTipHandlers, false, true);
 
-		StampStandardRow(currentWire, lit >= 0);
+		StampStandardRow(currentWire == m_Menu.StandardWire(cls) && lit < 0);
 
 		foreach (int i, RK29_KitPreset preset : presets)
 		{
@@ -309,18 +312,17 @@ class RK29_MenuInfoBand
 
 	//------------------------------------------------------------------------------------------------
 	//! The kit as the config authors it, always first and never deletable. Clicking it throws the
-	//! session's picks for this class away, which is this menu's only reset to default. Highlighted
-	//! exactly when the class is standard, which on the wire is the empty string: an empty pick array
-	//! is what makes the authored defaults show, and EncodePicks answers "" for exactly that array.
+	//! session's picks for this class away, which is this menu's only reset to default. Lit is the
+	//! caller's answer: the class is standard and no saved kit claims the same wire.
 	//! It takes no place in the preset book, so its handler carries the index 0 and nothing reads it.
-	protected void StampStandardRow(string currentWire, bool savedKitLit)
+	protected void StampStandardRow(bool lit)
 	{
 		Widget row = GetGame().GetWorkspace().CreateWidgets(PRESET_ROW_LAYOUT, m_wColInfo);
 		if (!row)
 			return;
 
 		RK29_WidgetUtil.SetText(row, "RowName", PRESET_STANDARD_LABEL);
-		m_Menu.SetPlateToggled(row, "RowButton", "RowBg", currentWire == "" && !savedKitLit);
+		m_Menu.SetPlateToggled(row, "RowButton", "RowBg", lit);
 
 		Widget button = row.FindAnyWidget("RowButton");
 		if (button)
@@ -337,8 +339,8 @@ class RK29_MenuInfoBand
 	//! click on the row loads it; the glyph and a right click both open the overwrite/delete menu,
 	//! which is why the row carries a mouse probe. Whether it is lit is the caller's answer.
 	//! - Healthy - plain white, no suffix, no tip.
-	//! - Outdated - amber name and "(outdated)", the tip says how many. It still loads: survivors
-	//!   apply and the rest degrade as a stale wire does (PickedEntry/PickedCount tolerate it).
+	//! - Outdated - amber name and "(outdated)", the tip names the changed sections. It still loads:
+	//!   survivors apply and the rest degrade as a stale wire does (DropBlockedPicks).
 	//! - Old format - a dialect this build does not speak, so the click does nothing. Dimmed and
 	//!   named on the row, because a row that ignores a click has to say why; delete still works.
 	protected void StampPresetRow(notnull RK29_KitPreset preset, bool lit)
@@ -353,8 +355,9 @@ class RK29_MenuInfoBand
 
 		bool loadable = RK29_KitPresetStorage.CanLoad(preset);
 		int stale = 0;
+		string sections;
 		if (loadable)
-			stale = PresetStaleCount(preset);
+			stale = PresetStaleCount(preset, sections);
 
 		string label = preset.m_sName;
 		if (!loadable)
@@ -375,8 +378,8 @@ class RK29_MenuInfoBand
 
 		Widget button = row.FindAnyWidget("RowButton");
 		if (button)
-			m_Menu.HoverTip().AttachHoverTip(button, RK29_MenuRowKit.PresetTipOf(loadable, stale),
-				m_aInfoTipHandlers);
+			m_Menu.HoverTip().AttachHoverTip(button, RK29_MenuRowKit.PresetTipOf(loadable, sections),
+				m_aInfoTipHandlers, false, stale > 0);
 
 		// the loading click is attached whatever the state: an old-format row answers it with a log line
 		// in OnPresetClicked rather than being a row the cursor silently passes over. The click path,
@@ -479,108 +482,39 @@ class RK29_MenuInfoBand
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! How many of a preset's picks the current offer would refuse, without loading it. Nothing here
-	//! clamps anything - every test is put to the code that does the real resolution: FindGroup,
-	//! NoneAllowed for a bare pick, FindEntry, and PickedCount handed this pick alone, where a
-	//! changed number is one the resolver clamped. The budget is asked last and per group, and an
-	//! over-budget group counts once. Cached: each uncached answer builds a whole offer of its own.
-	protected int PresetStaleCount(notnull RK29_KitPreset preset)
+	//! How many of a preset's picks today's config would answer differently, without loading it -
+	//! RK29_KitResolve.ChangedCount, the one comparison that decides the row. outSections is the
+	//! changed sections one per line for the tip, "" when nothing changed. No answer (no setup) reads
+	//! as unchanged rather than guessed at, and is not cached.
+	protected int PresetStaleCount(notnull RK29_KitPreset preset, out string outSections)
 	{
+		outSections = "";
+
 		RK29_ClassSetup cls = m_Menu.CurrentClass();
-		string cacheKey;
-		if (cls)
-			cacheKey = cls.m_sKitName + "|" + preset.m_sPicks;
+		if (!cls)
+			return 0;
+
+		string cacheKey = cls.m_sKitName + "|" + preset.m_sPicks;
 		int known;
-		if (cacheKey != "" && m_mPresetStaleCache.Find(cacheKey, known))
+		if (m_mPresetStaleCache.Find(cacheKey, known))
+		{
+			m_mPresetStaleTips.Find(cacheKey, outSections);
 			return known;
-		int counted = CountPresetStale(preset, cls);
-		if (cacheKey != "")
-			m_mPresetStaleCache.Set(cacheKey, counted);
-		return counted;
-	}
+		}
 
-	//------------------------------------------------------------------------------------------------
-	protected int CountPresetStale(notnull RK29_KitPreset preset, RK29_ClassSetup cls)
-	{
-		array<ref RK29_ChoicePick> picks = {};
-		RK29_KitResolve.ParsePicks(preset.m_sPicks, picks);
-
-		// measured against the offer the preset's own picks produce, not the one the current session is
-		// looking at: a preset for the other rifle owns groups this rifle does not, which would read as
-		// gone
-		array<ref RK29_ResolvedGroup> offer = {};
 		RK29_KitSetup setup = RK29_MenuRowKit.Setup();
-		if (cls && setup)
-			RK29_KitResolve.BuildOffer(cls, setup, picks, offer);
-		else
-			offer = m_Menu.Offer();
+		array<ref RK29_ResolvedGroup> changed = {};
+		int gone;
+		int counted = RK29_KitResolve.ChangedCount(cls, setup, preset.m_sPicks, changed, gone);
+		if (counted < 0)
+			return 0;
 
-		int stale = 0;
-		array<string> budgeted = {};
+		if (counted > 0)
+			outSections = RK29_MenuRowKit.ChangedSectionsOf(changed, gone, cls, setup);
 
-		foreach (RK29_ChoicePick pick : picks)
-		{
-			if (!pick)
-				continue;
-
-			// a group the offer no longer has is not stale: the menu keeps such picks on purpose
-			// (the other rifle's ammo counts survive a switch and back), loading drops nothing, and
-			// the apply never reads them - counting one here marks a freshly saved preset outdated
-			RK29_ResolvedGroup g = RK29_KitResolve.FindGroup(offer, pick.m_sGroup);
-			if (!g)
-				continue;
-
-			if (pick.m_sEntry == "")
-			{
-				// a pick naming nothing is a deliberately bare seat, an answer only where the group
-				// offers one - and a rule withholding it makes the saved wire outdated like any
-				// other pick the offer has since ruled out
-				if (!g.NoneAllowed())
-					stale++;
-
-				continue;
-			}
-
-			RK29_ResolvedEntry e = g.FindEntry(pick.m_sEntry);
-			if (!e)
-			{
-				stale++;
-				continue;
-			}
-
-			// before the EXCLUSIVE early-out: a config revision that blocks a saved exclusive pick
-			// (a new exclusion, a new obstruction) is otherwise loaded silently and dropped by
-			// DropBlockedPicks without a word
-			if (e.m_bBlocked)
-			{
-				stale++;
-				continue;
-			}
-
-			if (g.m_eKind == RK29_EChoiceKind.EXCLUSIVE)
-				continue;
-
-			array<ref RK29_ChoicePick> single = {};
-			single.Insert(pick);
-			if (RK29_KitResolve.PickedCount(g, e, single) != pick.m_iCount)
-			{
-				stale++;
-				continue;
-			}
-
-			if (g.m_eKind == RK29_EChoiceKind.BUDGETED && g.m_iBudget > 0
-				&& !budgeted.Contains(g.m_sId))
-				budgeted.Insert(g.m_sId);
-		}
-
-		foreach (string groupId : budgeted)
-		{
-			RK29_ResolvedGroup g = RK29_KitResolve.FindGroup(offer, groupId);
-			if (g && RK29_MenuRowKit.GroupSpendOf(g, picks) > g.m_iBudget)
-				stale++;
-		}
-
-		return stale;
+		m_mPresetStaleCache.Set(cacheKey, counted);
+		m_mPresetStaleTips.Set(cacheKey, outSections);
+		return counted;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -599,9 +533,9 @@ class RK29_MenuInfoBand
 	//! reset.
 	void OnPresetStandardClicked()
 	{
-		// already standing at the authored defaults - the empty wire IS that condition - so there is
-		// nothing to throw away and no reason to re-dress the soldier to reach the kit he wears
-		if (RK29_KitResolve.EncodePicks(m_Menu.Picks()) == "")
+		// already standing at the authored defaults - StandardWire IS that condition - so there is
+		// nothing to throw away and no reason to re-dress the soldier to reach the kit they wear
+		if (m_Menu.CurrentWire() == m_Menu.StandardWire(m_Menu.CurrentClass()))
 			return;
 
 		m_Menu.SetPicks(new array<ref RK29_ChoicePick>());
@@ -609,8 +543,8 @@ class RK29_MenuInfoBand
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! A preset row: its picks replace this class's session picks wholesale. Survivors apply and
-	//! invalid picks degrade exactly as a stale wire does - see PresetStaleCount. No confirmation
+	//! A preset row: its picks replace this class's session picks wholesale. An outdated kit loads
+	//! as today's config answers it - DropBlockedPicks, see PresetStaleCount. No confirmation
 	//! dialog, and the unapplied edits it overwrites are a real cost, spent knowingly: a dialog would
 	//! tax every load to save the occasional misclick, which Standard and the other presets undo
 	//! anyway. A dialect this build cannot read does nothing but log.
@@ -644,9 +578,9 @@ class RK29_MenuInfoBand
 
 		// Already wearing it. Parsing the wire back would rebuild the offer, re-dress the mannequin
 		// and restamp all three columns to arrive exactly where it started - and the dress alone is
-		// the ~14 ms of it. The comparison is sound because the live picks have already been through
-		// DropBlockedPicks, so a wire equal to theirs parses to the same answer.
-		if (RK29_KitResolve.EncodePicks(m_Menu.Picks()) == preset.m_sPicks)
+		// the ~14 ms of it. The comparison is sound because both sides are full expanded lists and
+		// the live picks have already been through DropBlockedPicks.
+		if (m_Menu.CurrentWire() == preset.m_sPicks)
 		{
 			// but the plate can still have to move: twins share a wire, so clicking the other one
 			// changes which row is chosen without changing a single pick. The band alone, no dress.
@@ -730,8 +664,8 @@ class RK29_MenuInfoBand
 		if (!store)
 			return;
 
-		string wire = RK29_KitResolve.EncodePicks(m_Menu.Picks());
-		if (!store.Save(cls.m_sKitName, name, wire))
+		string wire = m_Menu.CurrentWire();
+		if (!WireSavable(name, wire) || !store.Save(cls.m_sKitName, name, wire))
 			return;
 
 		RK29_Log.Trace(string.Format("[RK29] loadout menu: overwrote preset '%1' of %2 picks='%3'",
@@ -767,7 +701,7 @@ class RK29_MenuInfoBand
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! A name typed into the save row and committed. The picks saved are encoded by the very call
+	//! A name typed into the save row and committed. The picks saved are CurrentWire, the very call
 	//! Confirm sends to the server, so what a preset holds and what an apply would send are the same
 	//! string by construction. An empty or blank commit is a no-op. A refusal from the store - the
 	//! per-class cap is the only one that can reach here - leaves the typed name standing in the box
@@ -791,7 +725,10 @@ class RK29_MenuInfoBand
 		if (!store)
 			return;
 
-		string wire = RK29_KitResolve.EncodePicks(m_Menu.Picks());
+		string wire = m_Menu.CurrentWire();
+		if (!WireSavable(typed, wire))
+			return;
+
 		if (!store.Save(cls.m_sKitName, typed, wire))
 		{
 			Print(string.Format("[RK29] loadout menu: preset '%1' was not saved - %2 already"
@@ -815,15 +752,36 @@ class RK29_MenuInfoBand
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! A list the server would refuse whole cannot be saved either: loading it back could only ever
+	//! apply the defaults. Said in the log, as the store's own refusals are.
+	protected bool WireSavable(string name, string wire)
+	{
+		if (RK29_KitResolve.WireFits(wire))
+			return true;
+
+		Print(string.Format("[RK29] loadout menu: kit '%1' was not saved - its %2-char list is over"
+			+ " the wire caps (%3 chars / %4 picks)", name, wire.Length(),
+			RK29_KitResolve.WIRE_MAX_CHARS, RK29_KitResolve.WIRE_MAX_PICKS), LogLevel.WARNING);
+		return false;
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! A kit saved under a name while the body already wears exactly it: that name is what the class
 	//! is seeded from next session. The apply's own record cannot cover this order of doing it -
 	//! building a kit, applying it and THEN saving it - because at the moment the apply was confirmed
 	//! the picks matched no saved kit and the record was cleared. What the SERVER applied is the test,
 	//! not what is on screen: an edited kit saved under a name is a kit the player has not worn.
+	//!
+	//! A worn wire of "" is the server's own default seed, which is the Standard kit.
 	protected void RememberSavedAsWorn(notnull RK29_ClassSetup cls, string name, string wire)
 	{
-		if (cls.m_sKitName == "" || RK29_LocalStash.Kit() != cls.m_sKitName
-			|| RK29_LocalStash.Picks() != wire)
+		if (cls.m_sKitName == "" || RK29_LocalStash.Kit() != cls.m_sKitName)
+			return;
+
+		string worn = RK29_LocalStash.Picks();
+		if (worn == "")
+			worn = m_Menu.StandardWire(cls);
+		if (worn != wire)
 			return;
 
 		RK29_KitLastUsedStore store = RK29_KitLastUsedStore.GetInstance();

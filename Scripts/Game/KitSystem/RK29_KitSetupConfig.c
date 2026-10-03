@@ -59,6 +59,9 @@ class RK29_WeaponDef
 	[Attribute(desc: "This weapon's ammo choices, inline - ammo is intrinsic to the gun, so it lives here rather than in a catalog. Entry counts are the line-standard defaults; classes deviate through overrides. Empty group id = \"<weaponId>_ammo\", the name overrides address it by", category: "29th")]
 	ref RK29_AmmoGroup m_AmmoGroup;
 
+	[Attribute(desc: "Leave EMPTY for the standard loading steps (loaded-magazine picker, delete-and-spawn into the well). Set only for a gun those steps get wrong - a tube shotgun - to hand its loading to that loader class", category: "29th")]
+	ref RK29_WeaponLoader m_Loader;
+
 	[Attribute(desc: "SHARED choice groups this weapon owns by reference - attachment points and anything genuinely cross-weapon. Capability, stated once per gun; what a class actually offers of it is the overrides' business", category: "29th")]
 	ref array<string> m_aGroups;
 }
@@ -314,6 +317,14 @@ class RK29_KitSetup
 		if (!a)
 			return RK29_KitItemBatch.KEEP_RANK_DEFAULT;
 		return a.m_iKeepRank;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Authored m_bCargoOnly, or false for an alias that is not there.
+	bool ResolveAliasCargoOnly(string alias)
+	{
+		RK29_ItemAlias a = FindAlias(alias);
+		return a && a.m_bCargoOnly;
 	}
 
 	//------------------------------------------------------------------------------------------------

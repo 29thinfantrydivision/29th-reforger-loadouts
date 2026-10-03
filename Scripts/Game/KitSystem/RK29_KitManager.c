@@ -1139,7 +1139,10 @@ class RK29_KitManager
 			if (!IsCurrentKitLoadoutName(spawnedName))
 				spawnedKit = m_mKits.Get(spawnedName);
 			if (spawnedKit && entity)
+			{
 				RK29_KitApply.ApplyTraits_S(entity, spawnedKit);
+				RK29_KitApply.ApplyFacePaint(entity, spawnedKit.m_aFacePaint, false);
+			}
 		}
 
 		QueueRecompute_S();

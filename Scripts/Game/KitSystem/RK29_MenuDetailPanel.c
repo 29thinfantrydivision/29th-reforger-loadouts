@@ -912,8 +912,8 @@ class RK29_MenuDetailPanel
 
 	//------------------------------------------------------------------------------------------------
 	//! The LOADED toggle on one counted row: lit on the entry the gun is seated with, dim on the
-	//! others, clickable while the loaded sibling has more than one answer. No sibling means plain
-	//! spares and no toggle; a one-answer sibling lights but takes no handler. The count does not
+	//! others, clickable while the loaded sibling has more than one answer. No sibling means no
+	//! toggle (see RK29_KitResolve.LoadedSiblingOf); a one-answer sibling lights but takes no handler. The count does not
 	//! gate the mark - which row wears it is SeatedLoadedEntry's answer, not this stamp's - it only
 	//! colours it, amber for a seated round the kit carries and red for a chamber with nothing left.
 	protected void StampLoadedToggle(notnull Widget row, RK29_ResolvedGroup loadedGroup,
@@ -1029,8 +1029,8 @@ class RK29_MenuDetailPanel
 
 	//------------------------------------------------------------------------------------------------
 	//! The synthesized loaded-magazine selector standing over this counted group, or null when the
-	//! offer carries none - then the counts are plain spares and no row shows a LOADED toggle. The
-	//! resolver owns the rule and the suffix it is named off; all this adds is the offer to look in.
+	//! offer carries none - then no row shows a LOADED toggle. The resolver owns the rule, what the
+	//! counts then mean, and the suffix it is named off; all this adds is the offer to look in.
 	protected RK29_ResolvedGroup LoadedSiblingOf(notnull RK29_ResolvedGroup g)
 	{
 		return RK29_KitResolve.LoadedSiblingOf(m_Menu.Offer(), g);

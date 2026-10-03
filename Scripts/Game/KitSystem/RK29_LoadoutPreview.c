@@ -109,7 +109,11 @@ modded class SCR_LoadoutPreviewComponent
 			return null;
 		}
 
-		return GetGame().SpawnEntityPrefabLocal(res, GetGame().GetWorld());
+		IEntity body = GetGame().SpawnEntityPrefabLocal(res, GetGame().GetWorld());
+		if (body)
+			RK29_MannequinDress.KeepOffEditorBudget(body);
+
+		return body;
 	}
 
 	//------------------------------------------------------------------------------------------------

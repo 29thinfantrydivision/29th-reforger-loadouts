@@ -9,15 +9,21 @@ class RK29_KitResolve
 	//! merged WeaponSlotType per weapon prefab - the answer cannot change inside a session
 	protected static ref map<ResourceName, string> s_mSlotTypeCache = new map<ResourceName, string>();
 
+	//! "<kit>|<wire>" -> ExpandedWire, and kit -> the empty list's expansion. Config cannot change
+	//! inside a session; each uncached answer builds a whole offer.
+	protected static ref map<string, string> s_mExpandedWires = new map<string, string>();
+	protected static ref map<string, string> s_mStandardWires = new map<string, string>();
+
 	//! The sanity ceiling that cannot be forgotten in config: no request, however built, turns into
 	//! an absurd number of entities. Config is exactly where a cap gets omitted.
 	static const int COUNT_HARD_CEILING = 100;
 
-	//! The door on a pick wire, which arrives from a client: a real request is ~26 picks and ~1.2 KB
-	//! at the very worst the config allows. Over either cap the wire is refused whole, so a hostile
-	//! string cannot buy log lines or picks in proportion to its length.
+	//! The door on a pick wire, which arrives from a client. Every apply and saved kit sends the FULL
+	//! expanded list (ExpandPicks), estimated at ~50 picks for the biggest class. Over either cap the
+	//! wire is refused whole, so a hostile string cannot buy log lines or picks in proportion to its
+	//! length - which is also why the client checks WireFits before it sends or saves.
 	static const int WIRE_MAX_CHARS = 4096;
-	static const int WIRE_MAX_PICKS = 64;
+	static const int WIRE_MAX_PICKS = 128;
 
 	//! An unset m_iMax implies "about what this row already carries" - never unlimited. Two is the
 	//! ratio the config itself uses where a cap is stated (the rifle ball row is 2/6/12).
@@ -39,8 +45,14 @@ class RK29_KitResolve
 	//! own. Call order:
 	//!   CollectKitLevelGroups -> CollectOverrideAdds -> ApplyOverrides -> DropZeroCeilingEntries
 	//!   -> EnforceExclusions (weapon targets only) -> PullWeaponOwnedGroups -> FinalisePasses
-	//!   (ApplyOverrides, DropZeroCeilingEntries, EnforceAttachmentLegality, EnforceExclusions (the
-	//!   rest), OfferLoadedSelectors, DropEmptyGroups, SortOfferByOrder).
+	//!   (ApplyOverrides, DropZeroCeilingEntries, SettleShedFloors, EnforceAttachmentLegality,
+	//!   EnforceExclusions (the rest), OfferLoadedSelectors, DropEmptyGroups, SortOfferByOrder).
+	//!
+	//! Content from a mod this session does not run is not a pass: ResolveGroup never copies an
+	//! entry whose prefab does not load (IsEntryUnloaded), exactly as it never copies a parked one,
+	//! so overrides and exclusions naming it find nothing and do nothing. A group left with no entry
+	//! by that is not offered and evicts nothing (IsWhollyShed); SettleShedFloors is the one pass
+	//! that answers for what was shed.
 	//!
 	//! What each kind of pass may do:
 	//!   Remove - PruneUnmountable and, through it, PruneMissingVariants drop entries (only over a
@@ -123,6 +135,108 @@ class RK29_KitResolve
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! Is this entry content the session does not have - a prefab from a mod the server is not
+	//! running? Treated as parked, silently: which optional mods run is the server's mod list, not
+	//! a config mistake, and the boot lint (ReportUnloadedContent) lists every such prefab once.
+	//! A prefab that resolves to nothing is not this question - an unresolved alias or variant
+	//! stays in the offer and is complained about where it always was.
+	//!
+	//! Asked through RK29_KitCompose.PrefabReadable, so each prefab is loaded once per session and
+	//! the answer is a cache read after that. Server and client agree without a word on the wire:
+	//! a client can only join with the server's mod set.
+	protected static bool IsEntryUnloaded(notnull RK29_ChoiceEntryBase e, string ownerWeapon,
+		string factionKey, notnull RK29_KitSetup setup)
+	{
+		ResourceName prefab = EntryPrefabOf(e, ownerWeapon, factionKey, setup);
+		if (prefab == ResourceName.Empty)
+			return false;
+		return !RK29_KitCompose.PrefabReadable(prefab);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The prefab an entry issues, by the same precedence the emit path uses, or empty wherever
+	//! that cannot be told here. Silent throughout: an unknown weapon or attachment id is
+	//! complained about by the pass that reads it, not twice.
+	protected static ResourceName EntryPrefabOf(notnull RK29_ChoiceEntryBase e, string ownerWeapon,
+		string factionKey, notnull RK29_KitSetup setup)
+	{
+		RK29_EntryWeapon weapon = RK29_EntryWeapon.Cast(e);
+		if (weapon)
+		{
+			// asked first because WeaponPrefabOfId complains about an unknown id
+			if (!setup.FindWeaponDef(weapon.m_sWeapon))
+				return ResourceName.Empty;
+			return WeaponPrefabOfId(setup, weapon.m_sWeapon, factionKey);
+		}
+
+		RK29_EntryAttachment att = RK29_EntryAttachment.Cast(e);
+		if (att)
+		{
+			RK29_AttachmentDef adef = setup.FindAttachmentDef(att.m_sAttachment);
+			if (!adef)
+				return ResourceName.Empty;
+			return adef.m_sPrefab;
+		}
+
+		RK29_EntryItem item = RK29_EntryItem.Cast(e);
+		if (!item)
+			return ResourceName.Empty;
+		if (item.m_sPrefab != ResourceName.Empty)
+			return item.m_sPrefab;
+
+		// a variant, or the gun's own magazine, resolves through the owning gun; a kit-level row
+		// has none, and only its alias can be answered
+		RK29_WeaponDef ownerDef = null;
+		ResourceName ownerPrefab = ResourceName.Empty;
+		if (ownerWeapon != "")
+		{
+			ownerDef = setup.FindWeaponDef(ownerWeapon);
+			if (!ownerDef)
+				return ResourceName.Empty;
+			ownerPrefab = WeaponPrefabOfId(setup, ownerWeapon, factionKey);
+			if (ownerPrefab == ResourceName.Empty)
+				return ResourceName.Empty;
+		}
+		else if (item.m_sAlias == "")
+		{
+			return ResourceName.Empty;
+		}
+
+		return ResolveItemPrefabFor(item, ownerPrefab, ownerDef, factionKey, setup);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A group that lost every entry to unloaded content resolves as if parked: not offered, and it
+	//! evicts nothing. Only the shed ones - an authored entry-less group (the worn slot that exists
+	//! to go empty) keeps its meaning.
+	protected static bool IsWhollyShed(notnull RK29_ResolvedGroup g)
+	{
+		return g.m_bShedUnloaded && g.m_aEntries.IsEmpty();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The flagged default was shed and nothing surviving is flagged: the first row takes the flag.
+	//! Without this a group that allows None would answer None by default - a rifle slot arriving
+	//! empty because the author's first choice is not loaded - and a chamber would lose its
+	//! standing round. An override flagging a default later still wins; it runs after this.
+	protected static void InheritShedDefault(notnull RK29_ResolvedGroup g)
+	{
+		foreach (RK29_ResolvedEntry flagged : g.m_aEntries)
+		{
+			if (flagged && flagged.m_bDefault)
+				return;
+		}
+		foreach (RK29_ResolvedEntry first : g.m_aEntries)
+		{
+			if (first)
+			{
+				first.m_bDefault = true;
+				return;
+			}
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! One group per worn slot: a later clothing group on the same slot replaces the earlier one.
 	//! Kit-level groups are collected in authored order and weapon-owned groups after all of them,
 	//! so a kit's own hat beats the shared hat it was written after - this is the only override
@@ -149,9 +263,15 @@ class RK29_KitResolve
 		if (FindGroup(outGroups, def.m_sId))
 			return;
 
+		// resolved before the eviction: a kit's own hat group whose every helmet is missing this
+		// session must leave the shared hat it was written to replace in place
+		RK29_ResolvedGroup g = ResolveGroup(def, "", factionKey, setup);
+		if (IsWhollyShed(g))
+			return;
+
 		EvictSameSlot(outGroups, def);
 
-		outGroups.Insert(ResolveGroup(def, "", factionKey, setup));
+		outGroups.Insert(g);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -331,6 +451,8 @@ class RK29_KitResolve
 			return;
 
 		RK29_ResolvedGroup ammoGroup = ResolveGroup(ammoDef, def.m_sId, factionKey, setup);
+		if (IsWhollyShed(ammoGroup))
+			return;
 		if (ammoGroup.m_sId == "")
 		{
 			ammoGroup.m_sId = AmmoIdOf(def.m_sId);
@@ -387,6 +509,8 @@ class RK29_KitResolve
 			if (IsParked(gdef))
 				continue;
 			RK29_ResolvedGroup weaponGroup = ResolveGroup(gdef, def.m_sId, factionKey, setup);
+			if (IsWhollyShed(weaponGroup))
+				continue;
 
 			// what makes broad group refs safe to author: an M60 given the rifle optics group
 			// simply shows no optic section
@@ -407,10 +531,11 @@ class RK29_KitResolve
 	{
 		ApplyOverrides(comp, setup, outGroups);
 		DropZeroCeilingEntries(outGroups);
+		SettleShedFloors(outGroups);
 		EnforceAttachmentLegality(outGroups, picks, setup, factionKey);
 		EnforceGarmentSlots(outGroups, picks, setup, factionKey);
 		EnforceExclusions(outGroups, picks, comp, false);
-		OfferLoadedSelectors(outGroups);
+		OfferLoadedSelectors(outGroups, setup);
 		DropEmptyGroups(outGroups);
 		SortOfferByOrder(outGroups);
 	}
@@ -826,7 +951,8 @@ class RK29_KitResolve
 	//!
 	//! Only a weapon-owned group can earn one: DeriveGroupLoadedSeat leaves a kit-level group at NONE
 	//! (nothing to chamber into), and an EXCLUSIVE group states no total for a seated round to come
-	//! out of - which is also what keeps a weapon's attachment points out.
+	//! out of - which is also what keeps a weapon's attachment points out. Nor does a chamber its
+	//! gun's loader takes over (RK29_WeaponLoader.TakesOver).
 	//!
 	//! Directly after its totals group, not appended: the pair shares an m_iOrder, so their array
 	//! order is what the stable SortOfferByOrder preserves, and Apply emits in that same order.
@@ -836,13 +962,18 @@ class RK29_KitResolve
 	//! the first one earned, so three pools share one loaded mark, one seat order and one
 	//! deduction. The selector keeps the first group's id and place; the lint holds every pool a
 	//! gun owns to one entry-id space, which is what lets a row be found by id alone.
-	protected static void OfferLoadedSelectors(notnull array<ref RK29_ResolvedGroup> groups)
+	protected static void OfferLoadedSelectors(notnull array<ref RK29_ResolvedGroup> groups,
+		notnull RK29_KitSetup setup)
 	{
 		for (int i = 0; i < groups.Count(); i++)
 		{
 			RK29_ResolvedGroup g = groups[i];
 			if (!g || g.m_bLoaded || g.m_eLoadedSeat == RK29_ELoadedSeat.NONE
 				|| g.m_eKind == RK29_EChoiceKind.EXCLUSIVE)
+				continue;
+
+			RK29_WeaponLoader loader = LoaderOf(setup, g.m_sOwnerWeapon);
+			if (loader && loader.TakesOver(g.m_eLoadedSeat))
 				continue;
 
 			RK29_ResolvedGroup shared = FindLoadedSelector(groups, g.m_sOwnerWeapon, g.m_eLoadedSeat);
@@ -972,7 +1103,8 @@ class RK29_KitResolve
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! Null when the offer carries no selector for this group - its counts are then plain spares.
+	//! Null when the offer carries no selector for this group - its counts are then plain spares,
+	//! or, where the gun's loader takes over the chamber, totals that loader fills the gun from.
 	//! By chamber, not by name: the selector over a gun's muzzle is shared by every counted group
 	//! feeding it, and only the first of them gave it its id.
 	static RK29_ResolvedGroup LoadedSiblingOf(notnull array<ref RK29_ResolvedGroup> groups, notnull RK29_ResolvedGroup g)
@@ -995,6 +1127,50 @@ class RK29_KitResolve
 				return g;
 		}
 		return null;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The gun's own loader, or null for the standard loading steps (and for an ownerless group).
+	protected static RK29_WeaponLoader LoaderOf(notnull RK29_KitSetup setup, string weaponId)
+	{
+		RK29_WeaponDef def = setup.FindWeaponDef(weaponId);
+		if (!def)
+			return null;
+		return def.m_Loader;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! One loader order per chamber: a second pool feeding it would load it twice, the last Seat winning.
+	protected static bool HasLoaderOrder(notnull map<int, ref array<ref RK29_LoadedPick>> loadedMags,
+		int slot, bool underbarrel)
+	{
+		array<ref RK29_LoadedPick> forSlot = loadedMags.Get(slot);
+		if (!forSlot)
+			return false;
+		foreach (RK29_LoadedPick pick : forSlot)
+		{
+			if (pick && pick.m_Loader && pick.m_bUnderbarrel == underbarrel)
+				return true;
+		}
+		return false;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected static void AddLoaderOrder(notnull map<int, ref array<ref RK29_LoadedPick>> loadedMags,
+		int slot, notnull RK29_WeaponLoader loader, int rounds, bool underbarrel)
+	{
+		RK29_LoadedPick order = new RK29_LoadedPick();
+		order.m_Loader = loader;
+		order.m_iRounds = rounds;
+		order.m_bUnderbarrel = underbarrel;
+
+		array<ref RK29_LoadedPick> forSlot = loadedMags.Get(slot);
+		if (!forSlot)
+		{
+			forSlot = {};
+			loadedMags.Set(slot, forSlot);
+		}
+		forSlot.Insert(order);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -1049,6 +1225,8 @@ class RK29_KitResolve
 	{
 		s_aComplained.Clear();
 		s_mSlotTypeCache.Clear();
+		s_mExpandedWires.Clear();
+		s_mStandardWires.Clear();
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -1063,8 +1241,9 @@ class RK29_KitResolve
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! Catalog group -> runtime view: entries copied, so the numbers become adjustable. Wrong-faction
-	//! and parked entries never make the copy, so nothing downstream can know they were authored.
+	//! Catalog group -> runtime view: entries copied, so the numbers become adjustable. Wrong-faction,
+	//! parked and unloaded entries never make the copy, so nothing downstream can know they were
+	//! authored.
 	protected static RK29_ResolvedGroup ResolveGroup(notnull RK29_ChoiceGroup def, string ownerWeapon,
 		string factionKey, notnull RK29_KitSetup setup)
 	{
@@ -1078,6 +1257,7 @@ class RK29_KitResolve
 
 		CopyGroupShape(def, g);
 
+		bool shedDefault = false;
 		if (def.m_aEntries)
 		{
 			foreach (RK29_ChoiceEntryBase e : def.m_aEntries)
@@ -1094,14 +1274,27 @@ class RK29_KitResolve
 				string ownId = EntryIdOf(e);
 				if (ownId != "" && g.FindEntry(ownId))
 					continue;
+				// after the twin test: a twin was never going to be offered, so it sheds nothing
+				if (IsEntryUnloaded(e, ownerWeapon, factionKey, setup))
+				{
+					g.m_bShedUnloaded = true;
+					if (e.m_bDefault)
+						shedDefault = true;
+					continue;
+				}
 				g.m_aEntries.Insert(ResolveEntry(e));
 			}
 		}
 
-		MergeIncludedGroups(def, g, factionKey, setup);
+		if (MergeIncludedGroups(def, g, factionKey, setup))
+			shedDefault = true;
 
 		// entries are final here, and this is the one place their order is decided
 		SortEntriesByOrder(g);
+
+		// after the sort, so the flag lands on the row the player reads first
+		if (shedDefault)
+			InheritShedDefault(g);
 
 		// last: the seat is read off the entries the includes have only just finished contributing
 		DeriveSeatTypes(g, setup);
@@ -1173,12 +1366,14 @@ class RK29_KitResolve
 	//------------------------------------------------------------------------------------------------
 	//! Included catalog groups contribute their entries after this group's own. First duplicate id
 	//! wins; the first default flag in merged order is the default. one level only - an include that
-	//! itself includes is skipped with a complaint rather than recursed.
-	protected static void MergeIncludedGroups(notnull RK29_ChoiceGroup def,
+	//! itself includes is skipped with a complaint rather than recursed. True when an entry flagged
+	//! as the default was shed as unloaded - see ResolveGroup.
+	protected static bool MergeIncludedGroups(notnull RK29_ChoiceGroup def,
 		notnull RK29_ResolvedGroup g, string factionKey, notnull RK29_KitSetup setup)
 	{
+		bool shedDefault = false;
 		if (!def.m_aIncludeGroups)
-			return;
+			return shedDefault;
 
 		foreach (string includeId : def.m_aIncludeGroups)
 		{
@@ -1214,10 +1409,18 @@ class RK29_KitResolve
 				RK29_ResolvedEntry merged = ResolveEntry(incEntry);
 				if (g.FindEntry(merged.m_sId))
 					continue;
+				if (IsEntryUnloaded(incEntry, g.m_sOwnerWeapon, factionKey, setup))
+				{
+					g.m_bShedUnloaded = true;
+					if (incEntry.m_bDefault)
+						shedDefault = true;
+					continue;
+				}
 				merged.m_sFromGroup = inc.m_sId;
 				g.m_aEntries.Insert(merged);
 			}
 		}
+		return shedDefault;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -1470,6 +1673,29 @@ class RK29_KitResolve
 				if (e && e.m_iMax == 0)
 					g.m_aEntries.RemoveOrdered(i);
 			}
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A BUDGETED floor is authored against every row the group holds, and the authored defaults
+	//! must reach it or every fresh kit is refused (the lint holds the authoring to that). Rows shed
+	//! as unloaded take their share of the defaults with them, so the floor comes down to what the
+	//! surviving defaults spend - never further, and only on a group that shed something: a floor
+	//! the full authoring cannot reach is the lint's to report, not this pass's to hide. After the
+	//! overrides, whose budget adjusts would otherwise put it back; before the exclusions, so a
+	//! ruling blocking a row cannot lower it.
+	protected static void SettleShedFloors(notnull array<ref RK29_ResolvedGroup> groups)
+	{
+		foreach (RK29_ResolvedGroup g : groups)
+		{
+			if (!g || !g.m_bShedUnloaded || g.m_eKind != RK29_EChoiceKind.BUDGETED)
+				continue;
+			if (g.m_iBudgetMin <= 0)
+				continue;
+
+			int standard = SpendOf(g, null);
+			if (standard < g.m_iBudgetMin)
+				g.m_iBudgetMin = standard;
 		}
 	}
 
@@ -2068,6 +2294,315 @@ class RK29_KitResolve
 				LogLevel.WARNING);
 	}
 
+	//------------------------------------------------------------------------------------------------
+	//! Would this wire pass ParsePicks' door? Over either cap the server refuses the whole list and
+	//! issues every default without a word, so Save and Apply ask this first and refuse loudly.
+	static bool WireFits(string wire)
+	{
+		if (wire.Length() > WIRE_MAX_CHARS)
+			return false;
+
+		array<string> parts = {};
+		wire.Split(";", parts, true);
+		return parts.Count() <= WIRE_MAX_PICKS;
+	}
+
+	//============================================================================================
+	// Saved kits
+	//============================================================================================
+
+	//------------------------------------------------------------------------------------------------
+	//! The full answer these picks give: one explicit pick per group of the offer, each exactly what
+	//! the issue path reads for that group, so a moved default can never reach a kit saved from it.
+	//! offer must be the one BuildOffer made from these same picks. Groups not in the offer (the other
+	//! rifle's ammo the menu keeps inert) are not emitted.
+	//!
+	//! Explicit == absent rests on the three presence-sensitive reads and nothing else:
+	//! ExclusiveAnswer's bare test, SeatedLoadedEntry's empty flag and HasExplicitBarePick. A new
+	//! reader of FindPick/HasExplicitBarePick that treats a pick differently from its absence breaks
+	//! every saved kit silently - add its branch here first.
+	//!
+	//! Attachment groups are the one place explicit and absent differ: no pick says NOTHING (the gun
+	//! keeps what it has), "g=" EMPTIES THE SEAT (AttachmentOrderFor). An unanswered attachment group
+	//! with no default is therefore left unwritten, never written bare, or it would strip sights.
+	static void ExpandPicks(notnull array<ref RK29_ResolvedGroup> offer, array<ref RK29_ChoicePick> picks,
+		notnull array<ref RK29_ChoicePick> outFull)
+	{
+		outFull.Clear();
+
+		// "group" for one-answer groups, "group|entry" for counted rows: a class carrying two grenade
+		// launchers offers ugl_grenades twice, and both copies read the same picks
+		array<string> emitted = {};
+
+		foreach (RK29_ResolvedGroup g : offer)
+		{
+			if (!g)
+				continue;
+
+			bool counted = g.m_eKind == RK29_EChoiceKind.COUNTED || g.m_eKind == RK29_EChoiceKind.BUDGETED;
+			if (counted && !g.m_bLoaded && !g.IsWeaponGroup() && !g.IsAttachmentGroup())
+			{
+				if (g.m_eGroupType != RK29_EGroupType.ITEM)
+				{
+					ComplainUnpinnable(g);
+					continue;
+				}
+
+				array<int> counts = {};
+				int overspend;
+				ResolveCounts(g, picks, counts, overspend);
+				foreach (int i, RK29_ResolvedEntry row : g.m_aEntries)
+				{
+					if (row && !emitted.Contains(g.m_sId + "|" + row.m_sId))
+					{
+						emitted.Insert(g.m_sId + "|" + row.m_sId);
+						AddPick(outFull, g.m_sId, row.m_sId, counts[i]);
+					}
+				}
+				continue;
+			}
+
+			if (emitted.Contains(g.m_sId))
+				continue;
+			emitted.Insert(g.m_sId);
+
+			if (g.m_bLoaded)
+			{
+				RK29_ResolvedEntry mark = PickedEntry(g, picks);
+				if (!mark)
+					continue;
+
+				// the empty flag travels only on the row it was put on - SeatedLoadedEntry's own test
+				int flag = 1;
+				RK29_ChoicePick held = FindPick(picks, g.m_sId);
+				if (held && held.m_sEntry == mark.m_sId && held.m_iCount == LOADED_PICK_EMPTY)
+					flag = LOADED_PICK_EMPTY;
+
+				AddPick(outFull, g.m_sId, mark.m_sId, flag);
+				continue;
+			}
+
+			if (g.IsWeaponGroup())
+			{
+				AddAnswer(outFull, g, PickedWeaponEntry(g, picks));
+				continue;
+			}
+
+			if (g.IsAttachmentGroup())
+			{
+				if (HasExplicitBarePick(picks, g.m_sId))
+				{
+					AddPick(outFull, g.m_sId, "", 1);
+					continue;
+				}
+
+				RK29_ResolvedEntry chosen = PickedEntry(g, picks);
+				if (chosen && chosen.m_bBlocked)
+					chosen = g.DefaultEntry();
+				if (chosen && !chosen.m_bBlocked)
+					AddPick(outFull, g.m_sId, chosen.m_sId, 1);
+				continue;
+			}
+
+			if (g.m_eKind == RK29_EChoiceKind.EXCLUSIVE && (g.m_eGroupType == RK29_EGroupType.ITEM
+				|| g.IsClothingGroup() || g.IsGarmentAttachmentGroup()))
+			{
+				AddAnswer(outFull, g, ExclusiveAnswer(g, picks));
+				continue;
+			}
+
+			ComplainUnpinnable(g);
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A group type or kind ExpandPicks has no branch for is left out of every saved kit, so its
+	//! default moving would reach them unannounced. Never skipped silently: types do get added
+	//! (GARMENT_ATTACHMENT arrived with NVG).
+	protected static void ComplainUnpinnable(notnull RK29_ResolvedGroup g)
+	{
+		ComplainOnce(string.Format("[RK29] saved kits cannot pin group '%1' (type %2, kind %3) - add"
+			+ " its branch to RK29_KitResolve.ExpandPicks", g.m_sId,
+			typename.EnumToString(RK29_EGroupType, g.m_eGroupType),
+			typename.EnumToString(RK29_EChoiceKind, g.m_eKind)), LogLevel.ERROR);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A one-answer group's answer, with None written bare only where None is an answer the group
+	//! allows - elsewhere a null answer means every row is blocked, and bare would not say that.
+	protected static void AddAnswer(notnull array<ref RK29_ChoicePick> outFull,
+		notnull RK29_ResolvedGroup g, RK29_ResolvedEntry answer)
+	{
+		if (answer)
+			AddPick(outFull, g.m_sId, answer.m_sId, 1);
+		else if (g.NoneAllowed())
+			AddPick(outFull, g.m_sId, "", 1);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected static void AddPick(notnull array<ref RK29_ChoicePick> outFull, string group, string entry,
+		int count)
+	{
+		RK29_ChoicePick pick = new RK29_ChoicePick();
+		pick.m_sGroup = group;
+		pick.m_sEntry = entry;
+		pick.m_iCount = count;
+		outFull.Insert(pick);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A wire re-expanded under today's config: its own offer, its own answers, encoded. What a saved
+	//! kit loads as - equal to the stored wire exactly when the kit is unchanged. "" with no class or
+	//! setup, which no caller may read as the defaults.
+	static string ExpandedWire(RK29_ClassSetup cls, RK29_KitSetup setup, string wire)
+	{
+		if (!cls || !setup)
+			return "";
+
+		array<ref RK29_ChoicePick> picks = {};
+		ParsePicks(wire, picks);
+
+		array<ref RK29_ResolvedGroup> offer = {};
+		BuildOffer(cls, setup, picks, offer);
+
+		array<ref RK29_ChoicePick> full = {};
+		ExpandPicks(offer, picks, full);
+		return EncodePicks(full);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! ExpandedWire, cached per class and wire for the session. "" is never cached: it is the answer
+	//! with no class or setup, and a later call may have both.
+	static string CachedExpandedWire(RK29_ClassSetup cls, RK29_KitSetup setup, string wire)
+	{
+		if (!cls)
+			return "";
+
+		string key = cls.m_sKitName + "|" + wire;
+		string known;
+		if (s_mExpandedWires.Find(key, known))
+			return known;
+
+		string expanded = ExpandedWire(cls, setup, wire);
+		if (expanded != "")
+			s_mExpandedWires.Set(key, expanded);
+		return expanded;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The class at its authored defaults, as a full list: what the Standard row stands for, and what
+	//! an apply of it sends. The empty list is no longer that - every apply sends a full list.
+	static string StandardWire(RK29_ClassSetup cls, RK29_KitSetup setup)
+	{
+		if (!cls)
+			return "";
+
+		string known;
+		if (s_mStandardWires.Find(cls.m_sKitName, known))
+			return known;
+
+		string standard = ExpandedWire(cls, setup, "");
+		if (standard != "")
+			s_mStandardWires.Set(cls.m_sKitName, standard);
+		return standard;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! How many picks of a saved wire today's config would answer differently: the saved list against
+	//! its own re-expansion. 0 is a kit that loads exactly as saved; -1 is no answer (no class or
+	//! setup), which callers must not read as either.
+	//!
+	//! outChanged gets the offer groups involved, once per id; outGone the number of distinct groups
+	//! the offer no longer has. Pool minimums are deliberately not a term: Save does not check them,
+	//! so a work-in-progress kit would read outdated the moment it was saved.
+	static int ChangedCount(RK29_ClassSetup cls, RK29_KitSetup setup, string savedWire,
+		notnull array<ref RK29_ResolvedGroup> outChanged, out int outGone)
+	{
+		outChanged.Clear();
+		outGone = 0;
+
+		if (!cls || !setup)
+			return -1;
+
+		array<ref RK29_ChoicePick> saved = {};
+		ParsePicks(savedWire, saved);
+
+		array<ref RK29_ResolvedGroup> offer = {};
+		BuildOffer(cls, setup, saved, offer);
+
+		array<ref RK29_ChoicePick> expanded = {};
+		ExpandPicks(offer, saved, expanded);
+
+		array<string> savedKeys = {};
+		array<string> savedGroups = {};
+		ComparisonKeys(offer, saved, savedKeys, savedGroups);
+
+		array<string> expandedKeys = {};
+		array<string> expandedGroups = {};
+		ComparisonKeys(offer, expanded, expandedKeys, expandedGroups);
+
+		int changed = 0;
+		array<string> involved = {};
+		foreach (int i, string key : savedKeys)
+		{
+			if (expandedKeys.Contains(key))
+				continue;
+			changed++;
+			if (!involved.Contains(savedGroups[i]))
+				involved.Insert(savedGroups[i]);
+		}
+		foreach (int j, string added : expandedKeys)
+		{
+			if (savedKeys.Contains(added))
+				continue;
+			changed++;
+			if (!involved.Contains(expandedGroups[j]))
+				involved.Insert(expandedGroups[j]);
+		}
+
+		foreach (string groupId : involved)
+		{
+			RK29_ResolvedGroup g = FindGroup(offer, groupId);
+			if (g)
+				outChanged.Insert(g);
+			else
+				outGone++;
+		}
+
+		return changed;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! One "group=entry:count" key per pick that issues something, deduplicated, with the group each
+	//! key came from index-aligned. A zero count issues nothing. A bare pick of an offered group that
+	//! is not an attachment issues nothing either - kept, a None-default slot added to the config would
+	//! turn every kit outdated. A bare attachment pick empties a seat, and a bare pick of a group the
+	//! offer lost is the change itself, so both stay.
+	protected static void ComparisonKeys(notnull array<ref RK29_ResolvedGroup> offer,
+		notnull array<ref RK29_ChoicePick> picks, notnull array<string> outKeys,
+		notnull array<string> outGroups)
+	{
+		foreach (RK29_ChoicePick pick : picks)
+		{
+			if (!pick || pick.m_iCount == 0)
+				continue;
+
+			if (pick.m_sEntry == "")
+			{
+				RK29_ResolvedGroup g = FindGroup(offer, pick.m_sGroup);
+				if (g && !g.IsAttachmentGroup())
+					continue;
+			}
+
+			string key = pick.m_sGroup + "=" + pick.m_sEntry + ":" + pick.m_iCount.ToString();
+			if (outKeys.Contains(key))
+				continue;
+
+			outKeys.Insert(key);
+			outGroups.Insert(pick.m_sGroup);
+		}
+	}
+
 	//============================================================================================
 	// Apply
 	//============================================================================================
@@ -2147,10 +2682,10 @@ class RK29_KitResolve
 					StowUnfitted(kit, g, setup, ownerPrefab);
 				continue;
 			}
-			ApplyItemGroup(kit, g, groups, picks, setup, ownerPrefab);
+			ApplyItemGroup(kit, g, groups, picks, setup, ownerPrefab, weaponSlots, outLoadedMags);
 		}
 
-		ClearUnfedMuzzles(groups, weaponPrefabs, weaponSlots, outLoadedMags);
+		ClearUnfedMuzzles(groups, weaponPrefabs, weaponSlots, setup, outLoadedMags);
 
 		// Nothing is deducted from the kit's cargo for a mounted attachment: no kit authors an
 		// attachment as cargo, so the attachment group is the only source of one.
@@ -2229,10 +2764,11 @@ class RK29_KitResolve
 	//! muzzle and nothing else, so only a pool feeding that muzzle can stand in for it. A gun with
 	//! no magazine well at all is never cleared - the M72's rocket is not a magazine in a well
 	//! (SCR_MuzzleInMagComponent) and must not be touched; a prefab that cannot be read is NOT
-	//! taken as well-less, the guarantee holds and the clear runs.
+	//! taken as well-less, the guarantee holds and the clear runs. A gun whose loader takes over its
+	//! chamber is emptied by that loader (a zero-round order): a plain clear deletes what it loads into.
 	protected static void ClearUnfedMuzzles(notnull array<ref RK29_ResolvedGroup> groups,
 		notnull map<string, ResourceName> weaponPrefabs, notnull map<string, int> weaponSlots,
-		notnull map<int, ref array<ref RK29_LoadedPick>> outLoadedMags)
+		notnull RK29_KitSetup setup, notnull map<int, ref array<ref RK29_LoadedPick>> outLoadedMags)
 	{
 		array<int> coveredSlots = {};
 		foreach (RK29_ResolvedGroup g : groups)
@@ -2262,6 +2798,14 @@ class RK29_KitResolve
 			ResourceName prefab;
 			if (weaponPrefabs.Find(weaponId, prefab) && RK29_KitCompose.PresentsNoWell(prefab))
 				continue;
+
+			RK29_WeaponLoader loader = LoaderOf(setup, weaponId);
+			if (loader && loader.TakesOver(RK29_ELoadedSeat.OWN_MUZZLE))
+			{
+				if (!HasLoaderOrder(outLoadedMags, slot, false))
+					AddLoaderOrder(outLoadedMags, slot, loader, 0, false);
+				continue;
+			}
 
 			// an empty prefab and the gun's own muzzle: both fields already are that
 			RK29_LoadedPick clear = new RK29_LoadedPick();
@@ -2663,12 +3207,13 @@ class RK29_KitResolve
 	//! so every count resolves to zero).
 	protected static void ApplyItemGroup(notnull RK29_KitStruct kit, notnull RK29_ResolvedGroup g,
 		notnull array<ref RK29_ResolvedGroup> groups, array<ref RK29_ChoicePick> picks,
-		notnull RK29_KitSetup setup, ResourceName ownerPrefab)
+		notnull RK29_KitSetup setup, ResourceName ownerPrefab,
+		notnull map<string, int> weaponSlots, notnull map<int, ref array<ref RK29_LoadedPick>> outLoadedMags)
 	{
 		if (g.m_eKind == RK29_EChoiceKind.EXCLUSIVE)
 			ApplyExclusiveItemGroup(kit, g, picks, setup, ownerPrefab);
 		else
-			ApplyCountedItemGroup(kit, g, groups, picks, setup, ownerPrefab);
+			ApplyCountedItemGroup(kit, g, groups, picks, setup, ownerPrefab, weaponSlots, outLoadedMags);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -2699,10 +3244,12 @@ class RK29_KitResolve
 	//------------------------------------------------------------------------------------------------
 	//! A COUNTED or BUDGETED group's per-entry counts, issued as batches. Takes the whole offer
 	//! because a group with a loaded-magazine sibling states totals: the seated magazine comes off
-	//! the cargo count here, when one is seated at all.
+	//! the cargo count here, when one is seated at all. A gun with its own loader takes its rounds
+	//! off the count here too, and its order joins outLoadedMags for its Seat to carry out.
 	protected static void ApplyCountedItemGroup(notnull RK29_KitStruct kit,
 		notnull RK29_ResolvedGroup g, notnull array<ref RK29_ResolvedGroup> groups,
-		array<ref RK29_ChoicePick> picks, notnull RK29_KitSetup setup, ResourceName ownerPrefab)
+		array<ref RK29_ChoicePick> picks, notnull RK29_KitSetup setup, ResourceName ownerPrefab,
+		notnull map<string, int> weaponSlots, notnull map<int, ref array<ref RK29_LoadedPick>> outLoadedMags)
 	{
 		array<int> counts = {};
 		int overspend;
@@ -2732,6 +3279,28 @@ class RK29_KitResolve
 						counts[seatedIdx] = counts[seatedIdx] - 1;
 					break;
 				}
+			}
+		}
+
+		RK29_WeaponLoader loader = LoaderOf(setup, g.m_sOwnerWeapon);
+		bool underbarrel = g.m_eLoadedSeat == RK29_ELoadedSeat.UNDERBARREL;
+		int loaderSlot;
+		if (loader && loader.TakesOver(g.m_eLoadedSeat) && weaponSlots.Find(g.m_sOwnerWeapon, loaderSlot)
+			&& !HasLoaderOrder(outLoadedMags, loaderSlot, underbarrel))
+		{
+			RK29_LoadContext ctx = new RK29_LoadContext();
+			ctx.m_Setup = setup;
+			ctx.m_sWeaponId = g.m_sOwnerWeapon;
+			ctx.m_sWeapon = ownerPrefab;
+			ctx.m_eSeat = g.m_eLoadedSeat;
+			ctx.m_Group = g;
+			ctx.m_aCounts = counts;
+			// the core does the arithmetic: a loader can only move rounds the player picked
+			if (loader.PlanLoad(ctx) && counts.IsIndexValid(ctx.m_iEntry))
+			{
+				int rounds = Math.ClampInt(ctx.m_iRounds, 0, counts[ctx.m_iEntry]);
+				counts[ctx.m_iEntry] = counts[ctx.m_iEntry] - rounds;
+				AddLoaderOrder(outLoadedMags, loaderSlot, loader, rounds, underbarrel);
 			}
 		}
 
