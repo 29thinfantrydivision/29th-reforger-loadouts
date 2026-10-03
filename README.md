@@ -21,9 +21,12 @@ carries.
 | `595F2BF2F44836FB` | RHS: Status Quo |
 | `1337C0DE5DABBEEF` | RHS: Status Quo — Content Pack 01 |
 | `BADC0DEDABBEDA5E` | RHS: Status Quo — Content Pack 02 |
+| `62A711001B8FDEEA` | Big Chungus Rifles |
 
 RHS is a hard dependency: the scripts mod and extend RHS classes, and the mod's own prefabs
-inherit from RHS prefabs. Nothing else is.
+inherit from RHS prefabs. Big Chungus Rifles is one because the mod overrides its M1 Garand
+anim graph (`Assets/Weapons/Rifles/workspaces/bc_m1_garand.agf`), and an override only wins when
+it loads after the file it replaces. Nothing else is.
 
 ## Content from other mods
 
