@@ -1,0 +1,18 @@
+### 29th-reforger-loadouts
+- **Folder:** `29th-reforger-loadouts`
+
+Test:
+- **Project ID:** `29th ID Loadouts Testing`
+- **GUID:** `69730206FA071FE2` 
+
+Production:
+- **Project ID:** `29th ID Loadouts`
+- **GUID:** `6A8369196925F3C7` 
+
+| Dependency | GUID |
+|---|---|
+| Arma Reforger (base game) | `58D0FB3206B6F859` |
+| RHS: Status Quo - Content Pack 01 | `1337C0DE5DABBEEF` |
+| RHS: Status Quo - Content Pack 02 | `BADC0DEDABBEDA5E` |
+| RHS: Status Quo | `595F2BF2F44836FB` |
+| ACE Medical Core | `60C4C12DAE90727B` |
