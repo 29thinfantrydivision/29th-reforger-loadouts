@@ -3,6 +3,11 @@ GenericEntity : "{F54F6C453A8CB478}Prefabs/Weapons/Core/MachineGun_Base.et" {
  components {
   WeaponComponent "{CFBAA4B706BA66E8}" {
    components {
+    AttachmentSlotComponent "{60FF5961466DAFF8}" {
+     AttachmentSlot RHS_SlidingInventoryStorageSlot optic {
+      Angles -0.09 0 0
+     }
+    }
     SightsComponent "{BB23A637957CFFF8}" {
      SightsPosition PointInfo "{BB23A63796688E69}" {
       Offset 0 0 0
