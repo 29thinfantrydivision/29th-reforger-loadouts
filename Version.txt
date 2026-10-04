@@ -15,4 +15,4 @@ Production:
 | RHS: Status Quo - Content Pack 01 | `1337C0DE5DABBEEF` |
 | RHS: Status Quo - Content Pack 02 | `BADC0DEDABBEDA5E` |
 | RHS: Status Quo | `595F2BF2F44836FB` |
-| ACE Medical Core | `60C4C12DAE90727B` |
+| Big Chungus Rifles | `62A711001B8FDEEA` |
