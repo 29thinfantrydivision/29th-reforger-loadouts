@@ -76,12 +76,13 @@ class RK29_KeybindPrefs : JsonApiStruct
 		{
 			foreach (EInputDeviceType device : devices)
 			{
-				if (binding.IsDefault(action, device))
+				string preset = PresetFor(action, device);
+				if (binding.IsDefault(action, device, preset))
 					continue;
 
 				string deviceName = DeviceName(device);
 				array<string> raw = {};
-				binding.GetBindings(action, raw, device, string.Empty, false);
+				binding.GetBindings(action, raw, device, preset, false);
 				if (raw.IsEmpty())
 				{
 					prefs.m_aRecords.Insert(action + "|" + deviceName + "|" + UNBOUND + "|");
@@ -90,7 +91,7 @@ class RK29_KeybindPrefs : JsonApiStruct
 
 				foreach (int i, string bind : raw)
 				{
-					string filter = binding.GetFilter(action, device, string.Empty, i);
+					string filter = binding.GetFilter(action, device, preset, i);
 					prefs.m_aRecords.Insert(action + "|" + deviceName + "|" + bind + "|" + filter);
 				}
 			}
@@ -134,7 +135,8 @@ class RK29_KeybindPrefs : JsonApiStruct
 		{
 			foreach (EInputDeviceType device : devices)
 			{
-				if (!binding.IsDefault(action, device))
+				string preset = PresetFor(action, device);
+				if (!binding.IsDefault(action, device, preset))
 					continue;
 
 				array<string> binds = {};
@@ -142,14 +144,14 @@ class RK29_KeybindPrefs : JsonApiStruct
 				if (!Collect(action, DeviceName(device), binds, filters))
 					continue;
 
-				binding.CreateUserBinding(action, device);
-				for (int i = binding.GetBindingsCount(action, device) - 1; i >= 0; i--)
-					binding.RemoveBinding(action, device, string.Empty, i);
+				binding.CreateUserBinding(action, device, preset);
+				for (int i = binding.GetBindingsCount(action, device, preset) - 1; i >= 0; i--)
+					binding.RemoveBinding(action, device, preset, i);
 
 				foreach (int bindIdx, string bind : binds)
 				{
 					if (bind != UNBOUND)
-						binding.AddBinding(action, string.Empty, bind, filters[bindIdx]);
+						binding.AddBinding(action, preset, bind, filters[bindIdx]);
 				}
 
 				changed = true;
@@ -190,6 +192,21 @@ class RK29_KeybindPrefs : JsonApiStruct
 		actions.Insert("RK29_DialogApply");
 		actions.Insert("RK29_StepFive");
 		actions.Insert("RK29_StepTen");
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Must match the FilterPreset in chimeraInputCommon.conf and m_sPreset in keyBindingMenu.conf:
+	//! the vanilla keybind rows capture under that preset, and an empty one addresses nothing.
+	protected static string PresetFor(string action, EInputDeviceType device)
+	{
+		string preset = "click";
+		if (action == "RK29_StepFive" || action == "RK29_StepTen")
+			preset = "hold";
+
+		if (device == EInputDeviceType.GAMEPAD)
+			return "gamepad:" + preset;
+
+		return preset;
 	}
 
 	//------------------------------------------------------------------------------------------------
