@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{94138D0CF32EDA56}Prefabs/Weapons/Magazines/Internal Mags (Do not use)/Internal_mag_double_barrel_610mm.et"
+ Configurations {
+  EntityTemplateResourceClass PC {
+  }
+  EntityTemplateResourceClass XBOX_ONE : PC {
+  }
+  EntityTemplateResourceClass XBOX_SERIES : PC {
+  }
+  EntityTemplateResourceClass PS4 : PC {
+  }
+  EntityTemplateResourceClass PS5 : PC {
+  }
+  EntityTemplateResourceClass HEADLESS : PC {
+  }
+ }
+}

@@ -1,0 +1,22 @@
+Projectile : "{67FED88E5085F63F}Prefabs/Weapons/Core/Ammo_Bullet_Base.et" {
+ ID "DA5C6308000CDEF2"
+ components {
+  TimerTriggerComponent "{6A90314B14519BBE}" {
+   PROJECTILE_EFFECTS {
+    SubmunitionEffect "{6A90314BE3B7A3C4}" {
+     Prefab "{8A45841AC9BA3AE6}Prefabs/Weapons/Ammo/Ammo_Buckshot_pellet.et"
+     Count 9
+     Dispersion 1.42
+    }
+   }
+   TIMER 0.05
+  }
+  ShellMoveComponent "{851AA4A2AE0A5691}" {
+   InitSpeed 400
+   Mass 0.0675
+   TimeToLive 5
+   TriggerWhenTimeout 1
+  }
+ }
+ CartridgeModel "{A78200189FD0D974}Assets/Weapons/Ammo/Bullets/12ga/12ga_buckshot_shell.xob"
+}
