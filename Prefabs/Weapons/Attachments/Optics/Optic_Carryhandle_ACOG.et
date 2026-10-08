@@ -1,0 +1,79 @@
+GenericEntity : "{966B4E5523D2F166}Prefabs/Weapons/Attachments/Optics/WeaponOptic_Base.et" {
+ ID "4BA426CBAED42A14"
+ components {
+  InventoryItemComponent "{52627A1F45CD4EB6}" {
+   Attributes SCR_ItemAttributeCollection "{52627A1EBB0698FD}" {
+    ItemDisplayName UIInfo "{5D0CC83435B5584E}" {
+     Name "Carryhandle ACOG"
+    }
+    ItemPhysAttributes ItemPhysicalAttributes "{5D0CC83435B55848}" {
+     Weight 0.335
+     ItemVolume 200
+     RestingUP Right
+    }
+    CustomAttributes {
+     WeaponAttachmentAttributes "{5284D858FFF9BE66}" {
+      AttachmentType AttachmentOpticsCarryHandle "{6A9150800EF32F64}" {
+      }
+     }
+     PreviewRenderAttributes "{52D69389645B4E4D}" {
+      CameraDistanceToItem 0.6
+     }
+    }
+   }
+  }
+  MeshObject "{5D0CC83435B55858}" {
+   Object "{2E925A2D4FF76A2C}Assets/Weapons/Attachments/Optics/ACOG.xob"
+  }
+  SCR_2DPIPSightsComponent "{5D0CC83435B55855}" {
+   SightsPosition PointInfo "{5D0CC83435B55853}" {
+    PivotID "eye"
+    Angles 0 0 -90
+   }
+   SightsRanges {
+    SightRangeInfo "{6A9150800EF32F6A}" {
+     Range -0.022 200
+    }
+   }
+   SightsFOVInfo SCR_SightsZoomFOVInfo "{6A9150800EF32F73}" {
+    m_fBaseZoom 4
+    m_fZoomMax 4
+    m_fInterpolationSpeed 50
+   }
+   SightsPointFront PointInfo "{6A9150800EF32F7D}" {
+    PivotID "root"
+    Offset 0 0.0306 -0.0391
+   }
+   SightsPointRear PointInfo "{6A9150800EF32F7F}" {
+    PivotID "root"
+    Offset 0 0.0346 0.0881
+   }
+   m_sReticleTexture "{80860D19EDECE837}UI/Textures/Sights/4x20/4x202048_UI.edds"
+   m_sReticleGlowTexture "{80860D19EDECE837}UI/Textures/Sights/4x20/4x202048_UI.edds"
+   m_vCameraAngles -0.13 0 0
+   m_rScopeHDRMatrial "{09B57B6EA6B5EE41}Assets/Weapons/Attachments/Optics/4x20/Data/Optic_4x20_HDR.emat"
+   m_fObjectiveFov 4
+   m_fReticleAngularSize 0.6
+   m_fReticlePortion 0.10791
+   m_fReticleBaseZoom 4
+   m_fMagnification 4
+   m_fScopeRadius 0.0139
+  }
+  ActionsManagerComponent "{5284E0EFF569AD07}" {
+   ActionContexts {
+    UserActionContext "{5284E0EFF4E818E9}" {
+     Position PointInfo "{5284E0EFC526E6F0}" {
+      Offset 0 0.0012 -0.0042
+     }
+    }
+   }
+   additionalActions {
+    SCR_AttachItemFromInventoryAction "{5D0CC83435B55B88}" {
+     ParentContextList {
+      "optic"
+     }
+    }
+   }
+  }
+ }
+}

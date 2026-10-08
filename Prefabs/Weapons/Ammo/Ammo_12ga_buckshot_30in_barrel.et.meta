@@ -1,5 +1,5 @@
 MetaFileClass {
- Name "{ECC3556D24A20789}Prefabs/Weapons/Magazines/Internal Mags (Do not use)/Internal_mag_double_barrel_internal_sawn.et"
+ Name "{60A76C59E3AA2B58}Prefabs/Weapons/Ammo/Ammo_12ga_buckshot_30in_barrel.et"
  Configurations {
   EntityTemplateResourceClass PC {
   }
