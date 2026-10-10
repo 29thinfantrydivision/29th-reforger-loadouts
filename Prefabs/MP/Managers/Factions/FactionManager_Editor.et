@@ -1,0 +1,9 @@
+SCR_FactionManager : "{A242612865F2A48E}Prefabs/MP/Managers/Factions/FactionManager_Base.et" {
+ ID "56B2B4776E6E4499"
+ Factions {
+  SCR_Faction "{AB29C0FFEE29F0A1}" : "{AB29C0FFEEB2FAC1}Configs/Factions/IRR.conf" {
+   m_bIsPlayable 0
+   m_sFactionBackground "{81BF3B1DCC106577}UI/Textures/DeployMenu/Loadout-BG/Loadout_BG_FIA.imageset"
+  }
+ }
+}

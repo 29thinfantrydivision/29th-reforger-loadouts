@@ -1,0 +1,17 @@
+GenericEntity : "{D0C72FAED16430BC}PrefabsEditable/Auto/Props/Military/Compositions/FIA/E_Antenna_01_FIA.et" {
+ ID "F0DBA538AC2A0552"
+ components {
+  SCR_EditableSystemComponent "{5D6477349440EEAD}" {
+   m_UIInfo SCR_EditableEntityUIInfo "{5298E609432D192D}" {
+    Name "Radio Antenna (Irregular)"
+    m_sFaction "IRR"
+    m_aAutoLabels {
+     FACTION_IRR THEME_MILITARY SIZE_M
+    }
+   }
+  }
+  SCR_FactionAffiliationComponent "{5CB6D5B3749D59C3}" {
+   "faction affiliation" "IRR"
+  }
+ }
+}
