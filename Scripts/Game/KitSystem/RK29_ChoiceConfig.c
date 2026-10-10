@@ -25,6 +25,10 @@ class RK29_ChoiceEntryTitle : BaseContainerCustomTitle
 	{
 		title = PayloadTitle(source);
 
+		bool donorOnly;
+		if (source.Get("m_bDonorOnly", donorOnly) && donorOnly)
+			title = "(donor) " + title;
+
 		// Get leaves the local alone when the conf never mentions the flag - default must be true
 		bool enabled = true;
 		if (source.Get("m_bEnabled", enabled) && !enabled)
@@ -86,6 +90,11 @@ class RK29_ChoiceEntryBase
 	// Dropped exactly where a wrong-faction entry is, before anything downstream can see it.
 	[Attribute("1", desc: "Offer this entry. Clear it to PARK the entry - it stays authored, with its numbers and its id, but resolves as if absent. For shelving content (a future weapon, an ammo type) without deleting the authoring", category: "29th")]
 	bool m_bEnabled;
+
+	// A mark and nothing more: no resolver, validator or apply path reads it, so anyone may still
+	// take the entry. Read off m_Def by RK29_MenuRowKit.IsDonorOnly.
+	[Attribute("0", desc: "Mark this entry Donor Only in the picker: a green bar at the right end of its row, and of the tile summarising it while it is the standing pick. DISPLAY ONLY - nothing stops a non-donor taking it; the unit polices that", category: "29th")]
+	bool m_bDonorOnly;
 }
 
 //------------------------------------------------------------------------------------------------

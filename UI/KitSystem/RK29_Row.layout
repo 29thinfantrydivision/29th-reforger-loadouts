@@ -324,6 +324,26 @@ SizeLayoutWidgetClass {
         }
        }
       }
+      SizeLayoutWidgetClass "{AB29C0FFEEB22D20}" {
+       Name "RowDonorBox"
+       Slot OverlayWidgetSlot "{AB29C0FFEEB22D21}" {
+        HorizontalAlign 2
+        VerticalAlign 3
+       }
+       "Is Visible" 0
+       AllowWidthOverride 1
+       WidthOverride 6
+       {
+        ImageWidgetClass "{AB29C0FFEEB22D22}" {
+         Name "RowDonorBar"
+         Slot AlignableSlot "{AB29C0FFEEB22D23}" {
+          HorizontalAlign 3
+          VerticalAlign 3
+         }
+         Color 0.263 0.761 0.365 1
+        }
+       }
+      }
      }
     }
    }

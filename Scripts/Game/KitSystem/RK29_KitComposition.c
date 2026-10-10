@@ -34,4 +34,7 @@ class RK29_KitComposition : RK29_ChoiceGroupSet
 
 	[Attribute(uiwidget: UIWidgets.ComboBox, desc: "Face paint patterns this kit lets the player choose, as a Face Paint row on the Appearance tab: None plus every pattern listed, None being the standing answer. Empty = None only. Whatever is answered is applied at kit apply, None washing any paint back to the plain face, so re-kitting to another class takes it off. A faction kit restating the list REPLACES it", enums: ParamEnumArray.FromEnum(RK29_EFacePaint), category: "29th")]
 	ref array<RK29_EFacePaint> m_aFacePaint;
+
+	[Attribute(uiwidget: UIWidgets.ComboBox, desc: "Which of the patterns in m_aFacePaint are marked Donor Only in the picker - the face paint rows are built from that list and have no entry to carry the flag themselves. DISPLAY ONLY, like the entry flag. A pattern named here and not offered above marks nothing. A faction kit restating the list REPLACES it", enums: ParamEnumArray.FromEnum(RK29_EFacePaint), category: "29th")]
+	ref array<RK29_EFacePaint> m_aDonorFacePaint;
 }
