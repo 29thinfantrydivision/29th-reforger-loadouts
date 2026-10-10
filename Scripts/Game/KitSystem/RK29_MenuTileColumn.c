@@ -179,8 +179,8 @@ class RK29_MenuTileColumn
 				continue;
 			}
 
-			// a garment group belongs to the other tab, never to both
-			if (g.IsClothingGroup())
+			// a garment group belongs to the other tab, never to both, and so does the face under them
+			if (g.IsClothingGroup() || g.IsFacePaintGroup())
 				continue;
 
 			// what seats on a garment is edited under that garment, on the other tab. A group notable
@@ -222,7 +222,40 @@ class RK29_MenuTileColumn
 			}
 
 			StampWornTile(slot, s_aWornCaptions[i], g);
+
+			// worn order: the face comes after what sits on the head
+			if (slot == "Hat")
+				StampFacePaintTile();
 		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The face paint row, on every class: one that is offered no pattern wears the padlock over
+	//! "None" exactly as a block-clothing slot wears it over its garment, so the row means the same
+	//! thing wherever it is read. No picture - a pattern is a material on the head, not a prefab.
+	protected void StampFacePaintTile()
+	{
+		RK29_ResolvedGroup g = RK29_KitResolve.FindGroup(m_Menu.Offer(),
+			RK29_KitResolve.FACE_PAINT_GROUP);
+		bool locked = !g || RK29_MenuRowKit.GroupFullyPinned(g);
+
+		RK29_MenuRowKit.StampHeader(m_wColTiles, "FACE PAINT", RK29_MenuRowKit.LockFlag(locked));
+
+		string label = "None";
+		if (g)
+			label = m_Menu.ExclusiveTileSummary(g);
+
+		Widget row = RK29_MenuRowKit.StampTile(m_wColTiles, label);
+		if (!row || locked)
+			return;
+
+		int index = m_aTileGroup.Count();
+		m_aTileGroup.Insert(g.m_sId);
+
+		m_Menu.SetPlateToggled(row, "RowButton", "RowBg", m_Menu.Detail().OpenGroup() == g.m_sId);
+		RK29_MenuRowKit.ShowMoreHint(row, RK29_MenuRowKit.SelectableCount(g) - 1);
+
+		m_Menu.AttachHandler(row, "RowButton", RK29_EMenuRowKind.TILE, index, m_aTileHandlers);
 	}
 
 	//------------------------------------------------------------------------------------------------

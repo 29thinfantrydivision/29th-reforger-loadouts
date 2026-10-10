@@ -33,6 +33,9 @@ class RK29_KitResolve
 	//! silent gear loss. Optional extras (the RPG's PG-7VL/VR rows) need this usable floor.
 	protected static const int COUNT_IMPLIED_FLOOR = 4;
 
+	//! The synthesized face paint group's id, which is also its spelling in saved kits.
+	static const string FACE_PAINT_GROUP = "face_paint";
+
 	//============================================================================================
 	// Offer
 	//============================================================================================
@@ -46,7 +49,8 @@ class RK29_KitResolve
 	//!   CollectKitLevelGroups -> CollectOverrideAdds -> ApplyOverrides -> DropZeroCeilingEntries
 	//!   -> EnforceExclusions (weapon targets only) -> PullWeaponOwnedGroups -> FinalisePasses
 	//!   (ApplyOverrides, DropZeroCeilingEntries, SettleShedFloors, EnforceAttachmentLegality,
-	//!   EnforceExclusions (the rest), OfferLoadedSelectors, DropEmptyGroups, SortOfferByOrder).
+	//!   EnforceExclusions (the rest), OfferLoadedSelectors, DropEmptyGroups, SortOfferByOrder)
+	//!   -> OfferFacePaint.
 	//!
 	//! Content from a mod this session does not run is not a pass: ResolveGroup never copies an
 	//! entry whose prefab does not load (IsEntryUnloaded), exactly as it never copies a parked one,
@@ -114,6 +118,99 @@ class RK29_KitResolve
 		PullWeaponOwnedGroups(cls, setup, subs, picks, factionKey, outGroups);
 
 		FinalisePasses(comp, setup, picks, factionKey, outGroups);
+
+		OfferFacePaint(cls, comp, outGroups);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Face paint as one EXCLUSIVE group, synthesized the way the loaded selectors are: nothing
+	//! authors it as a group, the kit's composition only lists patterns. None is always an answer
+	//! and the standing one, so a kit nobody touched washes the face. Not offered at all where it
+	//! lists none. After every pass on purpose: no override or exclusion can address it, and its
+	//! entries carry no item for a pass to weigh.
+	protected static void OfferFacePaint(notnull RK29_ClassSetup cls, RK29_KitComposition comp,
+		notnull array<ref RK29_ResolvedGroup> outGroups)
+	{
+		array<RK29_EFacePaint> patterns = {};
+		if (comp)
+			CollectFacePaint(comp.m_aFacePaint, cls.m_sKitName, patterns);
+		if (patterns.IsEmpty())
+			return;
+
+		RK29_ResolvedGroup g = new RK29_ResolvedGroup();
+		g.m_sId = FACE_PAINT_GROUP;
+		g.m_sDisplayName = "Face Paint";
+		g.m_eKind = RK29_EChoiceKind.EXCLUSIVE;
+		g.m_eGroupType = RK29_EGroupType.FACE_PAINT;
+		g.m_bAllowEmpty = true;
+
+		foreach (RK29_EFacePaint pattern : patterns)
+		{
+			int number = pattern;
+
+			// built here, so none of the attribute defaults a conf load would have set; only the
+			// three fields below are read off it
+			RK29_EntryFacePaint def = new RK29_EntryFacePaint();
+			def.m_sId = "pattern_" + number.ToString();
+			def.m_sDisplayName = "Pattern " + number.ToString();
+			def.m_ePattern = pattern;
+
+			RK29_ResolvedEntry e = new RK29_ResolvedEntry();
+			e.m_sId = def.m_sId;
+			e.m_Def = def;
+			g.m_aEntries.Insert(e);
+		}
+
+		outGroups.Insert(g);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The authored list into the patterns on offer, each once and in enum order whatever order it
+	//! states them in. NONE is the zero value, so an unfilled row reads as one and is a config
+	//! fault.
+	protected static void CollectFacePaint(array<RK29_EFacePaint> authored, string kitName,
+		notnull array<RK29_EFacePaint> outPatterns)
+	{
+		if (!authored)
+			return;
+
+		foreach (RK29_EFacePaint pattern : authored)
+		{
+			if (pattern == RK29_EFacePaint.NONE)
+			{
+				ComplainOnce(string.Format("[RK29] '%1' is offered an unset face paint row", kitName),
+					LogLevel.WARNING);
+				continue;
+			}
+			if (outPatterns.Contains(pattern))
+				continue;
+
+			int at = 0;
+			while (at < outPatterns.Count() && outPatterns[at] < pattern)
+				at++;
+
+			// InsertAt's contract wants an index below Count(), so the last one appends instead
+			if (at < outPatterns.Count())
+				outPatterns.InsertAt(pattern, at);
+			else
+				outPatterns.Insert(pattern);
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The pattern the face paint group answers with, NONE for the bare answer.
+	protected static RK29_EFacePaint FacePaintAnswer(notnull RK29_ResolvedGroup g,
+		array<ref RK29_ChoicePick> picks)
+	{
+		RK29_ResolvedEntry chosen = ExclusiveAnswer(g, picks);
+		if (!chosen)
+			return RK29_EFacePaint.NONE;
+
+		RK29_EntryFacePaint def = RK29_EntryFacePaint.Cast(chosen.m_Def);
+		if (!def)
+			return RK29_EFacePaint.NONE;
+
+		return def.m_ePattern;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -2405,7 +2502,7 @@ class RK29_KitResolve
 			}
 
 			if (g.m_eKind == RK29_EChoiceKind.EXCLUSIVE && (g.m_eGroupType == RK29_EGroupType.ITEM
-				|| g.IsClothingGroup() || g.IsGarmentAttachmentGroup()))
+				|| g.IsClothingGroup() || g.IsGarmentAttachmentGroup() || g.IsFacePaintGroup()))
 			{
 				AddAnswer(outFull, g, ExclusiveAnswer(g, picks));
 				continue;
@@ -2653,6 +2750,13 @@ class RK29_KitResolve
 			if (g.m_bLoaded)
 			{
 				ApplyLoadedGroup(kit, g, groups, picks, setup, ownerPrefab, weaponSlots, outLoadedMags);
+				continue;
+			}
+
+			// nothing issued: the answer rides the kit to RK29_KitApply.ApplyFacePaint
+			if (g.IsFacePaintGroup())
+			{
+				kit.m_eFacePaint = FacePaintAnswer(g, picks);
 				continue;
 			}
 

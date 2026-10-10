@@ -49,9 +49,9 @@ class RK29_KitStruct
 	//! drops one.
 	ref array<RK29_ETrait> m_aTraits = {};
 
-	//! Composition-owned like the traits: the patterns the face may be painted with at apply, empty
-	//! washes it.
-	ref array<RK29_EFacePaint> m_aFacePaint = {};
+	//! The face paint group's answer, written by RK29_KitResolve.Apply. NONE washes the face, and is
+	//! what a kit offering no pattern stays at.
+	RK29_EFacePaint m_eFacePaint;
 
 	//! Instanced at capture, shared read-only. Do not store the BaseContainer instead -
 	//! containers die with their resource even behind a held ref Resource.
@@ -65,15 +65,13 @@ class RK29_KitStruct
 		c.m_sFactionKey   = m_sFactionKey;
 		c.m_UIInfo        = m_UIInfo;
 		c.m_sPrimaryWeapon = m_sPrimaryWeapon;
+		c.m_eFacePaint    = m_eFacePaint;
 
 		foreach (string slot, ResourceName res : m_mClothing)
 			c.m_mClothing.Set(slot, res);
 
 		foreach (RK29_ETrait trait : m_aTraits)
 			c.m_aTraits.Insert(trait);
-
-		foreach (RK29_EFacePaint pattern : m_aFacePaint)
-			c.m_aFacePaint.Insert(pattern);
 
 		foreach (string eqSlot, ResourceName eqRes : m_mEquipment)
 			c.m_mEquipment.Set(eqSlot, eqRes);

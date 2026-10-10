@@ -9,6 +9,7 @@ enum RK29_EGroupType
 	ATTACHMENT = 2,
 	CLOTHING = 3,
 	GARMENT_ATTACHMENT = 4,
+	FACE_PAINT = 5,
 }
 
 //------------------------------------------------------------------------------------------------
@@ -131,6 +132,12 @@ class RK29_ResolvedGroup
 	bool IsGarmentAttachmentGroup()
 	{
 		return m_eGroupType == RK29_EGroupType.GARMENT_ATTACHMENT;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	bool IsFacePaintGroup()
+	{
+		return m_eGroupType == RK29_EGroupType.FACE_PAINT;
 	}
 
 	//------------------------------------------------------------------------------------------------

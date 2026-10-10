@@ -36,7 +36,7 @@ class RK29_MannequinDress
 			return;
 		}
 
-		RK29_KitApply.ApplyFacePaint(body, kit.m_aFacePaint, true);
+		RK29_KitApply.ApplyFacePaint(body, kit.m_eFacePaint, true);
 
 		IEntity primary = WeaponAt(body, 0);
 		if (primary)

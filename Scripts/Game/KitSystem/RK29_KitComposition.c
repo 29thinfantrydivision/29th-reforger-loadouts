@@ -32,6 +32,6 @@ class RK29_KitComposition : RK29_ChoiceGroupSet
 	[Attribute(uiwidget: UIWidgets.ComboBox, desc: "What this role is qualified at - a medic dresses wounds faster, a sapper builds faster. Declared on the shared role file so every faction's kits inherit it; a faction kit restating the list REPLACES it, and '+' appends. Applied to the body at kit apply, so re-kitting to another class drops them", enums: ParamEnumArray.FromEnum(RK29_ETrait), category: "29th")]
 	ref array<RK29_ETrait> m_aTraits;
 
-	[Attribute(uiwidget: UIWidgets.ComboBox, desc: "Face paint patterns this kit may wear, applied at kit apply: one at random when several are listed, and a face already wearing a listed pattern keeps it. Empty washes any face paint back to the plain face, so re-kitting to another class takes it off. Preview mannequins show the first listed. A faction kit restating the list REPLACES it", enums: ParamEnumArray.FromEnum(RK29_EFacePaint), category: "29th")]
+	[Attribute(uiwidget: UIWidgets.ComboBox, desc: "Face paint patterns this kit lets the player choose, as a Face Paint row on the Appearance tab: None plus every pattern listed, None being the standing answer. Empty = None only. Whatever is answered is applied at kit apply, None washing any paint back to the plain face, so re-kitting to another class takes it off. A faction kit restating the list REPLACES it", enums: ParamEnumArray.FromEnum(RK29_EFacePaint), category: "29th")]
 	ref array<RK29_EFacePaint> m_aFacePaint;
 }
