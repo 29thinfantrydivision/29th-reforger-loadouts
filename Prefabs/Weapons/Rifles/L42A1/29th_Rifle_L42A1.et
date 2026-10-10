@@ -1,0 +1,14 @@
+GenericEntity : "{775DFB7F4529A122}Prefabs/Weapons/Rifles/L42A1/Rifle_L42A1.et" {
+ ID "5260C45AAAA407F4"
+ components {
+  WeaponComponent "{CFBAA4B706BA66E8}" {
+   components {
+    AttachmentSlotComponent "{6156CB66A3B97AEB}" {
+     AttachmentSlot InventoryStorageSlot Scope {
+      Prefab ""
+     }
+    }
+   }
+  }
+ }
+}
