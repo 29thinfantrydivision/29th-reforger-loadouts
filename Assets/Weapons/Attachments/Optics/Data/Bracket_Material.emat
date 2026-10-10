@@ -1,0 +1,5 @@
+MatPBRBasic {
+ Emissive 0 0 0 1
+ BCRMap "{1B577E1B2C8FA994}Assets/Weapons/Attachments/Optics/Data/Bracket_Material_BaseColor_Combined.edds"
+ NMOMap "{7964840C4B0A03D0}Assets/Weapons/Attachments/Optics/Data/Bracket_Material_Normal.edds"
+}

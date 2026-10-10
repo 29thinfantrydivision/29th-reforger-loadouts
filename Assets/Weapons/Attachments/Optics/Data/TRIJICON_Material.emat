@@ -1,0 +1,5 @@
+MatPBRBasic {
+ Emissive 0 0 0 1
+ BCRMap "{C5E93BFA01599252}Assets/Weapons/Attachments/Optics/Data/TRIJICON_Material_BaseColor_Black.edds"
+ NMOMap "{0F1A4169D47E1FC9}Assets/Weapons/Attachments/Optics/Data/TRIJICON_Material_Normal.edds"
+}
