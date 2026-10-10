@@ -139,6 +139,8 @@ class RK29_MenuRowKit
 	//! mark that is not the chambered row, BLOCKED_DIM "not with that" on a ruled-out attachment.
 	static const float LOADED_DIM = 0.5;
 
+	protected static const string TIP_DONOR_ONLY = "Donor Only";
+
 	//! Vanilla's own ammo-type glyphs, off the imageset its inventory slots read
 	//! (UI/layouts/Menus/Inventory/InventoryAmmoType.layout stamps these very quads).
 	protected static const ResourceName AMMO_IMAGESET
@@ -725,6 +727,34 @@ class RK29_MenuRowKit
 
 		corner.SetText(ZoomTextOf(optic));
 		corner.SetVisible(true);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Whether an entry is authored Donor Only. Null is the None answer, which nobody has to pay for.
+	static bool IsDonorOnly(RK29_ResolvedEntry e)
+	{
+		return e && e.m_Def && e.m_Def.m_bDonorOnly;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The green bar at a row's right end, and the words it answers the cursor with. All three row
+	//! layouts author RowDonorBox hidden inside the right-hand padding of their line, so the bar
+	//! takes no width from anything. The tip hangs on the image: it is opaque, which is what lets it
+	//! raise an enter once it stops ignoring the cursor - the same move ShowExclusionWarning makes.
+	//! The colour is set here rather than trusted to the layout's authored one.
+	static void ShowDonorBar(notnull Widget row, notnull RK29_HoverTip tip,
+		notnull array<ref RK29_HoverTipHandler> store)
+	{
+		Widget box = row.FindAnyWidget("RowDonorBox");
+		ImageWidget bar = ImageWidget.Cast(row.FindAnyWidget("RowDonorBar"));
+		if (!box || !bar)
+			return;
+
+		bar.SetColor(UIColors.CONFIRM);
+		box.SetVisible(true);
+
+		bar.ClearFlags(WidgetFlags.IGNORE_CURSOR);
+		tip.AttachHoverTip(bar, TIP_DONOR_ONLY, store);
 	}
 
 	//------------------------------------------------------------------------------------------------

@@ -149,11 +149,13 @@ class RK29_KitResolve
 			int number = pattern;
 
 			// built here, so none of the attribute defaults a conf load would have set; only the
-			// three fields below are read off it
+			// four fields below are read off it
 			RK29_EntryFacePaint def = new RK29_EntryFacePaint();
 			def.m_sId = "pattern_" + number.ToString();
 			def.m_sDisplayName = "Pattern " + number.ToString();
 			def.m_ePattern = pattern;
+			if (comp.m_aDonorFacePaint)
+				def.m_bDonorOnly = comp.m_aDonorFacePaint.Contains(pattern);
 
 			RK29_ResolvedEntry e = new RK29_ResolvedEntry();
 			e.m_sId = def.m_sId;

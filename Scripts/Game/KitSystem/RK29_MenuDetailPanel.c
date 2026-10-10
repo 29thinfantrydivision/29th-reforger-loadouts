@@ -324,6 +324,12 @@ class RK29_MenuDetailPanel
 
 		int index = PushDetailRow(g.m_sId, "");
 
+		// the answer the label names, whichever caller wrote the label - except a seat the garment
+		// refuses, whose label names no answer at all
+		if (!RK29_MenuRowKit.BlockedByHost(g)
+			&& RK29_MenuRowKit.IsDonorOnly(RK29_KitResolve.PickedEntry(g, m_Menu.Picks())))
+			RK29_MenuRowKit.ShowDonorBar(row, m_Menu.HoverTip(), m_aDetailTipHandlers);
+
 		RK29_MenuRowKit.FillPreview(row, prefab);
 		RK29_MenuRowKit.ShowMoreHint(row, RK29_MenuRowKit.SelectableCount(g) - 1);
 
@@ -648,6 +654,10 @@ class RK29_MenuDetailPanel
 
 		RK29_MenuRowKit.FillPreview(row, m_Menu.EntryPreviewPrefab(e, g));
 
+		// before the blocked return: a greyed row is still a donor's row
+		if (RK29_MenuRowKit.IsDonorOnly(e))
+			RK29_MenuRowKit.ShowDonorBar(row, m_Menu.HoverTip(), m_aDetailTipHandlers);
+
 		// An attachment another of this kit's own picks rules out stays on screen - greyed, not
 		// clickable, carrying the reason on hover. Taking it out of the list answered a question the
 		// player never got to ask: the bayonet was simply gone, with nothing connecting that to the
@@ -714,6 +724,10 @@ class RK29_MenuDetailPanel
 
 		RK29_WidgetUtil.SetText(row, "RowName", m_Menu.EntryLabelIn(g, e));
 		StampCountRowPicture(row, g, e);
+
+		// before the blocked return: a greyed row is still a donor's row
+		if (RK29_MenuRowKit.IsDonorOnly(e))
+			RK29_MenuRowKit.ShowDonorBar(row, m_Menu.HoverTip(), m_aDetailTipHandlers);
 
 		// A COUNTED row can be ruled out too, and for a long time nothing said so: the flag was only ever
 		// read on the exclusive rows, so a blocked magazine or grenade greyed nowhere and was issued
