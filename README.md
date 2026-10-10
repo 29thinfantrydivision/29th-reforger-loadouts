@@ -10,8 +10,9 @@ carries.
 - **Kit menu keybind:** `F4` · **Apply kit:** `Space` (both rebindable, category *Kits - 29th ID*;
   rebinds are backed up to `$profile:RK29_Keybinds.json` and restored if a session without the
   mod wipes them from the engine's input settings)
-- **Factions:** US, USSR · **Classes:** 11 US (incl. Parade), 10 USSR
-- **Default kit** for a player who has not picked one: US *29th Parade*, USSR *Rifleman*
+- **Factions:** US, USSR, UK (British Forces), FIA, IRR (Irregular) · **Classes:** 11 US and 11 UK
+  (incl. Parade), 10 USSR, 10 FIA, 7 IRR (no Leadership, Crewman or Pilot)
+- **Default kit** for a player who has not picked one: US *29th Parade*, every other side *Rifleman*
 
 ## Dependencies
 
@@ -34,7 +35,8 @@ uniform. Nothing else is.
 ## Content from other mods
 
 The kit config may name prefabs from **any** mod, dependency or not — ACE Medical's epinephrine
-is one (`Catalogs/RK29_Aliases.conf`). Whatever does not load in a session is left out of every
+is one (`Catalogs/RK29_Aliases.conf`), and so are the Big Chungus SMGs, LMGs and Shotguns the
+weapon catalog names (Thompson, Carl Gustaf m/45, BAR, RPK, RPD, Ithaca 37). Whatever does not load in a session is left out of every
 kit as if it were parked: the row never appears, overrides and exclusions naming it do nothing,
 and a group left with nothing (a kit's own hat group whose every helmet is missing) is not
 offered and leaves the group it was written to replace in place. A default that is missing hands
@@ -59,10 +61,10 @@ running, so check that list after changing the config.
 Configs/
   KitSystem/
     RK29_KitSetup.conf        entry point - everything below is loaded from here
-    Rosters/                  RK29_Roster_US · RK29_Roster_USSR   per-faction class lists
+    Rosters/                  RK29_Roster_<US|USSR|UK|FIA|IRR>    per-faction class lists
     Catalogs/                 RK29_Aliases · RK29_Attachments · RK29_Choices · RK29_Magazines
                               RK29_Overrides · RK29_Weapons
-    Kits/                     Common/infantry -> Roles/<role> -> US|USSR/<role>   (inheritance chain)
+    Kits/                     Common/infantry -> Roles/<role> -> <FACTION>/<role>   (inheritance chain)
   Loadouts/GM29_Kits.conf     deploy-menu rows: one Current Kit row per side + the two TP bodies
   Groups/GM29_Groups.conf     squad presets (every squad offers every kit on its side; TP offers
                               the two BCT bodies)
@@ -83,7 +85,7 @@ Everything a kit wears or carries is a **choice group**, including fixed dress: 
 clothing group is a garment the player cannot change, and a kit's own group on a worn slot
 replaces the shared group on that slot. There are no fixed clothing or item lists.
 
-Only the two *Current Kit* rows go through the kit system. The *29th TP* rows are plain
+Only the *Current Kit* rows, one per side, go through the kit system. The *29th TP* rows are plain
 vanilla loadouts spawned from their body prefab and never appear in the kit menu.
 
 ## Saved kits
