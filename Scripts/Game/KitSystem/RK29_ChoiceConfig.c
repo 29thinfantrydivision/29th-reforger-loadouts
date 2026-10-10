@@ -139,6 +139,14 @@ class RK29_EntryAttachment : RK29_ChoiceEntryBase
 }
 
 //------------------------------------------------------------------------------------------------
+//! One face paint pattern as an answer. Never authored - no BaseContainerProps, so no Workbench
+//! list offers it: RK29_KitResolve.OfferFacePaint builds one per pattern the kit's composition lists.
+class RK29_EntryFacePaint : RK29_ChoiceEntryBase
+{
+	RK29_EFacePaint m_ePattern;
+}
+
+//------------------------------------------------------------------------------------------------
 //! Where the round a group seats goes. A property of the group, not of where the group was
 //! authored - deriving it from inline-vs-referenced made one authored count mean two things and
 //! forced ten weapon definitions to copy their ammo blocks.

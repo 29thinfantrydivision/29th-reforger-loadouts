@@ -1141,7 +1141,7 @@ class RK29_KitManager
 			if (spawnedKit && entity)
 			{
 				RK29_KitApply.ApplyTraits_S(entity, spawnedKit);
-				RK29_KitApply.ApplyFacePaint(entity, spawnedKit.m_aFacePaint, false);
+				RK29_KitApply.ApplyFacePaint(entity, spawnedKit.m_eFacePaint, false);
 			}
 		}
 

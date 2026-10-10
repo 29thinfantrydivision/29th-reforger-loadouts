@@ -458,7 +458,7 @@ class RK29_KitApply
 			return false;
 
 		ApplyTraits_S(character, kit);
-		ApplyFacePaint(character, kit.m_aFacePaint, false);
+		ApplyFacePaint(character, kit.m_eFacePaint, false);
 
 		Print(string.Format("[RK29] apply '%1' done", kit.m_sKitName), LogLevel.NORMAL);
 		return true;
@@ -598,14 +598,11 @@ class RK29_KitApply
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! The kit decides the face on every apply: an empty list washes any Headcamo head (what ACE
-	//! Facepaint swaps to) back to the plain face, otherwise a face not already wearing a listed
-	//! pattern is painted with one of them at random. Heads resolve by reverse lookup in the
-	//! faction's visual identities, so no script names the optional mod. `preview` is the
-	//! mannequins: a local body, the first listed pattern so it does not re-roll per dress, quiet,
-	//! no SetIdentity.
-	static void ApplyFacePaint(notnull IEntity character, notnull array<RK29_EFacePaint> patterns,
-		bool preview)
+	//! The kit decides the face on every apply: NONE washes any Headcamo head (what ACE Facepaint
+	//! swaps to) back to the plain face, a pattern paints a face not already wearing it. Heads
+	//! resolve by reverse lookup in the faction's visual identities, so no script names the optional
+	//! mod. `preview` is the mannequins: a local body, quiet, no SetIdentity.
+	static void ApplyFacePaint(notnull IEntity character, RK29_EFacePaint pattern, bool preview)
 	{
 		CharacterIdentityComponent identityComp = CharacterIdentityComponent.Cast(
 			character.FindComponent(CharacterIdentityComponent));
@@ -623,6 +620,7 @@ class RK29_KitApply
 			return;
 
 		ResourceName head = visual.GetHead();
+		string suffix = SuffixOf(pattern);
 		array<ref VisualIdentity> candidates = {};
 		factionIdentity.GetVisualIdentities(candidates);
 		foreach (VisualIdentity candidate : candidates)
@@ -633,43 +631,31 @@ class RK29_KitApply
 			if (!painted && candidate.GetHead() != head)
 				continue;
 
-			if (patterns.IsEmpty())
+			if (suffix.IsEmpty())
 			{
 				if (painted)
 					SetHead(identityComp, visual, candidate.GetHead(), "washed", preview);
 				return;
 			}
 
-			array<ResourceName> offered = {};
-			foreach (RK29_EFacePaint pattern : patterns)
+			foreach (ResourceName camo : camos)
 			{
-				string suffix = SuffixOf(pattern);
-				foreach (ResourceName camo : camos)
-				{
-					if (!suffix.IsEmpty() && camo.EndsWith(suffix))
-						offered.Insert(camo);
-				}
-			}
+				if (!camo.EndsWith(suffix))
+					continue;
 
-			if (offered.Contains(head))
-				return;
-
-			if (offered.IsEmpty())
-			{
-				if (!preview)
-					Print(string.Format("[RK29] face paint: %1 has none of the kit's patterns",
-						FilePath.StripPath(candidate.GetHead())), LogLevel.WARNING);
+				if (camo != head)
+					SetHead(identityComp, visual, camo, "applied", preview);
 				return;
 			}
 
-			ResourceName pick = offered[0];
 			if (!preview)
-				pick = offered[Math.RandomInt(0, offered.Count())];
-			SetHead(identityComp, visual, pick, "applied", preview);
+				Print(string.Format("[RK29] face paint: %1 has no %2 head",
+					FilePath.StripPath(candidate.GetHead()),
+					typename.EnumToString(RK29_EFacePaint, pattern)), LogLevel.WARNING);
 			return;
 		}
 
-		if (!patterns.IsEmpty() && !preview)
+		if (!suffix.IsEmpty() && !preview)
 			Print("[RK29] face paint: head is not in the faction's visual identities", LogLevel.WARNING);
 	}
 

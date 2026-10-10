@@ -1176,9 +1176,14 @@ class RK29_MenuDetailPanel
 		// closing it would take away the section the pick just changed. Swapping to the helmet that
 		// takes night vision has to leave that section standing - it is the whole point of the swap -
 		// and a pick inside the section is read on its own folded tile, the way a gun's is.
+		//
+		// Face paint closes like a bare garment, and needs it more: its rows carry no picture, so the
+		// soldier is the only place the answer can be seen.
 		RK29_ResolvedGroup picked = RK29_KitResolve.FindGroup(m_Menu.Offer(), groupId);
 		if (picked && (picked.IsClothingGroup() || picked.IsGarmentAttachmentGroup())
 			&& !RK29_MenuRowKit.SlotHostsAttachment(m_Menu.Offer(), GarmentSlotOf(picked)))
+			SetOpenGroup("");
+		else if (picked && picked.IsFacePaintGroup())
 			SetOpenGroup("");
 
 		m_Menu.AfterPickChanged();
