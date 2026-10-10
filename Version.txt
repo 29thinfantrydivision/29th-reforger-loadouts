@@ -16,3 +16,4 @@ Production:
 | RHS: Status Quo - Content Pack 02 | `BADC0DEDABBEDA5E` |
 | RHS: Status Quo | `595F2BF2F44836FB` |
 | Big Chungus Rifles | `62A711001B8FDEEA` |
+| British Forces | `5AE50EC5B8D6F4AE` |

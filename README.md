@@ -22,11 +22,14 @@ carries.
 | `1337C0DE5DABBEEF` | RHS: Status Quo — Content Pack 01 |
 | `BADC0DEDABBEDA5E` | RHS: Status Quo — Content Pack 02 |
 | `62A711001B8FDEEA` | Big Chungus Rifles |
+| `5AE50EC5B8D6F4AE` | British Forces |
 
 RHS is a hard dependency: the scripts mod and extend RHS classes, and the mod's own prefabs
 inherit from RHS prefabs. Big Chungus Rifles is one because the mod overrides its M1 Garand
 anim graph (`Assets/Weapons/Rifles/workspaces/bc_m1_garand.agf`), and an override only wins when
-it loads after the file it replaces. Nothing else is.
+it loads after the file it replaces. British Forces is one because the British body prefab
+(`29th_Character_UK_BaseLoadout.et`) inherits from its `Character_UK_Base.et` and wears its
+uniform. Nothing else is.
 
 ## Content from other mods
 
