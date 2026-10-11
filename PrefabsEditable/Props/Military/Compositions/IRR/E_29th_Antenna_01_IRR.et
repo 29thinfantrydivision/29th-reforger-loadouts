@@ -13,5 +13,8 @@ GenericEntity : "{D0C72FAED16430BC}PrefabsEditable/Auto/Props/Military/Compositi
   SCR_FactionAffiliationComponent "{5CB6D5B3749D59C3}" {
    "faction affiliation" "IRR"
   }
+  ScriptedRadioComponent "{5CB8818C71F12C73}" {
+   "Encryption key" "burntCoffee"
+  }
  }
 }
