@@ -1,0 +1,24 @@
+GenericEntity : "{C731CC083B954825}PrefabsEditable/Auto/Compositions/Slotted/SlotFlatSmall/E_Antenna_S_FIA_01.et" {
+ ID "5282DCB5DFC8538F"
+ components {
+  FactionAffiliationComponent "{695AEE546980A0CC}" {
+   "faction affiliation" "IRR"
+  }
+  SCR_EditableEntityComponent "{5E48D017D62F3062}" {
+   m_UIInfo SCR_EditableEntityUIInfo "{5298E609432D192D}" {
+    Name "Radio Relay Station (Irregular)"
+    m_sFaction "IRR"
+    m_aAuthoredLabels {
+     ENTITYTYPE_COMPOSITION SLOT_FLAT_SMALL TRAIT_RADIO FACTION_IRR TRAIT_SERVICE SERVICE_ANTENNA
+    }
+   }
+  }
+  SCR_EditorLinkComponent "{5E5C73DBAE741B48}" {
+   m_aEntries {
+    SCR_EditorLinkEntry "{5E5C73DBAE4B3389}" {
+     m_Prefab "{AB29C0FFEEB2FAC4}PrefabsEditable/Props/Military/Compositions/IRR/E_29th_Antenna_01_IRR.et"
+    }
+   }
+  }
+ }
+}
