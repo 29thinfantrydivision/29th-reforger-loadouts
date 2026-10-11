@@ -7,7 +7,7 @@ GenericEntity : "{540C08AD5F21A5FA}Prefabs/Items/Equipment/Radios/Radio_R148_FIA
   InventoryItemComponent "{5222EB4D0C73006B}" {
    Attributes SCR_ItemAttributeCollection "{5222EB4D0A2B466B}" {
     ItemDisplayName UIInfo "{5222EB4D07D865FA}" {
-     Name "R-148E INS"
+     Name "R-148E IRR"
     }
    }
   }
