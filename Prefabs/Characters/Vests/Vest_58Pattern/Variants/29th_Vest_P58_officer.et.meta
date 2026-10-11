@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{AB29C0FFEE29E007}Prefabs/Characters/Vests/Vest_58Pattern/Variants/29th_Vest_P58_officer.et"
+ Configurations {
+  EntityTemplateResourceClass PC {
+  }
+  EntityTemplateResourceClass XBOX_ONE : PC {
+  }
+  EntityTemplateResourceClass XBOX_SERIES : PC {
+  }
+  EntityTemplateResourceClass PS4 : PC {
+  }
+  EntityTemplateResourceClass PS5 : PC {
+  }
+  EntityTemplateResourceClass HEADLESS : PC {
+  }
+ }
+}

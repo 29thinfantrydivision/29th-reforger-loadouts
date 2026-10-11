@@ -1,0 +1,15 @@
+GenericEntity : "{2CBF6C876586A8CC}Prefabs/Characters/Vests/Vest_58Pattern/Variants/Vest_P58_GL.et" {
+ ID "526492DCB8322C65"
+ components {
+  BaseLoadoutClothComponent "{5312D798A71DFBB1}" {
+   Slots {
+    LoadoutSlotInfo Cateen {
+     Enabled 0
+    }
+    LoadoutSlotInfo Scabbard {
+     Prefab "{A2065D4F9B3A2B97}Prefabs/Items/Equipment/Accessories/Scabbard_Bayonet_L1A4/Scabbard_Bayonet_L1A4.et"
+    }
+   }
+  }
+ }
+}
