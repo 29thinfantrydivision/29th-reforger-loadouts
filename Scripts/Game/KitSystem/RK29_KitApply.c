@@ -6,6 +6,22 @@
 //------------------------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------------------------
+//! Why RK29_KitApply.HandsBusy holds. An enum rather than text because it travels as a
+//! notification param, which is an int; RK29_NotificationHandsBusy turns it back into words.
+enum RK29_EHandsBusy
+{
+	NONE,
+	RELOADING,
+	CHANGING_ITEM,
+	USING_ITEM,
+	GESTURE,
+	//! vanilla's inventory gate: in practice CanPlayItemGesture() is false (the engine decides
+	//! when - ladder, swim, vault...). IsInventoryLocked() only spans one synchronous call
+	ITEM_ACTIONS_UNAVAILABLE,
+	VEHICLE_DOOR,
+}
+
+//------------------------------------------------------------------------------------------------
 //! What one attachment order is arriving into - built only by RK29_KitApply.DecideSeat. No seat
 //! means the weapon has nowhere for this attachment, and every field below is then null or empty.
 //! Says nothing about "already satisfied": both passes ask RK29_KitApply.HasAttachment first.
@@ -412,28 +428,44 @@ class RK29_KitApply
 	//! client clears both before asking, the server waits on them on top of this.
 	static bool HandsBusy(notnull SCR_ChimeraCharacter character)
 	{
+		return HandsBusyReason(character) != RK29_EHandsBusy.NONE;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! HandsBusy with its reason, for the player's notification. Reloading is asked first: a reload
+	//! can raise the item-change and gesture flags too, and it is the one players know.
+	static RK29_EHandsBusy HandsBusyReason(notnull SCR_ChimeraCharacter character)
+	{
 		CharacterControllerComponent ctrl = character.GetCharacterController();
 		if (!ctrl)
-			return false;
+			return RK29_EHandsBusy.NONE;
 
 		// vanilla refuses a body that is not ALIVE all inventory, so its gates say nothing there, and
 		// a downed or dead re-kit is deliberate. IsUnconscious as well as the life state: the
 		// preround heal stands the body up the frame before this, and through the wake-up animation
 		// GetLifeState already answers ALIVE while IsUnconscious stays true
 		if (ctrl.GetLifeState() != ECharacterLifeState.ALIVE || ctrl.IsUnconscious())
-			return false;
+			return RK29_EHandsBusy.NONE;
 
-		if (ctrl.IsChangingItem() || ctrl.IsPlayingGesture() || ctrl.IsUsingItem()
-			|| ctrl.IsReloading())
-			return true;
+		if (ctrl.IsReloading())
+			return RK29_EHandsBusy.RELOADING;
+		if (ctrl.IsChangingItem())
+			return RK29_EHandsBusy.CHANGING_ITEM;
+		if (ctrl.IsUsingItem())
+			return RK29_EHandsBusy.USING_ITEM;
+		if (ctrl.IsPlayingGesture())
+			return RK29_EHandsBusy.GESTURE;
 
 		SCR_InventoryStorageManagerComponent manager = SCR_InventoryStorageManagerComponent.Cast(
 			ctrl.GetInventoryStorageManager());
 		if (manager && (!manager.IsAnimationReady() || manager.IsInventoryLocked()))
-			return true;
+			return RK29_EHandsBusy.ITEM_ACTIONS_UNAVAILABLE;
 
 		CompartmentAccessComponent cac = character.GetCompartmentAccessComponent();
-		return cac && (cac.IsGettingIn() || cac.IsGettingOut());
+		if (cac && (cac.IsGettingIn() || cac.IsGettingOut()))
+			return RK29_EHandsBusy.VEHICLE_DOOR;
+
+		return RK29_EHandsBusy.NONE;
 	}
 
 	//------------------------------------------------------------------------------------------------

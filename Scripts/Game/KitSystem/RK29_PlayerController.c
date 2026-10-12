@@ -29,12 +29,18 @@ modded class SCR_PlayerController
 	//! The server cancels the same way on its own HANDS_SETTLE_TIMEOUT_MS.
 	protected static const float RK29_HANDS_FREE_CAP_MS = 3000;
 
+	//! How long busy hands hold a request before the waiting notification is sent, so an item change
+	//! that ends a tick later does not log one.
+	protected static const float RK29_WAIT_NOTIFY_MS = 250;
+
 	protected string m_RK29_SendKitName;
 	protected string m_RK29_SendChoices;
 	protected bool   m_RK29_SendIsSeed;
 	protected float  m_RK29_SendAfter;
 	protected float  m_RK29_SendAdsDeadline;
 	protected float  m_RK29_SendDeadline;
+	protected float  m_RK29_SendQueuedAt;
+	protected bool   m_RK29_SendNotified;
 
 	//! The body a waiting request is about. The server dresses whatever is controlled when it
 	//! arrives, so a request that outlives its body - GM possession, place-for-player - is dropped.
@@ -88,6 +94,8 @@ modded class SCR_PlayerController
 		GetGame().GetCallqueue().Remove(RK29_PollSendKit);
 
 		float now = GetGame().GetWorld().GetWorldTime();
+		m_RK29_SendQueuedAt = now;
+		m_RK29_SendNotified = false;
 		m_RK29_SendKitName = kitName;
 		m_RK29_SendChoices = choices;
 		m_RK29_SendIsSeed  = isSeed;
@@ -132,7 +140,11 @@ modded class SCR_PlayerController
 		float now = GetGame().GetWorld().GetWorldTime();
 		bool waiting = RK29_SendWaiting(now);
 		if (waiting && now < m_RK29_SendDeadline)
+		{
+			if (!m_RK29_SendNotified && now >= m_RK29_SendQueuedAt + RK29_WAIT_NOTIFY_MS)
+				RK29_ShowApplyWaiting();
 			return;
+		}
 
 		GetGame().GetCallqueue().Remove(RK29_PollSendKit);
 		if (!waiting)
@@ -225,13 +237,28 @@ modded class SCR_PlayerController
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! Once per request, and only for busy hands: the ADS blend-out alone is over before anyone could
+	//! read it, so this stays unarmed and the next poll asks again. A feed entry cannot be taken
+	//! back, so it stays up for its own duration even after the kit lands.
+	protected void RK29_ShowApplyWaiting()
+	{
+		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(GetControlledEntity());
+		if (!character)
+			return;
+		RK29_EHandsBusy reason = RK29_KitApply.HandsBusyReason(character);
+		if (reason == RK29_EHandsBusy.NONE)
+			return;
+
+		m_RK29_SendNotified = true;
+		SCR_NotificationsComponent.SendLocal(ENotification.RK29_KIT_WAITING_HANDS, reason);
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! Both cancels say the same thing: whichever side gave up, nothing on the body changed.
 	protected void RK29_ShowApplyCancelled()
 	{
 		SCR_UISoundEntity.SoundEvent(SCR_SoundEvent.ACTION_FAILED);
-		SCR_HintManagerComponent.ShowCustomHint("Your hands stayed busy (reloading or switching"
-			+ " items) for too long, so nothing was changed. Apply again once they are free.",
-			"KIT NOT APPLIED", 10);
+		SCR_NotificationsComponent.SendLocal(ENotification.RK29_KIT_NOT_APPLIED);
 	}
 
 	//------------------------------------------------------------------------------------------------
