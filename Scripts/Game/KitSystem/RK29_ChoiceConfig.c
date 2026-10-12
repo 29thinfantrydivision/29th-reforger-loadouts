@@ -29,6 +29,10 @@ class RK29_ChoiceEntryTitle : BaseContainerCustomTitle
 		if (source.Get("m_bDonorOnly", donorOnly) && donorOnly)
 			title = "(donor) " + title;
 
+		RK29_EBadge badge;
+		if (source.Get("m_eBadge", badge) && badge != RK29_EBadge.NONE)
+			title = "(" + RK29_Badges.NameOf(badge) + ") " + title;
+
 		// Get leaves the local alone when the conf never mentions the flag - default must be true
 		bool enabled = true;
 		if (source.Get("m_bEnabled", enabled) && !enabled)
@@ -95,6 +99,10 @@ class RK29_ChoiceEntryBase
 	// take the entry. Read off m_Def by RK29_MenuRowKit.IsDonorOnly.
 	[Attribute("0", desc: "Mark this entry Donor Only in the picker: a green bar at the right end of its row, and of the tile summarising it while it is the standing pick. DISPLAY ONLY - nothing stops a non-donor taking it; the unit polices that", category: "29th")]
 	bool m_bDonorOnly;
+
+	// The same kind of mark as m_bDonorOnly. Read off m_Def by RK29_MenuRowKit.BadgeOf.
+	[Attribute("0", uiwidget: UIWidgets.ComboBox, desc: "Mark this entry with the unit badge it asks for: the badge's icon just left of the donor bar on its row, and on the tile summarising it while it is the standing pick. One badge per entry. DISPLAY ONLY - nothing stops a player without the badge taking it; the unit polices that", enums: RK29_Badges.ParamEnums(), category: "29th")]
+	RK29_EBadge m_eBadge;
 }
 
 //------------------------------------------------------------------------------------------------

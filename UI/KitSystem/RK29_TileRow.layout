@@ -287,6 +287,15 @@ SizeLayoutWidgetClass {
          Texture "{856CAFDF3DBC4D64}UI/Textures/Editor/ContentBrowser/ContentBrowser_Trait_Optics.edds"
          Size 24 24
         }
+        ImageWidgetClass "{AB29C0FFEE2B4D14}" {
+         Name "RowBadge"
+         Slot LayoutSlot "{AB29C0FFEE2B4D15}" {
+          VerticalAlign 1
+          Padding 6 0 6 0
+         }
+         "Is Visible" 0
+         Size 17 17
+        }
        }
       }
       ImageWidgetClass "{AB29C0FFEEB22310}" {

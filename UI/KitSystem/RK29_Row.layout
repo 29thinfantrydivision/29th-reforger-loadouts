@@ -322,6 +322,15 @@ SizeLayoutWidgetClass {
           }
          }
         }
+        ImageWidgetClass "{AB29C0FFEE2B4D10}" {
+         Name "RowBadge"
+         Slot LayoutSlot "{AB29C0FFEE2B4D11}" {
+          VerticalAlign 1
+          Padding 6 0 6 0
+         }
+         "Is Visible" 0
+         Size 17 17
+        }
        }
       }
       SizeLayoutWidgetClass "{AB29C0FFEEB22D20}" {
