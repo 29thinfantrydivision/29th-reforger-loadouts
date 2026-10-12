@@ -253,7 +253,7 @@ class RK29_MenuTileColumn
 			return;
 
 		if (g)
-			StampDonorBar(row, g);
+			StampEntryMarks(row, g);
 
 		if (locked)
 			return;
@@ -308,7 +308,7 @@ class RK29_MenuTileColumn
 			RK29_MenuRowKit.FillPreview(row, garment);
 
 		if (g)
-			StampDonorBar(row, g);
+			StampEntryMarks(row, g);
 
 		// what the tile opens: this slot's own garment group, or - for a slot dressed by block clothing
 		// that something still seats on - that attachment, which then has no host section to open under
@@ -459,40 +459,49 @@ class RK29_MenuTileColumn
 			RK29_MenuRowKit.ShowMagnifiedBadge(row, "RowMagIconRight");
 
 		StampSpareMagCount(row, slot);
-		StampDonorBar(row, g);
+		StampEntryMarks(row, g);
 
 		m_Menu.AttachHandler(row, "RowButton", RK29_EMenuRowKind.TILE, index, m_aTileHandlers);
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! The donor bar on a tile summarising a group, worn while anything the group currently holds is
-	//! Donor Only: the standing answer of an EXCLUSIVE group, any row above zero of a counted one.
-	//! PickedEntry and PickedCount, the reads the tile's own name and chips are drawn off, so the
-	//! bar cannot mark something the tile is not showing.
-	protected void StampDonorBar(notnull Widget row, notnull RK29_ResolvedGroup g)
-	{
-		if (!HoldsDonorOnly(g))
-			return;
-
-		RK29_MenuRowKit.ShowDonorBar(row, m_Menu.HoverTip(), m_aTileTipHandlers);
-	}
-
-	//------------------------------------------------------------------------------------------------
-	protected bool HoldsDonorOnly(notnull RK29_ResolvedGroup g)
+	//! The marks on a tile summarising a group, worn while something the group currently holds carries
+	//! them: the standing answer of an EXCLUSIVE group, any row above zero of a counted one. A counted
+	//! group holding several badged rows shows the first in list order - a tile has one badge cell.
+	//! PickedEntry and PickedCount, the reads the tile's own name and chips are drawn off, so a mark
+	//! cannot name something the tile is not showing.
+	protected void StampEntryMarks(notnull Widget row, notnull RK29_ResolvedGroup g)
 	{
 		if (g.m_eKind == RK29_EChoiceKind.EXCLUSIVE)
-			return RK29_MenuRowKit.IsDonorOnly(RK29_KitResolve.PickedEntry(g, m_Menu.Picks()));
-
-		foreach (RK29_ResolvedEntry e : g.m_aEntries)
 		{
-			if (!RK29_MenuRowKit.IsDonorOnly(e))
-				continue;
-
-			if (RK29_KitResolve.PickedCount(g, e, m_Menu.Picks()) > 0)
-				return true;
+			RK29_MenuRowKit.ShowEntryMarks(row, RK29_KitResolve.PickedEntry(g, m_Menu.Picks()),
+				m_Menu.HoverTip(), m_aTileTipHandlers);
+			return;
 		}
 
-		return false;
+		bool donorOnly;
+		RK29_EBadge badge = RK29_EBadge.NONE;
+		foreach (RK29_ResolvedEntry e : g.m_aEntries)
+		{
+			bool entryDonorOnly = RK29_MenuRowKit.IsDonorOnly(e);
+			RK29_EBadge entryBadge = RK29_MenuRowKit.BadgeOf(e);
+			if (!entryDonorOnly && entryBadge == RK29_EBadge.NONE)
+				continue;
+
+			if (RK29_KitResolve.PickedCount(g, e, m_Menu.Picks()) <= 0)
+				continue;
+
+			if (entryDonorOnly)
+				donorOnly = true;
+
+			if (badge == RK29_EBadge.NONE)
+				badge = entryBadge;
+		}
+
+		if (donorOnly)
+			RK29_MenuRowKit.ShowDonorBar(row, m_Menu.HoverTip(), m_aTileTipHandlers);
+
+		RK29_MenuRowKit.ShowBadge(row, badge, m_Menu.HoverTip(), m_aTileTipHandlers);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -670,7 +679,7 @@ class RK29_MenuTileColumn
 		m_aTileGroup.Insert(g.m_sId);
 
 		m_Menu.SetPlateToggled(row, "RowButton", "RowBg", m_Menu.Detail().OpenGroup() == g.m_sId);
-		StampDonorBar(row, g);
+		StampEntryMarks(row, g);
 
 		m_Menu.AttachHandler(row, "RowButton", RK29_EMenuRowKind.TILE, index, m_aTileHandlers);
 	}
@@ -762,8 +771,8 @@ class RK29_MenuTileColumn
 			if (row)
 				RK29_MenuRowKit.FillPreview(row, m_Menu.EntryPreviewPrefab(worn, g));
 
-			if (row && RK29_MenuRowKit.IsDonorOnly(worn))
-				RK29_MenuRowKit.ShowDonorBar(row, m_Menu.HoverTip(), m_aTileTipHandlers);
+			if (row)
+				RK29_MenuRowKit.ShowEntryMarks(row, worn, m_Menu.HoverTip(), m_aTileTipHandlers);
 
 			// no "+N more": no tile in this column carries one - the weapons do not - and it is the
 			// worn tiles on the Appearance tab that do. A tile that reads like the ones beside it is

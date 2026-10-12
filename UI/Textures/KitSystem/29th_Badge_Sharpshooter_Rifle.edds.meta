@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{AB29C0FFEE2B4D01}UI/Textures/KitSystem/29th_Badge_Sharpshooter_Rifle.edds"
+ Configurations {
+  EDDSResourceClass PC {
+  }
+  EDDSResourceClass XBOX_ONE : PC {
+  }
+  EDDSResourceClass XBOX_SERIES : PC {
+  }
+  EDDSResourceClass PS4 : PC {
+  }
+  EDDSResourceClass PS5 : PC {
+  }
+  EDDSResourceClass HEADLESS : PC {
+  }
+ }
+}

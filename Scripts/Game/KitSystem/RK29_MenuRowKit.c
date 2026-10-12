@@ -758,6 +758,49 @@ class RK29_MenuRowKit
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! The badge an entry is marked with. Null is the None answer, which asks for nothing.
+	static RK29_EBadge BadgeOf(RK29_ResolvedEntry e)
+	{
+		if (!e || !e.m_Def)
+			return RK29_EBadge.NONE;
+
+		return e.m_Def.m_eBadge;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A badge's icon at the end of a row's line, just left of the donor bar, named by its tip. All
+	//! three row layouts author RowBadge hidden as the line's last cell, so it takes width from the
+	//! filling name only while shown. The texture is loaded here; the layout authors none.
+	static void ShowBadge(notnull Widget row, RK29_EBadge badge, notnull RK29_HoverTip tip,
+		notnull array<ref RK29_HoverTipHandler> store)
+	{
+		ResourceName icon = RK29_Badges.IconOf(badge);
+		if (icon == ResourceName.Empty)
+			return;
+
+		ImageWidget image = ImageWidget.Cast(row.FindAnyWidget("RowBadge"));
+		if (!image)
+			return;
+
+		image.LoadImageTexture(0, icon);
+		image.SetVisible(true);
+
+		image.ClearFlags(WidgetFlags.IGNORE_CURSOR);
+		tip.AttachHoverTip(image, RK29_Badges.NameOf(badge), store);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Every per-entry mark on the row standing for one entry: the donor bar and the badge.
+	static void ShowEntryMarks(notnull Widget row, RK29_ResolvedEntry e, notnull RK29_HoverTip tip,
+		notnull array<ref RK29_HoverTipHandler> store)
+	{
+		if (IsDonorOnly(e))
+			ShowDonorBar(row, tip, store);
+
+		ShowBadge(row, BadgeOf(e), tip, store);
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! Whether override has closed an entry's bounds onto a single legal count - such a row is stated
 	//! rather than asked. A negative or absent maximum is no bound at all and never pins.
 	static bool IsPinnedEntry(notnull RK29_ResolvedEntry e)
