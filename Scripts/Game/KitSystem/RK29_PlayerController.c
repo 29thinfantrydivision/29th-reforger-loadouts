@@ -24,10 +24,21 @@ modded class SCR_PlayerController
 	//! Longest a request waits for the ADS blend-out before going anyway.
 	protected static const float RK29_ADS_OUT_CAP_MS = 1500;
 
+	//! Longest a request waits for the hands to come free. Past it the request is cancelled, never
+	//! forced: a long reload outlasts it, and stripping a gun mid-reload is what this wait prevents.
+	//! The server cancels the same way on its own HANDS_SETTLE_TIMEOUT_MS.
+	protected static const float RK29_HANDS_FREE_CAP_MS = 3000;
+
 	protected string m_RK29_SendKitName;
 	protected string m_RK29_SendChoices;
+	protected bool   m_RK29_SendIsSeed;
 	protected float  m_RK29_SendAfter;
+	protected float  m_RK29_SendAdsDeadline;
 	protected float  m_RK29_SendDeadline;
+
+	//! The body a waiting request is about. The server dresses whatever is controlled when it
+	//! arrives, so a request that outlives its body - GM possession, place-for-player - is dropped.
+	protected IEntity m_RK29_SendBody;
 
 	protected int   m_RK29_DrawStance;
 	protected float m_RK29_DrawDynStance;
@@ -60,14 +71,30 @@ modded class SCR_PlayerController
 	//! SCR_GadgetManagerComponent.RemoveHeldGadget() - the manager has no skip-animation entry
 	//! point, so it would play a putaway after apply. Same pair vanilla uses in StartLoitering;
 	//! the manager stays in sync through m_OnGadgetStateChangedInvoker.
+	//! The request then waits on this client until the hands are free (RK29_KitApply.HandsBusy):
+	//! the owner sees its own reload or item change the frame it starts, the server only later.
+	//! Hands still busy at the cap cancel it, unsent.
 	void RK29_RequestKit(string kitName, string choices)
+	{
+		RK29_QueueSend(kitName, choices, false);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! One pending send at a time, request or seed: a newer one replaces whatever is waiting, which
+	//! is right both ways - a request outranks a seed, and a seed means the side changed under a
+	//! waiting request that the server would now refuse.
+	protected void RK29_QueueSend(string kitName, string choices, bool isSeed)
 	{
 		GetGame().GetCallqueue().Remove(RK29_PollSendKit);
 
+		float now = GetGame().GetWorld().GetWorldTime();
 		m_RK29_SendKitName = kitName;
 		m_RK29_SendChoices = choices;
+		m_RK29_SendIsSeed  = isSeed;
 		m_RK29_SendAfter   = 0;
-		m_RK29_SendDeadline = GetGame().GetWorld().GetWorldTime() + RK29_ADS_OUT_CAP_MS;
+		m_RK29_SendAdsDeadline = 0;
+		m_RK29_SendDeadline = now + RK29_HANDS_FREE_CAP_MS;
+		m_RK29_SendBody = GetControlledEntity();
 
 		CharacterControllerComponent ctrl = RK29_ControlledCtrl();
 		if (ctrl && ctrl.IsWeaponADS())
@@ -76,6 +103,15 @@ modded class SCR_PlayerController
 			// not delete it until the blend has run: IsWeaponADS() off, then GetADSTime() more
 			ctrl.SetWeaponADSInput(false);
 			ctrl.SetWeaponADS(false);
+			m_RK29_SendAdsDeadline = now + RK29_ADS_OUT_CAP_MS;
+		}
+
+		// before the wait rather than at the send: the wait must never be waiting on the gadget
+		if (ctrl)
+			RK29_PutAwayGadget(ctrl);
+
+		if (RK29_SendWaiting(now))
+		{
 			GetGame().GetCallqueue().CallLater(RK29_PollSendKit, RK29_POLL_MS, true);
 			return;
 		}
@@ -86,26 +122,66 @@ modded class SCR_PlayerController
 	//------------------------------------------------------------------------------------------------
 	protected void RK29_PollSendKit()
 	{
-		float now = GetGame().GetWorld().GetWorldTime();
-		CharacterControllerComponent ctrl = RK29_ControlledCtrl();
+		if (GetControlledEntity() != m_RK29_SendBody)
+		{
+			GetGame().GetCallqueue().Remove(RK29_PollSendKit);
+			RK29_Log.Trace("[RK29] kit request dropped - the body it was for has changed");
+			return;
+		}
 
-		if (ctrl && now < m_RK29_SendDeadline)
+		float now = GetGame().GetWorld().GetWorldTime();
+		bool waiting = RK29_SendWaiting(now);
+		if (waiting && now < m_RK29_SendDeadline)
+			return;
+
+		GetGame().GetCallqueue().Remove(RK29_PollSendKit);
+		if (!waiting)
+		{
+			RK29_SendKit();
+			return;
+		}
+
+		RK29_Log.Trace("[RK29] kit request cancelled - hands never came free on this client");
+		RK29_ShowApplyCancelled();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! True while the request should hold: the ADS blend-out has not run yet, or the hands are busy.
+	protected bool RK29_SendWaiting(float now)
+	{
+		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(GetControlledEntity());
+		if (!character)
+			return false;
+		CharacterControllerComponent ctrl = character.GetCharacterController();
+		if (!ctrl)
+			return false;
+
+		if (now < m_RK29_SendAdsDeadline)
 		{
 			if (ctrl.IsWeaponADS())
-				return;
+				return true;
 
 			if (m_RK29_SendAfter <= 0)
 			{
 				m_RK29_SendAfter = now + ctrl.GetADSTime() * 1000;
-				return;
+				return true;
 			}
 
 			if (now < m_RK29_SendAfter)
-				return;
+				return true;
 		}
 
-		GetGame().GetCallqueue().Remove(RK29_PollSendKit);
-		RK29_SendKit();
+		return RK29_KitApply.HandsBusy(character);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected void RK29_PutAwayGadget(notnull CharacterControllerComponent ctrl)
+	{
+		if (!ctrl.IsGadgetInHands())
+			return;
+
+		ctrl.SetGadgetRaisedModeWanted(false);
+		ctrl.RemoveGadgetFromHand(true);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -121,14 +197,13 @@ modded class SCR_PlayerController
 				ctrl.SetWeaponADS(false);
 			}
 
-			if (ctrl.IsGadgetInHands())
-			{
-				ctrl.SetGadgetRaisedModeWanted(false);
-				ctrl.RemoveGadgetFromHand(true);
-			}
+			RK29_PutAwayGadget(ctrl);
 		}
 
-		Rpc(RK29_RpcAsk_Kit, m_RK29_SendKitName, m_RK29_SendChoices);
+		if (m_RK29_SendIsSeed)
+			Rpc(RK29_RpcAsk_SeedKit, m_RK29_SendKitName, m_RK29_SendChoices);
+		else
+			Rpc(RK29_RpcAsk_Kit, m_RK29_SendKitName, m_RK29_SendChoices);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -147,6 +222,29 @@ modded class SCR_PlayerController
 
 		if (to && GetGame().GetPlayerController() == this)
 			RK29_LoadoutMenu.RegisterListeners();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Both cancels say the same thing: whichever side gave up, nothing on the body changed.
+	protected void RK29_ShowApplyCancelled()
+	{
+		SCR_UISoundEntity.SoundEvent(SCR_SoundEvent.ACTION_FAILED);
+		SCR_HintManagerComponent.ShowCustomHint("Your hands stayed busy (reloading or switching"
+			+ " items) for too long, so nothing was changed. Apply again once they are free.",
+			"KIT NOT APPLIED", 10);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	void RK29_NotifyApplyCancelled_S()
+	{
+		Rpc(RK29_RpcDo_ApplyCancelled);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
+	protected void RK29_RpcDo_ApplyCancelled()
+	{
+		RK29_ShowApplyCancelled();
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -482,10 +580,12 @@ modded class SCR_PlayerController
 	//! Offer the server what this client last wore on this side. Separate from RK29_RequestKit
 	//! because the two carry different authority: a request is the player asking now and always
 	//! wins, a seed is a profile file remembering and loses to anything the server already holds.
-	//! No ADS or gadget wait: this runs before the player has a body at all.
+	//! Usually there is no body yet and it goes at once; a GM moving a living player to the other
+	//! side is the exception, and the server re-dresses that body like a request - so it waits the
+	//! same way.
 	void RK29_SeedKit(string kitName, string choices)
 	{
-		Rpc(RK29_RpcAsk_SeedKit, kitName, choices);
+		RK29_QueueSend(kitName, choices, true);
 	}
 
 	//------------------------------------------------------------------------------------------------
