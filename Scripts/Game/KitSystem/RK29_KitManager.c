@@ -18,6 +18,7 @@ class RK29_PendingApply
 {
 	int m_iPlayerId;
 	int m_iGen;             // apply generation this was queued under; stale = abandon
+	ref RK29_PlayerSelection m_Selection; // committed only when the re-dress runs
 	ref RK29_KitStruct m_Kit;     // unedited, for the line that names the kit in the log
 	ref RK29_KitStruct m_Edited;  // what actually gets applied
 	ref array<ref RK29_AttachmentOrder> m_aOrders; // every attachment decision, bound to its own weapon
@@ -54,9 +55,9 @@ class RK29_KitManager
 	//! serve.
 	protected static const int REQUEST_MIN_INTERVAL_MS = 500;
 
-	//! Ceiling on the hands-free wait, not the sequencer - the wait ends on the condition. Same
-	//! shape as vanilla's ITEM_INSERTION_CALLBACK_CLEANUP_TIME; 3s covers the longest hand
-	//! action.
+	//! Ceiling on the hands-free wait, not the sequencer - the wait ends on the condition. Past it
+	//! the apply is cancelled, never forced: a long reload outlasts it. The client has already
+	//! waited the same length before asking, so this only trips on what the server learns late.
 	protected static const float HANDS_SETTLE_TIMEOUT_MS = 3000;
 
 	//! How long after a spawn to check the draw held. Must be longer than RK29_SPAWN_DRAW_CAP_MS,
@@ -578,19 +579,29 @@ class RK29_KitManager
 			return;
 		}
 
-		m_mSelections.Set(playerId, sel);
-
 		// resolve once: the same resolved kit dresses the body and feeds the client's preview
 		RK29_KitStruct edited;
 		map<int, ref array<ref RK29_LoadedPick>> loadedMags;
 		array<ref RK29_AttachmentOrder> orders;
 		ResolveSelection(kit, cls, sel, edited, loadedMags, orders);
 
+		// a living body commits when its re-dress runs, so an apply cancelled over busy hands, a
+		// death or a respawn during the wait leaves the old kit as the stash too
 		if (alive)
-			QueueLiveApply_S(playerId, character, kit, edited, orders, loadedMags);
+			QueueLiveApply_S(playerId, character, kit, sel, edited, orders, loadedMags);
+		else
+			CommitSelection_S(playerId, kit, sel);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Make `sel` this player's kit: the stash a spawn re-dresses from, and what every screen reads.
+	protected void CommitSelection_S(int playerId, notnull RK29_KitStruct kit,
+		notnull RK29_PlayerSelection sel)
+	{
+		m_mSelections.Set(playerId, sel);
 
 		// deploy menu shows "Current Kit" selected; spawn re-dresses from the stash
-		AssignIdentity_S(playerId, IdentityKitFor(kit.m_sFactionKey, kitName));
+		AssignIdentity_S(playerId, IdentityKitFor(kit.m_sFactionKey, sel.m_sKitName));
 
 		// every "preview shows the wrong thing" bug came from the client re-deriving this
 		NotifyKitSaved_S(playerId, sel);
@@ -694,7 +705,7 @@ class RK29_KitManager
 	//! Queue the re-dress of a living body and snapshot what the client needs to be put back as
 	//! found.
 	protected void QueueLiveApply_S(int playerId, notnull SCR_ChimeraCharacter character,
-		notnull RK29_KitStruct kit, RK29_KitStruct edited,
+		notnull RK29_KitStruct kit, notnull RK29_PlayerSelection sel, RK29_KitStruct edited,
 		array<ref RK29_AttachmentOrder> orders,
 		map<int, ref array<ref RK29_LoadedPick>> loadedMags)
 	{
@@ -741,6 +752,7 @@ class RK29_KitManager
 		RK29_PendingApply pending = new RK29_PendingApply();
 		pending.m_iPlayerId = playerId;
 		pending.m_iGen = BumpApplyGen(playerId);
+		pending.m_Selection = sel;
 		pending.m_Kit = kit;
 		pending.m_Edited = edited;
 		pending.m_aOrders = orders;
@@ -973,12 +985,11 @@ class RK29_KitManager
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! Strip a body only once its hands are free. Every vanilla path that mutates a character's
-	//! inventory refuses while an item action is in flight (CanMoveItem and InsertItem gate on
-	//! IsAnimationReady()/IsInventoryLocked(), the equip/drop actions on IsChangingItem()), and
-	//! an item change cannot be interrupted. Checked here because the owner drives its own
-	//! commands and the server learns of them late. Re-scheduled one frame at a time: Remove() is
-	//! keyed by function, so a repeating call cancelled for one player would cancel the rest.
+	//! Strip a body only once its hands are free, by vanilla's rule (RK29_KitApply.HandsBusy) - an
+	//! item change cannot be interrupted. The owner drives its own commands and the server learns of
+	//! them late, so the client waits on the same rule before asking and this is the backstop: it
+	//! normally passes on the first tick. Re-scheduled one frame at a time: Remove() is keyed by
+	//! function, so a repeating call cancelled for one player would cancel the rest.
 	//! Unconfirmed fix: adopted on vanilla's rule, aimed at the still-open launcher-swap bug.
 	protected void ApplyWhenHandsFree_S(RK29_PendingApply pending)
 	{
@@ -1010,8 +1021,8 @@ class RK29_KitManager
 
 		// a gadget still in the hands counts as busy: it is engine-attached where the strip
 		// cannot see it, so applying over it leaves the old compass beside the one the kit brings
-		bool busy = ctrl.IsChangingItem() || ctrl.IsPlayingGesture() || ctrl.IsUsingItem()
-			|| ctrl.IsGadgetInHands() || ctrl.IsWeaponADS();
+		bool busy = RK29_KitApply.HandsBusy(character) || ctrl.IsGadgetInHands()
+			|| ctrl.IsWeaponADS();
 		if (busy && GetGame().GetWorld().GetWorldTime() < pending.m_fDeadline)
 		{
 			GetGame().GetCallqueue().CallLater(ApplyWhenHandsFree_S, 0, false, pending);
@@ -1020,8 +1031,15 @@ class RK29_KitManager
 
 		m_mPendingApply_S.Remove(pending.m_iPlayerId);
 		if (busy)
-			Print(string.Format("[RK29] hands never came free on the server - applying anyway"
+		{
+			// the body is untouched, bar the preround heal, which ran at request time
+			Print(string.Format("[RK29] kit apply cancelled - hands never came free on the server"
 				+ " (player %1)", pending.m_iPlayerId), LogLevel.WARNING);
+			SCR_PlayerController pc = PlayerControllerOf(pending.m_iPlayerId);
+			if (pc)
+				pc.RK29_NotifyApplyCancelled_S();
+			return;
+		}
 
 		ApplyPending_S(pending, character);
 	}
@@ -1065,6 +1083,9 @@ class RK29_KitManager
 			pc.RK29_NotifyRestoreState_S(pending.m_iStance, pending.m_fDynStance,
 				DrawTargetAfterApply(character, pending.m_iHeldSlot, pending.m_bHeldThrowable),
 				RplIdOf(character));
+
+		// even when Place refused the body: the request itself was good, and a spawn dresses from it
+		CommitSelection_S(pending.m_iPlayerId, pending.m_Kit, pending.m_Selection);
 	}
 
 	//------------------------------------------------------------------------------------------------

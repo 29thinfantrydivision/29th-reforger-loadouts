@@ -403,6 +403,40 @@ class RK29_KitApply
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! Is an item action in flight on this body. Vanilla's "is the character free" gates on moving an
+	//! item, minus everything about the destination storage: CanMoveItem's IsAnimationReady and
+	//! IsInventoryLocked, the weapon pickup's IsReloading, drop/unequip's IsChangingItem, and the
+	//! inventory refusing to open while getting in or out of a seat. IsPlayingGesture and IsUsingItem
+	//! are ours and stricter - vanilla counts a playing item gesture as ready because its inventory
+	//! op is that gesture's callback; ours is not. The held gadget and ADS are left to the callers: the
+	//! client clears both before asking, the server waits on them on top of this.
+	static bool HandsBusy(notnull SCR_ChimeraCharacter character)
+	{
+		CharacterControllerComponent ctrl = character.GetCharacterController();
+		if (!ctrl)
+			return false;
+
+		// vanilla refuses a body that is not ALIVE all inventory, so its gates say nothing there, and
+		// a downed or dead re-kit is deliberate. IsUnconscious as well as the life state: the
+		// preround heal stands the body up the frame before this, and through the wake-up animation
+		// GetLifeState already answers ALIVE while IsUnconscious stays true
+		if (ctrl.GetLifeState() != ECharacterLifeState.ALIVE || ctrl.IsUnconscious())
+			return false;
+
+		if (ctrl.IsChangingItem() || ctrl.IsPlayingGesture() || ctrl.IsUsingItem()
+			|| ctrl.IsReloading())
+			return true;
+
+		SCR_InventoryStorageManagerComponent manager = SCR_InventoryStorageManagerComponent.Cast(
+			ctrl.GetInventoryStorageManager());
+		if (manager && (!manager.IsAnimationReady() || manager.IsInventoryLocked()))
+			return true;
+
+		CompartmentAccessComponent cac = character.GetCompartmentAccessComponent();
+		return cac && (cac.IsGettingIn() || cac.IsGettingOut());
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! Re-dress character as kit, then run the attachment orders. False only on hard failure.
 	//!
 	//! `loadedMags` (weapon slot index -> picks) is what each gun starts loaded with; null leaves
