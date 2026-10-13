@@ -229,6 +229,52 @@ class RK29_KitPresetStorage
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! The saved quick bar's value, without its key - see RK29_QuickBar. "" when the preset has none,
+	//! does not exist, or is a dialect this build only carries raw.
+	string QuickBarOf(string kitName, string name)
+	{
+		int index = IndexOf(kitName, name);
+		if (index < 0 || m_aPresets[index].m_sRaw != "")
+			return "";
+
+		foreach (string extra : m_aPresets[index].m_aExtra)
+		{
+			if (extra.StartsWith(RK29_QuickBar.EXTRA_KEY))
+				return extra.Substring(RK29_QuickBar.EXTRA_KEY.Length(),
+					extra.Length() - RK29_QuickBar.EXTRA_KEY.Length());
+		}
+
+		return "";
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Sets or, for "", removes one preset's saved quick bar and persists immediately. A trailing
+	//! field rather than a new record shape, so no new file: every build that reads this file keeps
+	//! fields it does not know.
+	bool SetQuickBar(string kitName, string name, string value)
+	{
+		if (!EnsureWritable())
+			return false;
+
+		int index = IndexOf(kitName, name);
+		if (index < 0 || m_aPresets[index].m_sRaw != "")
+			return false;
+
+		array<string> extras = m_aPresets[index].m_aExtra;
+		for (int i = extras.Count() - 1; i >= 0; i--)
+		{
+			if (extras[i].StartsWith(RK29_QuickBar.EXTRA_KEY))
+				extras.RemoveOrdered(i);
+		}
+
+		if (value != "")
+			extras.Insert(RK29_QuickBar.EXTRA_KEY + value);
+
+		WriteToStorage();
+		return true;
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! Moves one preset to another place in ITS OWN class's list and persists immediately. newPos is
 	//! a position among that class's presets - what the band shows - not an index into the flat
 	//! array every class shares, and the two are not the same number: another class's presets sit

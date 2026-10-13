@@ -1472,7 +1472,17 @@ class RK29_LoadoutMenu
 			return;
 		}
 		if (kind == RK29_EMenuRowKind.PRESET_MENU_DELETE)
+		{
 			m_Info.OnPresetMenuDelete();
+			return;
+		}
+		if (kind == RK29_EMenuRowKind.PRESET_MENU_QUICKBAR_SAVE)
+		{
+			m_Info.OnPresetMenuSaveQuickBar();
+			return;
+		}
+		if (kind == RK29_EMenuRowKind.PRESET_MENU_QUICKBAR_CLEAR)
+			m_Info.OnPresetMenuClearQuickBar();
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -1640,6 +1650,14 @@ class RK29_LoadoutMenu
 	//------------------------------------------------------------------------------------------------
 	protected void ShowApplyError(notnull array<string> reasons)
 	{
+		ShowRefusal(APPLY_ERROR_TITLE, reasons);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The apply refusal's band, for any refusal of the menu's own: gone again on the next pick
+	//! change, like the apply's.
+	void ShowRefusal(string title, notnull array<string> reasons)
+	{
 		if (!m_wApplyError)
 			return;
 
@@ -1651,13 +1669,13 @@ class RK29_LoadoutMenu
 			text += reason;
 		}
 
-		RK29_WidgetUtil.SetText(m_wApplyError, "ApplyErrorTitle", APPLY_ERROR_TITLE);
+		RK29_WidgetUtil.SetText(m_wApplyError, "ApplyErrorTitle", title);
 		RK29_WidgetUtil.SetText(m_wApplyError, "ApplyErrorText", text);
 		m_wApplyError.SetVisible(true);
 	}
 
 	//------------------------------------------------------------------------------------------------
-	protected void HideApplyError()
+	void HideApplyError()
 	{
 		if (m_wApplyError)
 			m_wApplyError.SetVisible(false);
@@ -1682,6 +1700,7 @@ class RK29_LoadoutMenu
 			return;
 
 		string wire = CurrentWire();
+		RK29_QuickBarRestore.NoteIntent(cls.m_sKitName, m_Info.ChosenPresetName(cls, wire));
 		pc.RK29_RequestKit(cls.m_sKitName, wire);
 		RK29_Log.Trace(string.Format("[RK29] loadout menu: applying '%1' picks='%2'",
 			cls.m_sKitName, wire));

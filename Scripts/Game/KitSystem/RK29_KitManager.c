@@ -179,6 +179,7 @@ class RK29_KitManager
 		// Stated, not inherited. Client-side session statics survive a world rebuild inside one
 		// process, so the deploy row and menu would open on the previous session's kit.
 		RK29_LocalStash.Clear();
+		RK29_QuickBarRestore.Clear();
 		RK29_LoadoutMenu.ForgetSession();
 
 		s_Instance = new RK29_KitManager();
@@ -1909,7 +1910,8 @@ class RK29_KitManager
 			if (magnifiedSlots.Contains(slot))
 				continue;
 
-			RK29_ResolvedEntry chosen = RK29_KitResolve.PickedEntry(g, picks);
+			// the apply's read: a pick naming a blocked glass seats the default, not that glass
+			RK29_ResolvedEntry chosen = RK29_KitResolve.ExclusiveAnswer(g, picks);
 			if (!chosen)
 				continue;
 

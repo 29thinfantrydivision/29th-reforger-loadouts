@@ -104,6 +104,9 @@ modded class SCR_PlayerController
 		m_RK29_SendDeadline = now + RK29_HANDS_FREE_CAP_MS;
 		m_RK29_SendBody = GetControlledEntity();
 
+		// before anything on the body can change: the saved quick bar waits for NEW copies only
+		RK29_QuickBarRestore.NoteRequest(m_RK29_SendBody);
+
 		CharacterControllerComponent ctrl = RK29_ControlledCtrl();
 		if (ctrl && ctrl.IsWeaponADS())
 		{
@@ -154,6 +157,7 @@ modded class SCR_PlayerController
 		}
 
 		RK29_Log.Trace("[RK29] kit request cancelled - hands never came free on this client");
+		RK29_QuickBarRestore.ForgetRequest();
 		RK29_ShowApplyCancelled();
 	}
 
@@ -232,8 +236,13 @@ modded class SCR_PlayerController
 	{
 		super.OnControlledEntityChanged(from, to);
 
-		if (to && GetGame().GetPlayerController() == this)
+		if (GetGame().GetPlayerController() != this)
+			return;
+
+		if (to)
 			RK29_LoadoutMenu.RegisterListeners();
+
+		RK29_QuickBarRestore.OnPossessed(this, from, to);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -271,6 +280,9 @@ modded class SCR_PlayerController
 	[RplRpc(RplChannel.Reliable, RplRcver.Owner)]
 	protected void RK29_RpcDo_ApplyCancelled()
 	{
+		// no RK29_QuickBarRestore.ForgetRequest here: this cancel names no request, and it can land
+		// after the NEXT one took its snapshot. A stale snapshot is harmless - every later arm on
+		// this body follows a request that replaces it.
 		RK29_ShowApplyCancelled();
 	}
 
@@ -589,6 +601,9 @@ modded class SCR_PlayerController
 		RK29_KitLastUsedStore store = RK29_KitLastUsedStore.GetInstance();
 		if (store)
 			store.Mark(kitName, picksWire);
+
+		// after the stash: the restore reads which kit this is from it
+		RK29_QuickBarRestore.OnKitSaved(this);
 	}
 
 	//------------------------------------------------------------------------------------------------

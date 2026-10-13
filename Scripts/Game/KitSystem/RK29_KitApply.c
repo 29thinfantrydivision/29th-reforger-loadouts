@@ -1409,7 +1409,8 @@ class RK29_KitApply
 	//------------------------------------------------------------------------------------------------
 	//! The character-carried plain equipment storage (watch/binocular slots) DressEquipment manages.
 	//! Garment strap storages are also SCR_EquipmentStorageComponent but belong to the item pass.
-	protected static bool IsManagedEquipmentStorage(BaseInventoryStorageComponent storage, IEntity character)
+	//! RK29_QuickBarRestore.NoteRequest reads it too: a same-prefab occupant here survives a re-kit.
+	static bool IsManagedEquipmentStorage(BaseInventoryStorageComponent storage, IEntity character)
 	{
 		if (!SCR_EquipmentStorageComponent.Cast(storage))
 			return false;
@@ -2798,6 +2799,29 @@ class RK29_KitApply
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! Which of the kit's grenades PrimeGrenadeSlot puts in the slot: the first frag, else the first
+	//! grenade, Empty for none. Pure, so RK29_QuickBar can leave that copy out of what a bar may use.
+	static ResourceName GrenadeToPrime(notnull RK29_KitStruct kit)
+	{
+		ResourceName best;
+		foreach (RK29_KitItemBatch batch : kit.m_aItems)
+		{
+			foreach (ResourceName prefab : batch.m_aPrefabs)
+			{
+				string path = "" + prefab;
+				if (!path.Contains("/Grenades/"))
+					continue;
+				int slash = path.LastIndexOf("/");
+				if (path.IndexOfFrom(slash + 1, "Grenade_") == slash + 1)
+					return prefab;
+				if (best == ResourceName.Empty)
+					best = prefab;
+			}
+		}
+		return best;
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! If the throwable slot is empty and the kit carries grenades, put one there (frag preferred).
 	//! Returns the prefab primed so the caller can leave it out of the cargo pass. "Frag" is read
 	//! off the file name (a `Grenade_` prefix), which is vanilla's naming convention and not a rule:
@@ -2814,34 +2838,10 @@ class RK29_KitApply
 		if (!grenadeSlot || grenadeSlot.GetWeaponEntity())
 			return ResourceName.Empty; // no slot, or already occupied (kit-authored keep)
 
-		RK29_KitItemBatch bestBatch;
-		int bestIdx = -1;
-		bool bestIsFrag = false;
-		foreach (RK29_KitItemBatch batch : kit.m_aItems)
-		{
-			for (int i = 0, n = batch.m_aPrefabs.Count(); i < n; i++)
-			{
-				string path = "" + batch.m_aPrefabs[i];
-				if (!path.Contains("/Grenades/"))
-					continue;
-				int slash = path.LastIndexOf("/");
-				bool isFrag = path.IndexOfFrom(slash + 1, "Grenade_") == slash + 1;
-				if (bestIdx == -1 || (isFrag && !bestIsFrag))
-				{
-					bestBatch = batch;
-					bestIdx = i;
-					bestIsFrag = isFrag;
-				}
-				if (bestIsFrag)
-					break;
-			}
-			if (bestIsFrag)
-				break;
-		}
-		if (bestIdx == -1)
+		ResourceName grenade = GrenadeToPrime(kit);
+		if (grenade == ResourceName.Empty)
 			return ResourceName.Empty;
 
-		ResourceName grenade = bestBatch.m_aPrefabs[bestIdx];
 		IEntity unused;
 		if (!SpawnInto(manager, grenade, weaponStorage, -1, unused))
 			return ResourceName.Empty;

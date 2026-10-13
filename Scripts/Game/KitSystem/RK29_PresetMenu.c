@@ -1,6 +1,6 @@
 //------------------------------------------------------------------------------------------------
-//! The context menu a saved kit row opens: overwrite that preset with the picks on screen, or
-//! delete it. Reached two ways, both landing here - the row's glyph, and a right-click anywhere on
+//! The context menu a saved kit row opens: overwrite that preset with the picks on screen, delete
+//! it, or save / clear its quick bar (RK29_QuickBar) - those two first, above Overwrite. Reached two ways, both landing here - the row's glyph, and a right-click anywhere on
 //! the row. A right-click must never load a preset, which is what it did before this existed:
 //! SCR_ModularButtonComponent.OnClick ignores which button was pressed.
 //!
@@ -19,14 +19,26 @@ class RK29_PresetMenu
 	protected static const string MENU_PANEL = "PresetMenu";
 	protected static const string MENU_OVERWRITE = "PresetMenuOverwrite";
 	protected static const string MENU_DELETE = "PresetMenuDelete";
+	protected static const string MENU_QUICKBAR = "PresetMenuQuickBar";
+	protected static const string MENU_QUICKBAR_CLEAR = "PresetMenuQuickBarClear";
 
-	//! What the panel measures, authored on PresetMenu in RK29_LoadoutMenu.layout. Stated rather
-	//! than measured on purpose: GetScreenSize answers zero until the engine has laid the panel out,
-	//! and the panel is placed in the very frame it is first shown in - the hover tip skips its
-	//! clamp in that case and hangs slightly wrong, which a menu opening off the edge of the screen
-	//! may not. Both must be kept in step with the two overrides the layout authors.
+	//! The two quick bar items come and go per row. What is hidden is the item's SizeLayout, so the
+	//! vertical layout closes the gap, and the label says Save or Update.
+	protected static const string MENU_QUICKBAR_SIZE = "PresetMenuQuickBarSize";
+	protected static const string MENU_QUICKBAR_CLEAR_SIZE = "PresetMenuQuickBarClearSize";
+	protected static const string MENU_QUICKBAR_LABEL = "PresetMenuQuickBarLabel";
+	protected static const string QUICKBAR_SAVE_TEXT = "Save Quick Bar";
+	protected static const string QUICKBAR_UPDATE_TEXT = "Update Quick Bar";
+
+	//! What the panel measures. Stated rather than measured on purpose: GetScreenSize answers zero
+	//! until the engine has laid the panel out, and the panel is placed in the very frame it is first
+	//! shown in - the hover tip skips its clamp in that case and hangs slightly wrong, which a menu
+	//! opening off the edge of the screen may not. The width must be kept in step with the layout's
+	//! WidthOverride; the height is set from here on every open (ITEM_HEIGHT per shown item plus
+	//! PresetMenuItems' padding), so it must match the items' HeightOverride and that padding.
 	protected static const float MENU_WIDTH = 160.0;
-	protected static const float MENU_HEIGHT = 68.0;
+	protected static const float ITEM_HEIGHT = 30.0;
+	protected static const float MENU_PADDING = 8.0;
 
 	//! Below the row that opened it, and this far clear of the layer's edges when it would not fit.
 	protected static const float MENU_OFFSET_Y = 2.0;
@@ -58,6 +70,9 @@ class RK29_PresetMenu
 	protected string m_sPreset;
 
 	protected bool m_bOpen;
+
+	//! This opening's height - see MENU_PADDING.
+	protected float m_fHeight;
 
 	//! World time (ms) at which a MenuBack press closed this menu - see TookBack.
 	protected float m_fBackClosedMs;
@@ -98,6 +113,10 @@ class RK29_PresetMenu
 			m_aHandlers);
 		menu.AttachHandler(m_wPanel, MENU_DELETE, RK29_EMenuRowKind.PRESET_MENU_DELETE, 0,
 			m_aHandlers);
+		menu.AttachHandler(m_wPanel, MENU_QUICKBAR, RK29_EMenuRowKind.PRESET_MENU_QUICKBAR_SAVE, 0,
+			m_aHandlers);
+		menu.AttachHandler(m_wPanel, MENU_QUICKBAR_CLEAR, RK29_EMenuRowKind.PRESET_MENU_QUICKBAR_CLEAR,
+			0, m_aHandlers);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -119,8 +138,9 @@ class RK29_PresetMenu
 	//! Opens under the anchor, right-aligned with it, holding the named preset. Re-opening on
 	//! another row closes first: AddModal on an already-modal widget is refused with a log line.
 	//! The panel is made modal so a click anywhere else closes it instead of reaching the row
-	//! underneath - vanilla's combo box opens its list exactly this way.
-	void Open(Widget anchor, string preset)
+	//! underneath - vanilla's combo box opens its list exactly this way. `canSaveBar` shows the
+	//! quick bar's Save/Update item, `hasBar` its Clear item and the Update wording.
+	void Open(Widget anchor, string preset, bool canSaveBar, bool hasBar)
 	{
 		if (!m_wPanel || !m_wLayer || !anchor || preset == "")
 			return;
@@ -138,11 +158,19 @@ class RK29_PresetMenu
 		m_sPreset = preset;
 		m_bOpen = true;
 
+		ShowQuickBarItems(canSaveBar, hasBar);
+
 		m_wLayer.SetVisible(true);
 		m_wPanel.SetVisible(true);
 		PlaceUnder(ws, anchor);
 
-		ws.AddModal(m_wPanel, m_wPanel.FindAnyWidget(MENU_OVERWRITE));
+		// focus starts on the topmost item shown
+		string first = MENU_OVERWRITE;
+		if (canSaveBar)
+			first = MENU_QUICKBAR;
+		else if (hasBar)
+			first = MENU_QUICKBAR_CLEAR;
+		ws.AddModal(m_wPanel, m_wPanel.FindAnyWidget(first));
 
 		// The modal takes the input the dialog would otherwise answer ESC with, so the press has to
 		// be listened for directly - vanilla's combo box arms the same two actions for the same
@@ -154,6 +182,44 @@ class RK29_PresetMenu
 			input.AddActionListener(UIConstants.MENU_ACTION_BACK, EActionTrigger.DOWN, OnMenuBack);
 			input.AddActionListener(UIConstants.MENU_ACTION_BACK_WB, EActionTrigger.DOWN, OnMenuBack);
 		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Before placement, which reads the height this sets.
+	protected void ShowQuickBarItems(bool canSaveBar, bool hasBar)
+	{
+		int items = 2;
+
+		Widget saveSize = m_wPanel.FindAnyWidget(MENU_QUICKBAR_SIZE);
+		if (saveSize)
+		{
+			saveSize.SetVisible(canSaveBar);
+			if (canSaveBar)
+				items++;
+		}
+
+		Widget clearSize = m_wPanel.FindAnyWidget(MENU_QUICKBAR_CLEAR_SIZE);
+		if (clearSize)
+		{
+			clearSize.SetVisible(hasBar);
+			if (hasBar)
+				items++;
+		}
+
+		TextWidget label = TextWidget.Cast(m_wPanel.FindAnyWidget(MENU_QUICKBAR_LABEL));
+		if (label)
+		{
+			if (hasBar)
+				label.SetText(QUICKBAR_UPDATE_TEXT);
+			else
+				label.SetText(QUICKBAR_SAVE_TEXT);
+		}
+
+		m_fHeight = MENU_PADDING + ITEM_HEIGHT * items;
+
+		SizeLayoutWidget size = SizeLayoutWidget.Cast(m_wPanel);
+		if (size)
+			size.SetHeightOverride(m_fHeight);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -248,8 +314,8 @@ class RK29_PresetMenu
 			if (x > rightLimit)
 				x = rightLimit;
 
-			if (y + MENU_HEIGHT > ws.DPIUnscale(layerH) - MENU_MARGIN)
-				y = ws.DPIUnscale(anchorY - layerY) - MENU_HEIGHT - MENU_OFFSET_Y;
+			if (y + m_fHeight > ws.DPIUnscale(layerH) - MENU_MARGIN)
+				y = ws.DPIUnscale(anchorY - layerY) - m_fHeight - MENU_OFFSET_Y;
 		}
 
 		if (x < MENU_MARGIN)

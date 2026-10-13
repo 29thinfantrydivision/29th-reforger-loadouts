@@ -24,9 +24,11 @@ enum RK29_EMenuRowKind
 	//! a saved kit. Left-click loads it, right-click opens its overwrite/delete menu, and holding
 	//! it drags it up or down the list - which is why it is attached by AttachClickHandler.
 	PRESET_ROW,
-	//! the two items of that menu - neither carries an index, the open menu holds the preset name
+	//! the items of that menu - none carries an index, the open menu holds the preset name
 	PRESET_MENU_OVERWRITE,
 	PRESET_MENU_DELETE,
+	PRESET_MENU_QUICKBAR_SAVE,
+	PRESET_MENU_QUICKBAR_CLEAR,
 	//! the typed preset name, routed on commit only
 	PRESET_SAVE_EDIT,
 	MODE_TAB,

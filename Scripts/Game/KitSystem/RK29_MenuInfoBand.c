@@ -32,6 +32,12 @@ class RK29_MenuInfoBand
 	protected static const string PRESET_OLD_FORMAT_SUFFIX = " (old format)";
 	protected static const string PRESET_STALE_SUFFIX = " (outdated)";
 
+	//! The refusal band's title when the worn quick bar names something the target kit lacks.
+	protected static const string QUICKBAR_REFUSED_TITLE = "Can't save quick bar";
+
+	//! The band's title when an overwrite leaves the saved quick bar naming something the kit lacks.
+	protected static const string QUICKBAR_REMOVED_TITLE = "Quick bar removed";
+
 	//! Amber ink, and deliberately neither a dim nor a plate: a filled amber row is this menu's
 	//! "current selection", and an outdated preset is still perfectly loadable - it wants a warning.
 	protected static const ref Color PRESET_STALE_INK = new Color(0.761, 0.386, 0.08, 1.0);
@@ -611,7 +617,40 @@ class RK29_MenuInfoBand
 		if (name == "")
 			return;
 
-		m_Menu.PresetMenu().Open(PresetAnchor(index), name);
+		// the quick bar items: Save/Update only with a body of our own to read the keys from, Clear
+		// only when there is something to clear
+		bool canSaveBar;
+		bool hasBar;
+		RK29_ClassSetup cls = m_Menu.CurrentClass();
+		RK29_KitPresetStorage store = RK29_KitPresetStorage.GetInstance();
+		if (cls && store)
+		{
+			hasBar = store.QuickBarOf(cls.m_sKitName, name) != "";
+			canSaveBar = RK29_QuickBar.SaveableBody() != null
+				&& RK29_KitPresetStorage.CanLoad(store.Find(cls.m_sKitName, name));
+		}
+
+		m_Menu.PresetMenu().Open(PresetAnchor(index), name, canSaveBar, hasBar);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The saved kit the player last chose that holds exactly these picks, "" when none does - the
+	//! same tie-break the lit row takes, so applying a twin restores THAT twin's quick bar.
+	string ChosenPresetName(RK29_ClassSetup cls, string wire)
+	{
+		RK29_KitPresetStorage store = RK29_KitPresetStorage.GetInstance();
+		if (!cls || !store)
+			return "";
+
+		array<RK29_KitPreset> presets = {};
+		store.PresetsFor(cls.m_sKitName, presets);
+		foreach (RK29_KitPreset preset : presets)
+		{
+			if (preset && preset.m_sPicks == wire && ChosenKey(cls, preset.m_sName) == m_sChosenPreset)
+				return preset.m_sName;
+		}
+
+		return "";
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -671,6 +710,9 @@ class RK29_MenuInfoBand
 		RK29_Log.Trace(string.Format("[RK29] loadout menu: overwrote preset '%1' of %2 picks='%3'",
 			name, cls.m_sKitName, wire));
 		RememberSavedAsWorn(cls, name, wire);
+		// a refusal on screen can be about this preset's old picks
+		m_Menu.HideApplyError();
+		RecheckQuickBar(cls, name);
 		m_sChosenPreset = ChosenKey(cls, name);
 		BuildInfoPanel();
 	}
@@ -697,7 +739,141 @@ class RK29_MenuInfoBand
 
 		RK29_Log.Trace(string.Format("[RK29] loadout menu: deleted preset '%1' of %2", name,
 			cls.m_sKitName));
+		// a refusal on screen can name the preset just deleted
+		m_Menu.HideApplyError();
 		BuildInfoPanel();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The open menu's Save/Update Quick Bar: keys 6-0 of the body worn now, onto the named saved kit,
+	//! provided that kit carries every item on them. Any kit, not only the one worn - the check is
+	//! what makes that safe. The menu hides the item without a body of our own; refused here as well,
+	//! whatever got it pressed. Nothing to restamp: no row shows the bar.
+	void OnPresetMenuSaveQuickBar()
+	{
+		RK29_PresetMenu menu = m_Menu.PresetMenu();
+		string name = menu.Target();
+		menu.Close();
+		if (name == "")
+			return;
+
+		RK29_ClassSetup cls = m_Menu.CurrentClass();
+		RK29_KitPresetStorage store = RK29_KitPresetStorage.GetInstance();
+		if (!cls || !store)
+			return;
+
+		RK29_KitPreset preset = store.Find(cls.m_sKitName, name);
+		if (!RK29_KitPresetStorage.CanLoad(preset))
+			return;
+
+		// whatever an earlier press refused is about a save this one replaces
+		m_Menu.HideApplyError();
+
+		// the item is hidden without a body when the menu OPENS; the body can die before the click
+		IEntity body = RK29_QuickBar.SaveableBody();
+		array<ResourceName> bar = {};
+		if (!body || !RK29_QuickBar.Capture(body, bar))
+		{
+			array<string> noBody = {"Spawn in first - the bar is read", "from the body you are wearing."};
+			RefuseQuickBar(noBody);
+			return;
+		}
+
+		array<ResourceName> missing = {};
+		if (!RK29_QuickBar.MissingFrom(cls.m_sKitName, preset.m_sPicks, bar, missing))
+		{
+			Print(string.Format("[RK29] loadout menu: quick bar not saved to '%1' - the kit did not"
+				+ " resolve", name), LogLevel.WARNING);
+			array<string> unread = {"This kit could not be read."};
+			RefuseQuickBar(unread);
+			return;
+		}
+
+		if (!missing.IsEmpty())
+		{
+			array<string> lines = {};
+			RK29_MenuRowKit.DroppedLines(missing, lines);
+			lines.InsertAt("Not in " + name + ":", 0);
+			RefuseQuickBar(lines);
+			return;
+		}
+
+		string value = RK29_QuickBar.Encode(bar);
+		if (!store.SetQuickBar(cls.m_sKitName, name, value))
+			return;
+
+		// the button's own click is not authored, so a refusal plays only the fail sound
+		SCR_UISoundEntity.SoundEvent(SCR_SoundEvent.CLICK);
+		RK29_Log.Trace(string.Format("[RK29] loadout menu: saved quick bar of preset '%1' of %2 qs=%3",
+			name, cls.m_sKitName, value));
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A saved kit's picks just changed under its saved quick bar (Save keeps the bar on an
+	//! overwrite). A bar the new picks no longer carry is dropped and the band says why: kept, it
+	//! would fail and notify on every spawn in that kit (RK29_QuickBarRestore.GiveUp).
+	protected void RecheckQuickBar(notnull RK29_ClassSetup cls, string name)
+	{
+		RK29_KitPresetStorage store = RK29_KitPresetStorage.GetInstance();
+		if (!store)
+			return;
+
+		string value = store.QuickBarOf(cls.m_sKitName, name);
+		array<string> guids = {};
+		if (value == "" || !RK29_QuickBar.Decode(value, guids))
+			return;
+
+		RK29_KitPreset preset = store.Find(cls.m_sKitName, name);
+		if (!preset)
+			return;
+
+		array<ResourceName> bar = {};
+		foreach (string guid : guids)
+			bar.Insert(guid);
+
+		array<ResourceName> missing = {};
+		if (!RK29_QuickBar.MissingFrom(cls.m_sKitName, preset.m_sPicks, bar, missing)
+			|| missing.IsEmpty())
+			return;
+
+		if (!store.SetQuickBar(cls.m_sKitName, name, ""))
+			return;
+
+		RK29_Log.Trace(string.Format("[RK29] loadout menu: dropped the quick bar of preset '%1' of %2"
+			+ " - its new picks no longer carry qs=%3", name, cls.m_sKitName, value));
+
+		array<string> lines = {};
+		RK29_MenuRowKit.DroppedLines(missing, lines);
+		lines.InsertAt("No longer in " + name + ":", 0);
+		m_Menu.ShowRefusal(QUICKBAR_REMOVED_TITLE, lines);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected void RefuseQuickBar(notnull array<string> lines)
+	{
+		m_Menu.ShowRefusal(QUICKBAR_REFUSED_TITLE, lines);
+		SCR_UISoundEntity.SoundEvent(SCR_SoundEvent.ACTION_FAILED);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The open menu's Clear Quick Bar: the kit goes back to vanilla's own bar at spawn.
+	void OnPresetMenuClearQuickBar()
+	{
+		RK29_PresetMenu menu = m_Menu.PresetMenu();
+		string name = menu.Target();
+		menu.Close();
+		if (name == "")
+			return;
+
+		m_Menu.HideApplyError();
+
+		RK29_ClassSetup cls = m_Menu.CurrentClass();
+		RK29_KitPresetStorage store = RK29_KitPresetStorage.GetInstance();
+		if (!cls || !store || !store.SetQuickBar(cls.m_sKitName, name, ""))
+			return;
+
+		RK29_Log.Trace(string.Format("[RK29] loadout menu: cleared quick bar of preset '%1' of %2",
+			name, cls.m_sKitName));
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -741,6 +917,9 @@ class RK29_MenuInfoBand
 			typed, cls.m_sKitName, wire));
 
 		RememberSavedAsWorn(cls, typed, wire);
+		// a refusal on screen can be about the old picks of the preset this name overwrote
+		m_Menu.HideApplyError();
+		RecheckQuickBar(cls, typed);
 
 		// the kit just saved is the one on screen, and it is saved from picks some OTHER preset may
 		// already hold - without this the new row is stamped dark while its older twin keeps the

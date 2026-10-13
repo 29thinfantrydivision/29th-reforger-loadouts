@@ -13,6 +13,9 @@ modded enum ENotification
 
 	//! No params. Local, for a cancel on either side - see SCR_PlayerController.RK29_ShowApplyCancelled.
 	RK29_KIT_NOT_APPLIED,
+
+	//! No params. Local, from RK29_QuickBarRestore.GiveUp.
+	RK29_QUICKBAR_NOT_RESTORED,
 }
 
 //------------------------------------------------------------------------------------------------
