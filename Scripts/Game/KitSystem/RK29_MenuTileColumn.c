@@ -906,7 +906,8 @@ class RK29_MenuTileColumn
 			if (!point || !point.m_bIsOpticsPoint || point.m_sOwnerWeapon != weaponEntry.m_sWeapon)
 				continue;
 
-			RK29_ResolvedEntry seated = RK29_KitResolve.PickedEntry(point, m_Menu.Picks());
+			// the apply's read: a pick naming a blocked glass seats the default, not that glass
+			RK29_ResolvedEntry seated = RK29_KitResolve.ExclusiveAnswer(point, m_Menu.Picks());
 			if (seated && RK29_KitResolve.IsMagnifiedEntry(setup, point, seated))
 				return true;
 		}

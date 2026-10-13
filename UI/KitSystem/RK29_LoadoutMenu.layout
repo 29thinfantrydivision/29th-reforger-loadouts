@@ -600,6 +600,162 @@ OverlayWidgetClass {
           Padding 4 4 4 4
          }
          {
+          SizeLayoutWidgetClass "{AB29C0FFEEB40090}" {
+           Name "PresetMenuQuickBarSize"
+           Slot LayoutSlot "{AB29C0FFEEB40091}" {
+            HorizontalAlign 3
+           }
+           AllowHeightOverride 1
+           HeightOverride 30
+           {
+            ButtonWidgetClass "{AB29C0FFEEB40092}" {
+             Name "PresetMenuQuickBar"
+             Slot AlignableSlot "{AB29C0FFEEB40093}" {
+              HorizontalAlign 3
+              VerticalAlign 3
+             }
+             components {
+              SCR_ModularButtonComponent "{AB29C0FFEEB40094}" {
+               m_aEffects {
+                SCR_ButtonEffectColor "{AB29C0FFEEB40095}" : "{C5E2E5A4650334DC}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Color_ButtonBackground.conf" {
+                 m_eEvents 6159
+                 m_sWidgetName "PresetMenuQuickBarBg"
+                 m_cDefault 1 1 1 0
+                 m_cHovered 0.761 0.386 0.08 0.55
+                 m_cActivated 1 1 1 0
+                 m_cActivatedHovered 0.761 0.386 0.08 0.55
+                 m_cFocusGained 0.761 0.386 0.08 0.55
+                 m_cFocusLost 1 1 1 0
+                 m_cToggledOn 1 1 1 0
+                 m_cToggledOff 1 1 1 0
+                }
+                SCR_ButtonEffectSound "{AB29C0FFEEB40097}" : "{A96BD3D75E106FC5}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Focused.conf" {
+                }
+                SCR_ButtonEffectSound "{AB29C0FFEEB40098}" : "{F66E5F9DD84911A8}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Hovered.conf" {
+                }
+               }
+               m_eEventReturnValue 2147483599
+               m_bCanBeToggled 0
+              }
+             }
+             style blank
+             {
+              OverlayWidgetClass "{AB29C0FFEEB40099}" {
+               Name "PresetMenuQuickBarOverlay"
+               Slot ButtonWidgetSlot "{AB29C0FFEEB4009A}" {
+                HorizontalAlign 3
+                VerticalAlign 3
+               }
+               {
+                ImageWidgetClass "{AB29C0FFEEB4009B}" {
+                 Name "PresetMenuQuickBarBg"
+                 Slot OverlayWidgetSlot "{AB29C0FFEEB4009C}" {
+                  HorizontalAlign 3
+                  VerticalAlign 3
+                 }
+                 Color 1 1 1 0
+                }
+                RichTextWidgetClass "{AB29C0FFEEB4009D}" {
+                 Name "PresetMenuQuickBarLabel"
+                 Slot OverlayWidgetSlot "{AB29C0FFEEB4009E}" {
+                  HorizontalAlign 0
+                  VerticalAlign 1
+                  Padding 10 0 10 0
+                 }
+                 Color 0.9 0.9 0.89 1
+                 Text "Save Quick Bar"
+                 "Font Size" 16
+                 "Min Font Size" 16
+                 FontProperties FontProperties "{AB29C0FFEEB4009F}" {
+                  Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+                 }
+                 "Vertical Alignment" Center
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+          SizeLayoutWidgetClass "{AB29C0FFEEB400C0}" {
+           Name "PresetMenuQuickBarClearSize"
+           Slot LayoutSlot "{AB29C0FFEEB400C1}" {
+            HorizontalAlign 3
+           }
+           AllowHeightOverride 1
+           HeightOverride 30
+           {
+            ButtonWidgetClass "{AB29C0FFEEB400C2}" {
+             Name "PresetMenuQuickBarClear"
+             Slot AlignableSlot "{AB29C0FFEEB400C3}" {
+              HorizontalAlign 3
+              VerticalAlign 3
+             }
+             components {
+              SCR_ModularButtonComponent "{AB29C0FFEEB400C4}" {
+               m_aEffects {
+                SCR_ButtonEffectColor "{AB29C0FFEEB400C5}" : "{C5E2E5A4650334DC}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Color_ButtonBackground.conf" {
+                 m_eEvents 6159
+                 m_sWidgetName "PresetMenuQuickBarClearBg"
+                 m_cDefault 1 1 1 0
+                 m_cHovered 0.761 0.386 0.08 0.55
+                 m_cActivated 1 1 1 0
+                 m_cActivatedHovered 0.761 0.386 0.08 0.55
+                 m_cFocusGained 0.761 0.386 0.08 0.55
+                 m_cFocusLost 1 1 1 0
+                 m_cToggledOn 1 1 1 0
+                 m_cToggledOff 1 1 1 0
+                }
+                SCR_ButtonEffectSound "{AB29C0FFEEB400C6}" : "{D0EF588033B1793A}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Confirm.conf" {
+                }
+                SCR_ButtonEffectSound "{AB29C0FFEEB400C7}" : "{A96BD3D75E106FC5}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Focused.conf" {
+                }
+                SCR_ButtonEffectSound "{AB29C0FFEEB400C8}" : "{F66E5F9DD84911A8}Configs/WLib/ModularButtonEffects/ModularButtonEffect_Sound_Hovered.conf" {
+                }
+               }
+               m_eEventReturnValue 2147483599
+               m_bCanBeToggled 0
+              }
+             }
+             style blank
+             {
+              OverlayWidgetClass "{AB29C0FFEEB400C9}" {
+               Name "PresetMenuQuickBarClearOverlay"
+               Slot ButtonWidgetSlot "{AB29C0FFEEB400CA}" {
+                HorizontalAlign 3
+                VerticalAlign 3
+               }
+               {
+                ImageWidgetClass "{AB29C0FFEEB400CB}" {
+                 Name "PresetMenuQuickBarClearBg"
+                 Slot OverlayWidgetSlot "{AB29C0FFEEB400CC}" {
+                  HorizontalAlign 3
+                  VerticalAlign 3
+                 }
+                 Color 1 1 1 0
+                }
+                RichTextWidgetClass "{AB29C0FFEEB400CD}" {
+                 Name "PresetMenuQuickBarClearLabel"
+                 Slot OverlayWidgetSlot "{AB29C0FFEEB400CE}" {
+                  HorizontalAlign 0
+                  VerticalAlign 1
+                  Padding 10 0 10 0
+                 }
+                 Color 0.9 0.9 0.89 1
+                 Text "Clear Quick Bar"
+                 "Font Size" 16
+                 "Min Font Size" 16
+                 FontProperties FontProperties "{AB29C0FFEEB400CF}" {
+                  Font "{3E7733BAC8C831F6}UI/Fonts/RobotoCondensed/RobotoCondensed_Regular.fnt"
+                 }
+                 "Vertical Alignment" Center
+                }
+               }
+              }
+             }
+            }
+           }
+          }
           SizeLayoutWidgetClass "{AB29C0FFEEB4006A}" {
            Name "PresetMenuOverwriteSize"
            Slot LayoutSlot "{AB29C0FFEEB4006B}" {
