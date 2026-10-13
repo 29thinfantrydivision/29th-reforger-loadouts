@@ -18,3 +18,4 @@ Production:
 | Big Chungus Rifles | `62A711001B8FDEEA` |
 | British Forces | `5AE50EC5B8D6F4AE` |
 | M5 Backpack | `689A3C96490E8010` |
+| Chungus Shotguns | `620E584B1D2C96A4` |
