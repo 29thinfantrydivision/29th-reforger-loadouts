@@ -24,7 +24,6 @@ carries.
 | `BADC0DEDABBEDA5E` | RHS: Status Quo — Content Pack 02 |
 | `62A711001B8FDEEA` | Big Chungus Rifles |
 | `5AE50EC5B8D6F4AE` | British Forces |
-| `689A3C96490E8010` | M5 Backpack |
 | `620E584B1D2C96A4` | Chungus Shotguns |
 
 RHS is a hard dependency: the scripts mod and extend RHS classes, and the mod's own prefabs
@@ -32,8 +31,7 @@ inherit from RHS prefabs. Big Chungus Rifles is one because the mod overrides it
 anim graph (`Assets/Weapons/Rifles/workspaces/bc_m1_garand.agf`), and an override only wins when
 it loads after the file it replaces. British Forces is one because the British body prefab
 (`29th_Character_UK_BaseLoadout.et`) inherits from its `Character_UK_Base.et` and wears its
-uniform. M5 Backpack is one because the medic's `29th_Backpack_M5_NoCross.et` material takes
-its marking-free M5 texture. Chungus Shotguns is one so every server loads the shotguns the kits
+uniform. Chungus Shotguns is one so every server loads the shotguns the kits
 hand out (Ithaca 37, Remington 870, double barrel). Nothing else is.
 
 ## Content from other mods
