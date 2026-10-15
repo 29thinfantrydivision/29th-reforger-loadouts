@@ -20,19 +20,18 @@ carries.
 | --- | --- |
 | `58D0FB3206B6F859` | Arma Reforger (base data) |
 | `595F2BF2F44836FB` | RHS: Status Quo |
-| `1337C0DE5DABBEEF` | RHS: Status Quo — Content Pack 01 |
-| `BADC0DEDABBEDA5E` | RHS: Status Quo — Content Pack 02 |
-| `62A711001B8FDEEA` | Big Chungus Rifles |
 | `5AE50EC5B8D6F4AE` | British Forces |
-| `620E584B1D2C96A4` | Chungus Shotguns |
+| `69F907274A84A2ED` | 29th Arsenal |
 
-RHS is a hard dependency: the scripts mod and extend RHS classes, and the mod's own prefabs
-inherit from RHS prefabs. Big Chungus Rifles is one because the mod overrides its M1 Garand
-anim graph (`Assets/Weapons/Rifles/workspaces/bc_m1_garand.agf`), and an override only wins when
-it loads after the file it replaces. British Forces is one because the British body prefab
+RHS is a hard dependency: the scripts mod and extend RHS classes, and the body prefabs inherit
+from RHS prefabs. British Forces is one because the British body prefab
 (`29th_Character_UK_BaseLoadout.et`) inherits from its `Character_UK_Base.et` and wears its
-uniform. Chungus Shotguns is one so every server loads the shotguns the kits
-hand out (Ithaca 37, Remington 870, double barrel). Nothing else is.
+uniform. 29th Arsenal is one because it owns every 29th weapon, ammo, vest, backpack and item
+prefab the kits hand out, the overrides of other mods' gear (M240, ACOG, 12ga shells, barmine,
+medical kit) and the M1 Garand anim graph; the kits name them by the GUIDs that moved with them.
+The arsenal in turn requires RHS, Big Chungus Rifles, Chungus Shotguns, Chungus SMGs and LMGs,
+WCS Armaments and British Forces, so every server loads the guns the kits hand out. Nothing else
+is.
 
 ## Content from other mods
 
