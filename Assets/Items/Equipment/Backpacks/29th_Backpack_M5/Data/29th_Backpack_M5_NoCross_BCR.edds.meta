@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{AB29C0FFEE29E012}Assets/Items/Equipment/Backpacks/29th_Backpack_M5/Data/29th_Backpack_M5_NoCross_BCR.edds"
+ Configurations {
+  EDDSResourceClass PC {
+  }
+  EDDSResourceClass XBOX_ONE : PC {
+  }
+  EDDSResourceClass XBOX_SERIES : PC {
+  }
+  EDDSResourceClass PS4 : PC {
+  }
+  EDDSResourceClass PS5 : PC {
+  }
+  EDDSResourceClass HEADLESS : PC {
+  }
+ }
+}
