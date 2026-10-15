@@ -76,7 +76,7 @@ class RK29_ChoiceEntryBase
 	[Attribute(desc: "Id overrides and the wire address this entry by (\"group/entry\"). Empty = derived from the payload - an item stating BOTH a prefab and an alias is addressed by the ALIAS while the prefab still supplies what is issued - fine until an override needs to name it", category: "29th")]
 	string m_sId;
 
-	[Attribute("0", desc: "Where this entry sits in its group's list. Higher sinks; equal numbers keep authored order (own entries, then includes). Bands: ammo 100 ball / 200 AP / 300 tracer / 400 mixed; optics = max zoom x10; packs = capacity/100; weapons = +1000 badge / +2000 donor, hundreds type (1 rifle 2 marksman 3 carbine 4 SMG 5 shotgun 6 LMG 7 GPMG 8 disposable 9 reusable launcher), tens caliber step smallest first, ones alphabetical by shown name", category: "29th")]
+	[Attribute("0", desc: "Where this entry sits in its group's list. Higher sinks; equal numbers keep authored order (own entries, then includes). Bands: ammo 100 ball / 200 AP / 300 tracer / 400 mixed; optics = max zoom x10; packs = capacity/100; garments = +1000 donor, +100 protective (helmets, body armour) so soft items lead, tens the model (1 the issued one, then alternates), ones the build-up step (bare, cover, accessory, net/scrim; a state change - rolled, ears up, folded - right after its plain version; colours alphabetical, dirty after clean); weapons = +1000 badge / +2000 donor, hundreds type (1 rifle 2 marksman 3 carbine 4 SMG 5 shotgun 6 LMG 7 GPMG 8 disposable 9 reusable launcher), tens caliber step smallest first, ones alphabetical by shown name", category: "29th")]
 	int m_iOrder;
 
 	// Second job: RK29_KitResolve.SynthesizeLoadedGroup copies this flag onto the "<id>_loaded"
