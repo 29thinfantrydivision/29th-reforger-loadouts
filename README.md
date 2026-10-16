@@ -10,8 +10,9 @@ carries.
 - **Kit menu keybind:** `F4` · **Apply kit:** `Space` (both rebindable, category *Kits - 29th ID*;
   rebinds are backed up to `$profile:RK29_Keybinds.json` and restored if a session without the
   mod wipes them from the engine's input settings)
-- **Factions:** US, USSR, UK (British Forces), FIA, IRR (Irregular) · **Classes:** 11 US and 11 UK
-  (incl. Parade), 10 USSR, 10 FIA, 7 IRR (no Leadership, Crewman or Pilot)
+- **Factions:** US, USSR, UK (British Forces), FIA, IRR (Irregular — the faction itself lives in
+  29th Game Master) · **Classes:** 11 US and 11 UK (incl. Parade), 10 USSR, 10 FIA, 7 IRR (no
+  Leadership, Crewman or Pilot)
 - **Default kit** for a player who has not picked one: US *29th Parade*, every other side *Rifleman*
 
 ## Dependencies
@@ -22,6 +23,7 @@ carries.
 | `595F2BF2F44836FB` | RHS: Status Quo |
 | `5AE50EC5B8D6F4AE` | British Forces |
 | `69F907274A84A2ED` | 29th Arsenal |
+| `69B4ED19D84A9D12` | 29th Game Master |
 
 RHS is a hard dependency: the scripts mod and extend RHS classes, and the body prefabs inherit
 from RHS prefabs. British Forces is one because the British body prefab
@@ -30,8 +32,11 @@ uniform. 29th Arsenal is one because it owns every 29th weapon, ammo, vest, back
 prefab the kits hand out, the overrides of other mods' gear (M240, ACOG, 12ga shells, barmine,
 medical kit) and the M1 Garand anim graph; the kits name them by the GUIDs that moved with them.
 The arsenal in turn requires RHS, Big Chungus Rifles, Chungus Shotguns, Chungus SMGs and LMGs,
-WCS Armaments and British Forces, so every server loads the guns the kits hand out. Nothing else
-is.
+WCS Armaments and British Forces, so every server loads the guns the kits hand out. 29th Game
+Master is one because it owns the IRR faction: the faction config, its editor label and enum, its
+flag and icon, its Game Master registration, its spawn points, its radio relay composition, its
+R-148E radio and the IRR body prefab all live there, and the kits, the squad presets and the
+deploy row name them by the GUIDs that moved with them. Nothing else is.
 
 ## Content from other mods
 
@@ -73,7 +78,7 @@ Configs/
   System/chimeraInputCommon.conf      default keybinds + the action contexts the kit menu lives in
   Systems/ChimeraSystemsConfig.conf   registers the client-side RK29_KitInputSystem
   UI/RK29_Dialogs.conf        the loadout menu's dialog preset (Apply Kit / Close, action context)
-Prefabs/                      weapons, vests, empty scabbards, character bodies (see Known issues)
+Prefabs/Characters/           the character bodies the deploy rows spawn (see Known issues)
 Scripts/Game/                 GM29_* injection (loadouts, groups) + KitSystem/RK29_* runtime
 UI/KitSystem/                 loadout menu and HUD layouts
 ```

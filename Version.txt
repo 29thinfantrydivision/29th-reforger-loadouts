@@ -15,3 +15,4 @@ Production:
 | RHS: Status Quo | `595F2BF2F44836FB` |
 | British Forces | `5AE50EC5B8D6F4AE` |
 | 29th Arsenal | `69F907274A84A2ED` |
+| 29th Game Master | `69B4ED19D84A9D12` | (Test) — Production is `6A6B456E670ACD2B`
