@@ -43,9 +43,6 @@ class RK29_KitCapture
 			break;
 		}
 
-		if (!kit.m_UIInfo)
-			Print(string.Format("[RK29] captured '%1': body has no UIInfo", kitName), LogLevel.NORMAL);
-
 		return kit;
 	}
 }

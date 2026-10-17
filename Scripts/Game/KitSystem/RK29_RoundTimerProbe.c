@@ -49,20 +49,12 @@ class RK29_RoundTimerProbe
 		m_bResolved = true;
 		m_bActive = m_iIdxPhase >= 0;
 
-		if (!m_bReported)
+		if (!m_bReported && m_bActive
+			&& (m_iIdxStartTs < 0 || m_iIdxDurationS < 0 || m_iIdxPaused < 0 || m_iIdxPausedRemainingS < 0))
 		{
 			m_bReported = true;
-			if (m_bActive)
-			{
-				string countdown = "countdown fields resolved";
-				if (m_iIdxStartTs < 0 || m_iIdxDurationS < 0 || m_iIdxPaused < 0 || m_iIdxPausedRemainingS < 0)
-					countdown = "countdown fields MISSING - HUD clock hidden";
-				Print(string.Format(
-					"[RK29] round timer probe ACTIVE - phase field found on %1 | %2",
-					m_GameMode.Type().ToString(), countdown), LogLevel.NORMAL);
-			}
-			else
-				Print("[RK29] round timer not present - config fallback in effect", LogLevel.NORMAL);
+			Print(string.Format("[RK29] round timer on %1 has a phase but its countdown fields are"
+				+ " MISSING - HUD clock hidden", m_GameMode.Type().ToString()), LogLevel.WARNING);
 		}
 	}
 

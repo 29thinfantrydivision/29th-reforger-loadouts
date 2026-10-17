@@ -402,21 +402,6 @@ modded class SCR_PlayerController
 			if (RK29_TryDraw(character, ctrl))
 			{
 				RK29_StopDraw();
-
-				float took = GetGame().GetWorld().GetWorldTime() - m_RK29_DrawArmedAt;
-
-				// a finished spawn draw always logs - this path shipped broken twice. 0 attempts
-				// means the weapon was already in hand when the body became ours
-				if (m_RK29_DrawIsSpawn)
-					Print(string.Format(
-						"[RK29] spawn draw finished - %1 attempt(s), %2ms after the request",
-						m_RK29_DrawAttempts, took.ToString(-1, 0)), LogLevel.NORMAL);
-				// re-kit: silent when it works first time; anything else means the retry carried
-				// it
-				else if (m_RK29_DrawAttempts > 1)
-					Print(string.Format(
-						"[RK29] weapon drawn after %1 attempts, %2ms after the request",
-						m_RK29_DrawAttempts, took.ToString(-1, 0)), LogLevel.NORMAL);
 				return;
 			}
 		}

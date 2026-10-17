@@ -98,15 +98,6 @@ class RK29_KitStruct
 	}
 
 	//------------------------------------------------------------------------------------------------
-	int CountItems()
-	{
-		int n = 0;
-		foreach (RK29_KitItemBatch batch : m_aItems)
-			n += batch.m_aPrefabs.Count();
-		return n;
-	}
-
-	//------------------------------------------------------------------------------------------------
 	//! The m_mGarmentAttachments key. Slash-joined like every other two-part address here
 	//! ("group/entry"), so a second row for the same garment slot replaces the first, as a later
 	//! clothing group on a slot replaces an earlier one.

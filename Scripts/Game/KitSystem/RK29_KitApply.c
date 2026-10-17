@@ -486,8 +486,6 @@ class RK29_KitApply
 		if (!Replication.IsServer())
 			return false;
 
-		Print(string.Format("[RK29] apply '%1' begins", kit.m_sKitName), LogLevel.NORMAL);
-
 		// anchor the outfit-faction tally so the perceived faction cannot flip to unknown mid-apply
 		// (garment swaps fire per-item recalcs). The rebuild below erases the anchor.
 		SCR_CharacterFactionAffiliationComponent anchorAffiliation = SCR_CharacterFactionAffiliationComponent.Cast(
@@ -525,8 +523,6 @@ class RK29_KitApply
 
 		ApplyTraits_S(character, kit);
 		ApplyFacePaint(character, kit.m_eFacePaint, false);
-
-		Print(string.Format("[RK29] apply '%1' done", kit.m_sKitName), LogLevel.NORMAL);
 		return true;
 	}
 
@@ -641,7 +637,6 @@ class RK29_KitApply
 		}
 
 		array<EEditableEntityLabel> labels = {};
-		string named;
 		if (kit.m_aTraits)
 		{
 			foreach (RK29_ETrait trait : kit.m_aTraits)
@@ -650,17 +645,12 @@ class RK29_KitApply
 				if (label == EEditableEntityLabel.NONE || labels.Contains(label))
 					continue;
 				labels.Insert(label);
-				named = named + " " + RK29_Traits.NameOf(trait);
 			}
 		}
 
 		// RK29_SetTraits_S, not the vanilla setter: it marks the body kit-owned, without which a
 		// body could only ever gain traits. The kit index travels in the same bump as the labels.
 		editable.RK29_SetTraits_S(labels, RK29_KitManager.KitIndexOf(kit.m_sKitName));
-		if (labels.IsEmpty())
-			named = " none";
-		// logged even when empty: "did the medic trait come off" is otherwise answered by timing a bandage
-		Print(string.Format("[RK29] traits:%1", named), LogLevel.NORMAL);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -700,7 +690,7 @@ class RK29_KitApply
 			if (suffix.IsEmpty())
 			{
 				if (painted)
-					SetHead(identityComp, visual, candidate.GetHead(), "washed", preview);
+					SetHead(identityComp, visual, candidate.GetHead(), preview);
 				return;
 			}
 
@@ -710,7 +700,7 @@ class RK29_KitApply
 					continue;
 
 				if (camo != head)
-					SetHead(identityComp, visual, camo, "applied", preview);
+					SetHead(identityComp, visual, camo, preview);
 				return;
 			}
 
@@ -741,7 +731,7 @@ class RK29_KitApply
 
 	//------------------------------------------------------------------------------------------------
 	protected static void SetHead(notnull CharacterIdentityComponent identityComp,
-		notnull VisualIdentity visual, ResourceName head, string verb, bool preview)
+		notnull VisualIdentity visual, ResourceName head, bool preview)
 	{
 		visual.SetHead(head);
 		identityComp.CommitChanges();
@@ -751,7 +741,6 @@ class RK29_KitApply
 		// SetIdentity is the documented replicating call; CommitChanges alone is not promised to
 		// reach proxies mid-life. Same sequence as ACE Facepaint's own apply.
 		identityComp.SetIdentity(identityComp.GetIdentity());
-		Print(string.Format("[RK29] face paint %1", verb), LogLevel.NORMAL);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -1803,10 +1792,7 @@ class RK29_KitApply
 			ctx.m_Weapon = weapon;
 			ctx.m_Seated = magSlot.GetAttachedEntity();
 			ctx.m_Order = pick;
-			if (pick.m_Loader.Seat(ctx))
-				Note(string.Format("[RK29] %1 loaded by %2 with %3 round(s)", FileNameOf(weapon),
-					pick.m_Loader.Type().ToString(), pick.m_iRounds), LogLevel.NORMAL);
-			else
+			if (!pick.m_Loader.Seat(ctx))
 				Note(string.Format("[RK29] %1 did not seat %2 round(s) in %3", pick.m_Loader.Type().ToString(),
 					pick.m_iRounds, FileNameOf(weapon)), LogLevel.WARNING);
 			return;
@@ -1823,23 +1809,13 @@ class RK29_KitApply
 
 			ForceDelete(manager, seated, magSlot);
 		}
-		else if (clearOnly)
-			return; // asked for empty, already empty
 
 		if (clearOnly)
-		{
-			Note(string.Format("[RK29] emptied the muzzle of %1 - the chambered round"
-				+ " was picked down to zero", FileNameOf(weapon)), LogLevel.NORMAL);
 			return;
-		}
 
 		IEntity unused;
 		if (SpawnInto(manager, pick.m_sPrefab, destStorage, magSlot.GetID(), unused))
-		{
-			Note(string.Format("[RK29] loaded %1 into %2", FilePath.StripPath("" + pick.m_sPrefab),
-				FileNameOf(weapon)), LogLevel.NORMAL);
 			return;
-		}
 
 		Note(string.Format("[RK29] loaded magazine did not seat in %1: %2",
 			FileNameOf(weapon), pick.m_sPrefab), LogLevel.WARNING);

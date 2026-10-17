@@ -47,11 +47,11 @@ class RK29_MannequinDress
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! What the loaded dress actually put on the body, counted off the body, with the live weight -
-	//! the one figure that must match the player's own inventory screen. Each weapon the kit names
-	//! is asked for by its own slot: counts can coincide, and a body one gun short reported "2/2
-	//! weapon(s)" for a week. WARNING rather than a blank readout, because WeaponAt reads by list
-	//! position while the dress writes by slot ID.
+	//! Silent unless the dress dropped items or a weapon did not seat; then what it put on the body,
+	//! counted off the body, with the live weight - the one figure that must match the player's own
+	//! inventory screen. Each weapon the kit names is asked for by its own slot: counts can coincide,
+	//! and a body one gun short reported "2/2 weapon(s)" for a week. WeaponAt reads by list position
+	//! while the dress writes by slot ID.
 	protected static void ReportLoaded(string subject, notnull IEntity body,
 		notnull RK29_KitStruct kit, array<ResourceName> dropped)
 	{
@@ -84,24 +84,24 @@ class RK29_MannequinDress
 			missing = missing + " slot" + slotIdx.ToString() + ":" + FilePath.StripPath("" + weapon);
 		}
 
+		bool anyDropped = dropped && !dropped.IsEmpty();
+		if (missing == "" && !anyDropped)
+			return;
+
 		int dressed = OccupiedSlots(EquipedLoadoutStorageComponent.Cast(
 			body.FindComponent(EquipedLoadoutStorageComponent)));
 
 		string suffix = ", " + RK29_KitWeight.WeightLabel(RK29_KitWeight.LiveTotal(body));
 
-		if (dropped && !dropped.IsEmpty())
+		if (anyDropped)
 			suffix = suffix + " | " + dropped.Count().ToString() + " DROPPED";
 
-		LogLevel level = LogLevel.NORMAL;
+		// the weight row is read off this body in the same frame and would be shown as whole
 		if (missing != "")
-		{
-			// the weight row is read off this body in the same frame and would be shown as whole
 			suffix = suffix + " | WEAPON NOT SEATED - the weight below is short by it:" + missing;
-			level = LogLevel.WARNING;
-		}
 
 		Report(subject, dressed, kit.m_mClothing.Count(), weaponsSeated, weaponsWanted, "",
-			suffix, level);
+			suffix, LogLevel.WARNING);
 	}
 
 	//------------------------------------------------------------------------------------------------

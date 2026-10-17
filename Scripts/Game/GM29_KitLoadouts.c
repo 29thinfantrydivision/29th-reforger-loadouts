@@ -53,34 +53,20 @@ modded class SCR_LoadoutManager
 		// cache must exist before injection - the dedup guard uses it
 		BuildOwnedNameCache(holder);
 
-		int preExisting = m_aPlayerLoadouts.Count();
-
 		// counted as we go, so VerifyInjection needs no second walk. Dedup matches on the loadout
 		// name, never the resource (see m_aGM29OwnedNames); an unnamed entry is never a
 		// duplicate.
-		int added = 0;
 		int registered = 0;
 		foreach (SCR_BasePlayerLoadout kit : holder.m_aLoadouts)
 		{
 			if (!kit)
 				continue;
 
-			string kitName = kit.GetLoadoutName();
-			if (kitName != string.Empty && RK29_FindLoadoutByName(kitName))
-			{
-				Print(string.Format("[GM29Kits] dedup skip: '%1' already registered", kitName),
-					LogLevel.NORMAL);
-				registered = registered + 1;
-				continue;
-			}
-
-			m_aPlayerLoadouts.Insert(kit);
-			added = added + 1;
 			registered = registered + 1;
+			string kitName = kit.GetLoadoutName();
+			if (kitName == string.Empty || !RK29_FindLoadoutByName(kitName))
+				m_aPlayerLoadouts.Insert(kit);
 		}
-
-		Print(string.Format("[GM29Kits] pre-existing entries: %1 | injected: %2",
-			preExisting, added), LogLevel.NORMAL);
 
 		VerifyInjection(holder, registered);
 
@@ -140,9 +126,6 @@ modded class SCR_LoadoutManager
 			if (kitName != string.Empty)
 				m_aGM29OwnedNames.Insert(kitName);
 		}
-
-		Print(string.Format("[GM29Kits] ownership cache holds %1 kit name(s)",
-			m_aGM29OwnedNames.Count()), LogLevel.NORMAL);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -211,17 +194,7 @@ modded class SCR_LoadoutManager
 
 		// back-to-front so earlier indices stay valid
 		for (int i = foreignIndices.Count() - 1; i >= 0; i--)
-		{
-			int idx = foreignIndices[i];
-			SCR_BasePlayerLoadout entry = m_aPlayerLoadouts[idx];
-
-			Print(string.Format("[GM29Kits] pruning: name='%1' res=%2",
-				entry.GetLoadoutName(), entry.GetLoadoutResource()), LogLevel.NORMAL);
-			m_aPlayerLoadouts.RemoveOrdered(idx);
-		}
-
-		Print(string.Format("[GM29Kits] pruned %1 foreign loadouts | %2 29th kits retained",
-			foreignIndices.Count(), ownedCount), LogLevel.NORMAL);
+			m_aPlayerLoadouts.RemoveOrdered(foreignIndices[i]);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -231,11 +204,7 @@ modded class SCR_LoadoutManager
 	{
 		int authored = holder.m_aLoadouts.Count();
 		if (registered >= authored)
-		{
-			Print(string.Format("[GM29Kits] verify OK - all %1 kits registered", authored),
-				LogLevel.NORMAL);
 			return;
-		}
 
 		Print(string.Format("[GM29Kits] verify FAILED - %1 of %2 kit(s) missing; a null entry in"
 			+ " GM29_Kits.conf is the only way this happens",

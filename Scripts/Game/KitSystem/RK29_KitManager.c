@@ -60,10 +60,6 @@ class RK29_KitManager
 	//! waited the same length before asking, so this only trips on what the server learns late.
 	protected static const float HANDS_SETTLE_TIMEOUT_MS = 3000;
 
-	//! How long after a spawn to check the draw held. Must be longer than RK29_SPAWN_DRAW_CAP_MS,
-	//! which is anchored at possession and can trail a first spawn by many seconds.
-	protected static const int DRAW_VERIFY_MS = 35000;
-
 	//! First slot index a kit never claims on Character_Base: ClaimSlot hands out 0-2 only; the
 	//! grenade slot and the hand-weapon slot both sit at 3, the throwable slot at 4. Vanilla's
 	//! restore draws only slotIdx < 3.
@@ -197,7 +193,6 @@ class RK29_KitManager
 			// the one-shots too: one outliving its world would read old state against a new body
 			queue.Remove(ApplyWhenHandsFree_S);
 			queue.Remove(Recompute_S);
-			queue.Remove(VerifyDrawn_S);
 			queue.Remove(RestoreRejoinIdentity);
 		}
 
@@ -279,12 +274,7 @@ class RK29_KitManager
 
 			m_mKits.Set(cls2.m_sKitName, standalone);
 			m_aIndexToKit.Insert(cls2.m_sKitName);
-			Print(string.Format("[RK29] kit '%1' is picker-only (no deploy entry, faction %2)",
-				cls2.m_sKitName, standalone.m_sFactionKey), LogLevel.NORMAL);
 		}
-
-		Print(string.Format("[RK29] manager up - %1 kit(s) walked | server=%2",
-			m_mKits.Count(), Replication.IsServer()), LogLevel.NORMAL);
 
 		if (Replication.IsServer())
 		{
@@ -372,12 +362,6 @@ class RK29_KitManager
 		RK29_Log.s_bVerbose = m_Setup.m_bVerboseLogging;
 		if (RK29_Log.s_bVerbose)
 			Print("[RK29] verbose apply trace ENABLED - turn m_bVerboseLogging off before a live session", LogLevel.WARNING);
-
-		Print(string.Format("[RK29] setup loaded - %1 class(es), %2 alias(es), %3 choice"
-			+ " group(s), %4 attachment(s), %5 weapon definition(s)",
-			m_Setup.m_aClasses.Count(), m_Setup.m_aAliases.Count(),
-			m_Setup.m_aChoiceGroups.Count(), m_Setup.m_aAttachments.Count(),
-			m_Setup.m_aWeaponDefs.Count()), LogLevel.NORMAL);
 
 		// the config sweeps are for whoever can act on them - the host's log, Workbench included
 		if (Replication.IsServer())
@@ -806,8 +790,6 @@ class RK29_KitManager
 				defaultOptic);
 		}
 
-		Print(string.Format("[RK29] kit '%1' from CONFIG (%2 items)",
-			kitName, composed.CountItems()), LogLevel.NORMAL);
 		return composed;
 	}
 
@@ -921,6 +903,7 @@ class RK29_KitManager
 			return false;
 		}
 		NotifyDropped_S(playerId, droppedItems);
+		LogApplied_S(playerId, sel.m_sKitName, "spawn");
 		// nothing stamps the body here - ApplyTraits_S is the one owner of the stamp
 
 		RequestSpawnDraw_S(playerId, body);
@@ -1065,10 +1048,11 @@ class RK29_KitManager
 
 			// mid-round the re-kit is announced rather than refused, and only for a body that got
 			// dressed; the phase is read here because that is the moment the gear changed
-			if (!IsPreround())
+			if (IsPreround())
+				LogApplied_S(pending.m_iPlayerId, pending.m_Kit.m_sKitName, "re-kit");
+			else
 			{
-				Print(string.Format("[RK29] live re-kit with the round live - '%1' (player %2)",
-					pending.m_Kit.m_sKitName, pending.m_iPlayerId), LogLevel.NORMAL);
+				LogApplied_S(pending.m_iPlayerId, pending.m_Kit.m_sKitName, "re-kit, round live");
 				SCR_NotificationsComponent.SendToEveryone(ENotification.RK29_LIVE_REKIT, pending.m_iPlayerId);
 			}
 
@@ -1133,7 +1117,7 @@ class RK29_KitManager
 			return;
 
 		// Every spawn: a mutation queued against the previous body must not dress the new one
-		int spawnGen = BumpApplyGen(playerId);
+		BumpApplyGen(playerId);
 
 		// "Current Kit" is the only entry that dresses from the stash, on a bare body in
 		// OnLoadoutSpawned. Any other entry is a request for that loadout as authored; stock
@@ -1141,12 +1125,6 @@ class RK29_KitManager
 		// all.
 		bool dressedBySpawnHook = m_mSpawnApplied_S.Contains(playerId);
 		m_mSpawnApplied_S.Remove(playerId);
-
-		// Diagnostic check on the spawn draw, a LOG and not a fix - a corrective draw this
-		// long after the spawn is worthless. This path once failed silently and cost a session of
-		// guessing.
-		if (dressedBySpawnHook)
-			GetGame().GetCallqueue().CallLater(VerifyDrawn_S, DRAW_VERIFY_MS, false, playerId, spawnGen);
 
 		// A stock spawn keeps its gear as authored, but a role's qualifications are config-owned
 		// and selections live in server memory only - so the first spawn of a session is a stock
@@ -1168,36 +1146,6 @@ class RK29_KitManager
 		}
 
 		QueueRecompute_S();
-	}
-
-	//------------------------------------------------------------------------------------------------
-	//! Did the spawn draw hold? Log-only: empty hands mean both halves failed, and a draw this
-	//! late fixes nothing. Gated on the apply generation; a dead or mounted player is skipped.
-	protected void VerifyDrawn_S(int playerId, int gen)
-	{
-		if (!Replication.IsServer())
-			return;
-
-		int currentGen;
-		if (!m_mApplyGen_S.Find(playerId, currentGen) || currentGen != gen)
-			return;
-
-		IEntity body = GetGame().GetPlayerManager().GetPlayerControlledEntity(playerId);
-		SCR_ChimeraCharacter character = SCR_ChimeraCharacter.Cast(body);
-		if (!character || character.IsInVehicle())
-			return;
-
-		CharacterControllerComponent ctrl = character.GetCharacterController();
-		if (!ctrl || ctrl.IsDead() || ctrl.IsUnconscious())
-			return;
-
-		BaseWeaponManagerComponent wm = ctrl.GetWeaponManagerComponent();
-		if (wm && wm.GetCurrentWeapon())
-			return;
-
-		Print(string.Format("[RK29] spawn equip did not hold for player %1 - hands still empty"
-			+ " %2s after spawning. Not correcting (too late to matter); investigate the equip"
-			+ " path", playerId, DRAW_VERIFY_MS / 1000), LogLevel.WARNING);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -1275,6 +1223,15 @@ class RK29_KitManager
 	{
 		return CharacterGrenadeSlotComponent.Cast(slot) != null
 			|| GrenadeSlotComponent.Cast(slot) != null;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The one line each successful apply to a player's body leaves in the server log.
+	protected static void LogApplied_S(int playerId, string kitName, string context)
+	{
+		Print(string.Format("[RK29] kit '%1' applied to %2 (player %3, %4)", kitName,
+			GetGame().GetPlayerManager().GetPlayerName(playerId), playerId, context),
+			LogLevel.NORMAL);
 	}
 
 	//------------------------------------------------------------------------------------------------

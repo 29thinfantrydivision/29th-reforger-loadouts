@@ -60,8 +60,6 @@ modded class SCR_Faction
 			return;
 		}
 
-		int added = 0;
-		int replaced = 0;
 		foreach (SCR_GroupRolePresetConfig preset : holder.m_aGroupPresets)
 		{
 			if (!preset)
@@ -75,18 +73,13 @@ modded class SCR_Faction
 			if (existingIdx < 0)
 			{
 				m_aGroupRolePresetConfigs.Insert(preset);
-				added = added + 1;
 				continue;
 			}
 
 			// re-running (mode/round restart) overwrites our own entry, so injection stays
 			// idempotent
 			m_aGroupRolePresetConfigs.Set(existingIdx, preset);
-			replaced = replaced + 1;
 		}
-
-		Print(string.Format("[GM29Groups] %1: added %2 group role presets, replaced %3",
-			GetFactionKey(), added, replaced), LogLevel.NORMAL);
 	}
 
 	//------------------------------------------------------------------------------------------------
