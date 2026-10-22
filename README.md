@@ -25,26 +25,44 @@ carries.
 | `69F907274A84A2ED` | 29th Arsenal |
 | `69B4ED19D84A9D12` | 29th Game Master |
 
-RHS is a hard dependency: the scripts mod and extend RHS classes, and the body prefabs inherit
-from RHS prefabs. British Forces is one because the British body prefab
+These five are what `addon.gproj` declares. For the two 29th mods they are the test projects'
+GUIDs; `Version.txt` records the production counterparts (this mod `6A8369196925F3C7`,
+29th Game Master `6A6B456E670ACD2B`).
+
+RHS is a hard dependency on both sides: `RK29_RadioSourceComponent` is a `modded class` on RHS's
+`RHS_RadioSourceComponent`, and the catalogs name RHS weapons, optics, vests, night vision and
+the M40 magazines by GUID. British Forces is one because the British body prefab
 (`29th_Character_UK_BaseLoadout.et`) inherits from its `Character_UK_Base.et` and wears its
-uniform. 29th Arsenal is one because it owns every 29th weapon, ammo, vest, backpack and item
-prefab the kits hand out, the overrides of other mods' gear (M240, ACOG, 12ga shells, barmine,
-medical kit) and the M1 Garand anim graph; the kits name them by the GUIDs that moved with them.
-The arsenal in turn requires RHS, Big Chungus Rifles, Chungus Shotguns, Chungus SMGs and LMGs,
-WCS Armaments and British Forces, so every server loads the guns the kits hand out. 29th Game
-Master is one because it owns the IRR faction: the faction config, its editor label and enum, its
-flag and icon, its Game Master registration, its spawn points, its radio relay composition, its
-R-148E radio and the IRR body prefab all live there, and the kits, the squad presets and the
-deploy row name them by the GUIDs that moved with them. Nothing else is.
+uniform, and because the UK kits are built almost entirely out of its gear. No other body prefab
+here inherits from a mod — the US, USSR and FIA bases are vanilla. 29th Arsenal is one because it
+owns every 29th weapon, ammo, vest, backpack and item prefab the kits hand out, the overrides of
+other mods' gear (M240, ACOG, 12ga shells, barmine, medical kit) and the M1 Garand anim graph;
+the kits name them by the GUIDs that moved with them. 29th Game Master is one because it owns the
+IRR faction: the faction config, its editor label and enum, its flag and icon, its Game Master
+registration, its spawn points, its radio relay composition, its R-148E radio and the IRR body
+prefab all live there, and the kits, the squad presets and the deploy row name them by the GUIDs
+that moved with them. Nothing else is.
+
+Those two 29th mods pull in the rest of what a server has to load:
+
+- **29th Arsenal** requires RHS: Status Quo `595F2BF2F44836FB`, RHS: Content Pack 01
+  `1337C0DE5DABBEEF`, RHS: Content Pack 02 `BADC0DEDABBEDA5E`, Chungus Rifles `62A711001B8FDEEA`,
+  Chungus Shotguns `620E584B1D2C96A4`, Chungus SMGs `60E6F54E174C53C5`, Chungus LMGs
+  `61344BDC155A5A28`, WCS Armaments `629B2BA37EFFD577`, British Forces `5AE50EC5B8D6F4AE` and
+  29th Game Master `69B4ED19D84A9D12`.
+- **29th Game Master** requires 29th ID MapIcons `69D375C3CB13F8CD`.
+
+So every Chungus gun the weapon catalog names (Thompson, Carl Gustaf m/45, BAR, RPK, RPD, the
+Garand, the shotguns) arrives with the arsenal: none of them is optional content.
 
 ## Content from other mods
 
-The kit config may name prefabs from **any** mod, dependency or not — ACE Medical's epinephrine
-is one (`Catalogs/RK29_Aliases.conf`), and so are the Big Chungus SMGs and LMGs the
-weapon catalog names (Thompson, Carl Gustaf m/45, BAR, RPK, RPD). Whatever does not load in a session is left out of every
-kit as if it were parked: the row never appears, overrides and exclusions naming it do nothing,
-and a group left with nothing (a kit's own hat group whose every helmet is missing) is not
+The kit config may name prefabs from **any** mod, dependency or not. Two such prefabs are in the
+config today, both aliases in `Catalogs/RK29_Aliases.conf`: ACE Medical's epinephrine
+(`5B2FD067D70C1E8F`) and Wirecutters 2's wirecutters (`42232FFE6E7AC415`). Everything else the
+kits name comes from the dependency chain above. Whatever does not load in a session is left out
+of every kit as if it were parked: the row never appears, overrides and exclusions naming it do
+nothing, and a group left with nothing (a kit's own hat group whose every helmet is missing) is not
 offered and leaves the group it was written to replace in place. A default that is missing hands
 its flag to the first row left, and a budget floor comes down to what the remaining defaults spend.
 
