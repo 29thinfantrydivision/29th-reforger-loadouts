@@ -15,3 +15,6 @@ CLAUDE.local.md
 
 # Local authoring/audit scripts - not game content, not shipped
 tools/
+
+*.gproj
+resourceDatabase.rdb
