@@ -80,6 +80,10 @@ class RK29_KitManager
 	//! A single slot would let two misconfigured sides re-announce each other on every deploy.
 	protected ref array<string> m_aDefaultlessFactionsNoted = {};
 
+	//! TEMP diagnostic (bugs.md hud-magnified-tally-two-unexplained): the last two-glass dump per
+	//! player, so a standing loadout dumps once, not on every recompute.
+	protected ref map<int, string> m_mDoubleMagLogged_S = new map<int, string>();
+
 	//! Same index space as SCR_LoadoutManager's list for as far as that list runs, then extends past
 	//! its end with the picker-only kits; the count arrays use it too.
 	protected ref array<string> m_aIndexToKit = {};
@@ -1626,6 +1630,7 @@ class RK29_KitManager
 		m_mPendingApply_S.Remove(playerId);
 		m_mLastRequestMs_S.Remove(playerId);
 		m_mSpawnApplied_S.Remove(playerId);
+		m_mDoubleMagLogged_S.Remove(playerId);
 		if (sel && sel.m_sIdentityUid != "")
 			m_mParkedSelections.Set(sel.m_sIdentityUid, sel);
 
@@ -1876,7 +1881,125 @@ class RK29_KitManager
 				magnifiedSlots.Insert(slot);
 		}
 
+		if (magnifiedSlots.Count() >= 2)
+			LogDoubleMagnified_S(playerId, kitName, sel, picks, offer, weaponIdSlots,
+				magnifiedSlots.Count());
+		else
+			m_mDoubleMagLogged_S.Remove(playerId);
+
 		return magnifiedSlots.Count();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! TEMP diagnostic (bugs.md hud-magnified-tally-two-unexplained): one loadout counting two or
+	//! more magnified optics is the symptom - only a CE with both the L1A1 and MAW glass earns it
+	//! legitimately - so dump every input MagnifiedCount read. Remove when the bug is resolved.
+	protected void LogDoubleMagnified_S(int playerId, string kitName, RK29_PlayerSelection sel,
+		array<ref RK29_ChoicePick> picks, notnull array<ref RK29_ResolvedGroup> offer,
+		notnull map<string, int> weaponIdSlots, int count)
+	{
+		array<string> lines = {};
+
+		string stashKit = "none";
+		int stashPicks = -1;
+		if (sel)
+		{
+			stashKit = sel.m_sKitName;
+			if (sel.m_aPicks)
+				stashPicks = sel.m_aPicks.Count();
+		}
+		int readPicks = -1;
+		if (picks)
+			readPicks = picks.Count();
+
+		lines.Insert(string.Format("player %1 '%2' counts %3 magnified | wears '%4' (loadout row"
+			+ " '%5') | stash '%6' with %7 picks | picks read: %8 | briefing %9",
+			playerId, GetGame().GetPlayerManager().GetPlayerName(playerId), count, kitName,
+			CurrentLoadoutName(playerId), stashKit, stashPicks, readPicks, IsBriefing()));
+
+		string slotLine = "weapon slots:";
+		foreach (string weaponId, int weaponSlot : weaponIdSlots)
+		{
+			slotLine += string.Format(" %1@%2", weaponId, weaponSlot);
+		}
+		lines.Insert(slotLine);
+
+		foreach (RK29_ResolvedGroup g : offer)
+		{
+			if (!g || !g.m_bIsOpticsPoint)
+				continue;
+
+			int slot;
+			bool covered = CoveredSlotOf(g, weaponIdSlots, slot);
+
+			string pickedId = "(no pick)";
+			if (picks)
+			{
+				foreach (RK29_ChoicePick p : picks)
+				{
+					if (p && p.m_sGroup == g.m_sId)
+						pickedId = "'" + p.m_sEntry + "'";
+				}
+			}
+
+			string defaultId = "-";
+			RK29_ResolvedEntry def = g.DefaultEntry();
+			if (def)
+				defaultId = def.m_sId;
+
+			string answerId = "-";
+			bool magnified = false;
+			RK29_ResolvedEntry chosen = RK29_KitResolve.ExclusiveAnswer(g, picks);
+			if (chosen)
+			{
+				answerId = chosen.m_sId;
+				magnified = RK29_KitResolve.IsMagnifiedEntry(m_Setup, g, chosen);
+			}
+
+			string entryIds = "";
+			foreach (RK29_ResolvedEntry e : g.m_aEntries)
+			{
+				if (!e)
+					continue;
+				entryIds += " " + e.m_sId;
+				if (e.m_bDefault)
+					entryIds += "(D)";
+				if (e.m_bBlocked)
+					entryIds += "(B)";
+			}
+
+			lines.Insert(string.Format("optics '%1' owner '%2' covered %3 slot %4 | allowEmpty %5"
+				+ " noneBlocked %6 exempt %7 | pick %8 default '%9'", g.m_sId, g.m_sOwnerWeapon,
+				covered, slot, g.m_bAllowEmpty, g.m_bNoneBlocked, g.m_bMagnifiedExempt, pickedId,
+				defaultId) + string.Format(" answer '%1' magnified %2 | entries:%3", answerId,
+				magnified, entryIds));
+		}
+
+		string pickLine = "picks:";
+		if (picks)
+		{
+			foreach (RK29_ChoicePick listed : picks)
+			{
+				if (listed)
+					pickLine += string.Format(" %1=%2x%3", listed.m_sGroup, listed.m_sEntry,
+						listed.m_iCount);
+			}
+		}
+		lines.Insert(pickLine);
+
+		string dump;
+		foreach (string line : lines)
+		{
+			dump += line + "\n";
+		}
+		if (m_mDoubleMagLogged_S.Get(playerId) == dump)
+			return;
+		m_mDoubleMagLogged_S.Set(playerId, dump);
+
+		foreach (string printed : lines)
+		{
+			Print("[RK29] DOUBLE MAGNIFIED " + printed, LogLevel.WARNING);
+		}
 	}
 
 	// =========================================================================== body stamp
