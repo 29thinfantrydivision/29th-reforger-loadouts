@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{44E5180A6332C595}Prefabs/Characters/Factions/BLUFOR/29th_US/29th_Character_US_Rifleman_Testing.et"
+ Configurations {
+  EntityTemplateResourceClass PC {
+  }
+  EntityTemplateResourceClass XBOX_ONE : PC {
+  }
+  EntityTemplateResourceClass XBOX_SERIES : PC {
+  }
+  EntityTemplateResourceClass PS4 : PC {
+  }
+  EntityTemplateResourceClass PS5 : PC {
+  }
+  EntityTemplateResourceClass HEADLESS : PC {
+  }
+ }
+}
