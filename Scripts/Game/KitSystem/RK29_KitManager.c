@@ -13,6 +13,19 @@ class RK29_PlayerSelection
 }
 
 //------------------------------------------------------------------------------------------------
+//! What a player's magnified count was last computed from, so a recount can tell in two map
+//! reads that it cannot have moved. The selection is held by REFERENCE on purpose: the request
+//! path always builds a fresh RK29_PlayerSelection and never edits a stored one, so a different
+//! object is exactly "these picks changed" and there is no invalidation for any site to forget.
+//! A null m_Selection is a legitimate stamp - that player is on the kit's authored defaults.
+class RK29_MagnifiedMemo
+{
+	ref RK29_PlayerSelection m_Selection;
+	string m_sKitName;
+	int m_iCount;
+}
+
+//------------------------------------------------------------------------------------------------
 //! A live re-kit, resolved and waiting for the body's hands to come free.
 class RK29_PendingApply
 {
@@ -48,8 +61,23 @@ class RK29_KitManager
 	//! mod holds, and a GM possession swaps the controlled entity outright. Every one of those
 	//! shows a wrong number on every screen until the next unrelated event, so the tally is
 	//! re-derived from scratch on this cadence and a correction is logged.
-	//! DELETE this and the sweep when a full briefing logs no "count sweep corrected" line.
+	//! The sweep has two jobs now and only the second can be switched off: it re-derives the worn
+	//! kit and the alive tally, which nothing caches, AND it re-derives the magnified count with
+	//! the caches bypassed to prove them - VERIFY_MAGNIFIED_CACHE. So this does not get deleted
+	//! even once the "count sweep corrected" line has gone quiet.
 	protected static const int RECOMPUTE_SWEEP_TICKS = 10;
+
+	//! Whether the sweep bypasses the two caches this tally added - the per-player memo and
+	//! RK29_KitResolve.s_mStandardMagnified - and reports a disagreement, or just reads them like
+	//! any other pass. It proves THOSE TWO and nothing else: the fresh build still reads the
+	//! prefab and composition caches underneath, and a fault both paths share by construction (the
+	//! faction key weapons resolve under, or which selection answers for the kit) is invisible to
+	//! it. On, because a cache that lies shows a wrong number on every
+	//! screen in the briefing and nothing else would ever catch it; the price is one offer build
+	//! per living player per sweep, which after the memo is this tally's whole remaining cost.
+	//! Turn it off once a long briefing has logged no mismatch and the sweep is wanted for its
+	//! uncached half alone.
+	protected static const bool VERIFY_MAGNIFIED_CACHE = true;
 
 	//! Fewest milliseconds between two accepted requests from one player: cheap to send, not to
 	//! serve.
@@ -86,6 +114,10 @@ class RK29_KitManager
 	//! read once at boot: asked per kit in every offer build, which was a linear scan each time
 	protected ref array<string> m_aCurrentKitNames = {};
 
+	//! kit name -> its index in m_aIndexToKit, built once that array is final. The scan it
+	//! replaces ran per living player on every recount, and again for every KitIndexOf caller.
+	protected ref map<string, int> m_mKitIndex = new map<string, int>();
+
 	//! The only owner of the role identities stamped onto bodies. SCR_EditableEntityComponent
 	//! declares its holder as a plain `SCR_UIInfo` with no `ref`, so SetInfoInstance takes a weak
 	//! reference: an instance handed straight over can be collected out from under the component.
@@ -114,6 +146,11 @@ class RK29_KitManager
 	//! At most one per player: a newer request bumps the generation, so an older pending
 	//! abandons.
 	protected ref map<int, ref RK29_PendingApply> m_mPendingApply_S = new map<int, ref RK29_PendingApply>();
+
+	//! playerId -> the magnified count and the kit and selection it was computed from; see
+	//! RK29_MagnifiedMemo for why that stamp needs no invalidation. What proves it is the count
+	//! sweep - VERIFY_MAGNIFIED_CACHE.
+	protected ref map<int, ref RK29_MagnifiedMemo> m_mMagnified_S = new map<int, ref RK29_MagnifiedMemo>();
 
 	//! One rebuild per frame however many events asked: each resolves every living player's
 	//! offer.
@@ -275,6 +312,9 @@ class RK29_KitManager
 			m_mKits.Set(cls2.m_sKitName, standalone);
 			m_aIndexToKit.Insert(cls2.m_sKitName);
 		}
+
+		// after both passes, because this reads the finished array
+		RebuildKitIndex();
 
 		if (Replication.IsServer())
 		{
@@ -1345,7 +1385,7 @@ class RK29_KitManager
 				continue;
 
 			int coveredSlot;
-			if (!CoveredSlotOf(opticGroup, weaponIdSlots, coveredSlot))
+			if (!RK29_KitResolve.CoveredSlotOf(opticGroup, weaponIdSlots, coveredSlot))
 				continue;
 
 			if (!coveredSlots.Contains(coveredSlot))
@@ -1361,25 +1401,6 @@ class RK29_KitManager
 			ironsOnly.m_iOwnerSlot = weaponSlot;
 			orders.Insert(ironsOnly);
 		}
-	}
-
-	//------------------------------------------------------------------------------------------------
-	//! Which body slot an optics group speaks for; false when it speaks for nothing. An ownerless
-	//! group means slot 0, an owner that claimed no slot covers nothing, and the irons-only
-	//! guarantee and the magnified tally must run on this one reading.
-	protected bool CoveredSlotOf(notnull RK29_ResolvedGroup g, notnull map<string, int> weaponIdSlots,
-		out int slot)
-	{
-		slot = 0;
-		if (g.m_sOwnerWeapon == "")
-			return true;
-
-		int ownerSlot;
-		if (!weaponIdSlots.Find(g.m_sOwnerWeapon, ownerSlot))
-			return false;
-
-		slot = ownerSlot;
-		return true;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -1473,12 +1494,28 @@ class RK29_KitManager
 	{
 		if (kitName == "")
 			return -1;
+
+		int idx;
+		if (!m_mKitIndex.Find(kitName, idx))
+			return -1;
+
+		return idx;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! m_aIndexToKit turned around, built once Init has filled it and never again - nothing writes
+	//! that array afterwards. First index wins, as the scan this replaces answered; the empty
+	//! slots are loadout rows that are no kit of ours and belong in no index.
+	protected void RebuildKitIndex()
+	{
+		m_mKitIndex.Clear();
 		foreach (int idx, string name : m_aIndexToKit)
 		{
-			if (name == kitName)
-				return idx;
+			if (name == "" || m_mKitIndex.Contains(name))
+				continue;
+
+			m_mKitIndex.Set(name, idx);
 		}
-		return -1;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -1626,6 +1663,8 @@ class RK29_KitManager
 		m_mPendingApply_S.Remove(playerId);
 		m_mLastRequestMs_S.Remove(playerId);
 		m_mSpawnApplied_S.Remove(playerId);
+		// the memo holds a reference to the selection it was computed from, and ids recycle
+		m_mMagnified_S.Remove(playerId);
 		if (sel && sel.m_sIdentityUid != "")
 			m_mParkedSelections.Set(sel.m_sIdentityUid, sel);
 
@@ -1773,14 +1812,18 @@ class RK29_KitManager
 	protected void Recompute_S()
 	{
 		bool sweep = m_bSweepRecompute_S;
+		// only a sweep nothing else asked for verifies, which is the same condition the corrected
+		// line is blamed on: a tick that piggybacked on an event proves nothing and says nothing
+		bool verify = sweep && VERIFY_MAGNIFIED_CACHE;
 		m_bSweepRecompute_S = false;
 		m_bRecomputeQueued_S = false;
 		if (!Replication.IsServer())
 			return;
 
-		// Nobody can see these outside briefing and they are not cheap: the magnified tally costs
-		// a full BuildOffer per living player, and a death is what most often triggers it in a
-		// live round. Nothing is cleared on the way out; the first pass after briefing returns
+		// Nobody can see these outside briefing. The event path is memo reads now, so the death
+		// that most often triggers this in a live round is cheap - but the verification sweep
+		// still costs a full BuildOffer per living player, and there is still nothing to show any
+		// of it to. Nothing is cleared on the way out; the first pass after briefing returns
 		// overwrites it.
 		if (!IsBriefing())
 			return;
@@ -1817,8 +1860,14 @@ class RK29_KitManager
 			// the tally counts optics, not men: one player can be carrying two magnified sights.
 			// DO NOT fold the call into the add - Enforce replaces a held array read with the last
 			// value of an int/enum foreach run under the call, and BuildOffer ends in face paint's
-			// pattern loop: `magnified[idx] + MagnifiedCount(...)` read 2 on every US/UK kit
-			int counted = MagnifiedCount(pid, m_aIndexToKit[idx]);
+			// pattern loop: `magnified[idx] + MagnifiedFor_S(...)` read 2 on every US/UK kit. Still
+			// true of the cached read - a memo HIT returns without a foreach, so folding it in
+			// would be right until the first miss, which is the worst way for this to break
+			int counted;
+			if (verify)
+				counted = VerifyMagnifiedFor_S(pid, m_aIndexToKit[idx]);
+			else
+				counted = MagnifiedFor_S(pid, m_aIndexToKit[idx]);
 			magnified[idx] = magnified[idx] + counted;
 		}
 
@@ -1831,56 +1880,139 @@ class RK29_KitManager
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! How many magnified optics this player's kit seats - a count, not a flag. A player who
-	//! picked nothing answers with the offered groups' defaults. Counted per weapon slot, not per
-	//! group: several groups can offer glass for one seat, and OR-ing them onto the seat stops
-	//! one rail counting twice. Whether a seat's glass counts is IsMagnifiedEntry's answer and
-	//! only its.
-	protected int MagnifiedCount(int playerId, string kitName)
+	//! Whose picks answer for this kit - the stash when it is this kit's, else null, which
+	//! RK29_KitResolve reads as the authored defaults. The one place that is decided, so the memo
+	//! stamps the very thing the count was built from and cannot disagree with it.
+	protected RK29_PlayerSelection PicksOwnerFor(int playerId, string kitName)
+	{
+		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
+		if (sel && sel.m_sKitName == kitName)
+			return sel;
+
+		return null;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! This player's magnified count, from the memo wherever it cannot have moved. The stamp is
+	//! the kit name and the IDENTITY of the selection the picks came from - a re-pick arrives as a
+	//! new RK29_PlayerSelection, so the reference test fails on its own and no site has to
+	//! remember to invalidate anything. A miss on the defaults is the per-kit cache's to answer;
+	//! a miss with picks is the one case that still pays for an offer build.
+	protected int MagnifiedFor_S(int playerId, string kitName)
 	{
 		RK29_ClassSetup cls = m_Setup.FindClass(kitName);
 		if (!cls)
 			return 0;
 
-		array<ref RK29_ChoicePick> picks = null;
-		RK29_PlayerSelection sel = m_mSelections.Get(playerId);
-		if (sel && sel.m_sKitName == kitName)
-			picks = sel.m_aPicks;
+		RK29_PlayerSelection owner = PicksOwnerFor(playerId, kitName);
 
-		array<ref RK29_ResolvedGroup> offer = {};
-		RK29_KitResolve.BuildOffer(cls, m_Setup, picks, offer);
-		if (offer.IsEmpty())
+		RK29_MagnifiedMemo memo = m_mMagnified_S.Get(playerId);
+		if (memo && memo.m_sKitName == kitName && memo.m_Selection == owner)
+			return memo.m_iCount;
+
+		int count;
+		bool offered;
+		if (HasPicks(owner))
+			count = RK29_KitResolve.MagnifiedCount(cls, m_Setup, owner.m_aPicks, offered);
+		else
+			count = RK29_KitResolve.StandardMagnifiedCount(cls, m_Setup, offered);
+
+		// answered, but never STAMPED when the class offered nothing to count. A pick-less
+		// player's stamp is a seeded selection that changes on nothing but a pick or a side swap,
+		// so a kept nothing-to-count zero would outlive whatever produced it - the whole briefing
+		// with VERIFY_MAGNIFIED_CACHE off, since only the sweep re-stamps a matching memo
+		if (offered)
+			StampMagnified_S(playerId, kitName, owner, count);
+
+		return count;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The sweep's reading: re-derived with both caches bypassed, any disagreement named, both
+	//! layers repaired. A mismatch is a WARNING and not a trace because a cache that lies puts a
+	//! wrong number on every screen in the briefing and nothing else in this mod would notice.
+	protected int VerifyMagnifiedFor_S(int playerId, string kitName)
+	{
+		RK29_ClassSetup cls = m_Setup.FindClass(kitName);
+		if (!cls)
 			return 0;
 
-		// an optics group names its owner by weapon id and a seat is a body slot, so both go
-		// through one walk
-		map<string, int> groupSlots = new map<string, int>();
-		map<string, int> weaponIdSlots = new map<string, int>();
-		RK29_KitResolve.BuildWeaponSlotMap(offer, picks, m_Setup, cls.m_sSideFactionKey,
-			groupSlots, weaponIdSlots);
+		RK29_PlayerSelection owner = PicksOwnerFor(playerId, kitName);
+		bool hasPicks = HasPicks(owner);
 
-		array<int> magnifiedSlots = {};
-		foreach (RK29_ResolvedGroup g : offer)
+		// the defaults path repairs the per-kit entry itself and reports what it held; a player
+		// with picks has nothing cached but their own memo
+		int fresh;
+		int cachedStandard = -1;
+		bool offered;
+		if (hasPicks)
+			fresh = RK29_KitResolve.MagnifiedCount(cls, m_Setup, owner.m_aPicks, offered);
+		else
+			fresh = RK29_KitResolve.VerifyStandardMagnified(cls, m_Setup, cachedStandard, offered);
+
+		// a build that resolved nothing proves nothing: it convicts no layer and repairs none, so
+		// it reports nothing and leaves both as they stand rather than overwriting a good value
+		// with a transient zero and blaming the cache for it
+		if (!offered)
+			return fresh;
+
+		int cachedMemo = -1;
+		RK29_MagnifiedMemo memo = m_mMagnified_S.Get(playerId);
+		if (memo && memo.m_sKitName == kitName && memo.m_Selection == owner)
+			cachedMemo = memo.m_iCount;
+
+		string wrong;
+		if (cachedMemo >= 0 && cachedMemo != fresh)
+			wrong = "the player's memo";
+		if (cachedStandard >= 0 && cachedStandard != fresh)
 		{
-			if (!g || !g.m_bIsOpticsPoint)
-				continue;
-
-			int slot;
-			if (!CoveredSlotOf(g, weaponIdSlots, slot))
-				continue;
-			if (magnifiedSlots.Contains(slot))
-				continue;
-
-			// the apply's read: a pick naming a blocked glass seats the default, not that glass
-			RK29_ResolvedEntry chosen = RK29_KitResolve.ExclusiveAnswer(g, picks);
-			if (!chosen)
-				continue;
-
-			if (RK29_KitResolve.IsMagnifiedEntry(m_Setup, g, chosen))
-				magnifiedSlots.Insert(slot);
+			if (wrong != "")
+				wrong += " and ";
+			wrong += "the kit's defaults entry";
 		}
 
-		return magnifiedSlots.Count();
+		if (wrong != "")
+		{
+			string picksWire = "<defaults>";
+			if (hasPicks)
+				picksWire = RK29_KitResolve.EncodePicks(owner.m_aPicks);
+
+			Print(string.Format("[RK29] magnified cache MISMATCH - %1 disagreed with a fresh"
+				+ " build: fresh %2, memo %3, defaults entry %4 (-1 = nothing held). Player %5"
+				+ " (%6), kit '%7', picks %8. The cached value has been replaced.",
+				wrong, fresh, cachedMemo, cachedStandard, playerId,
+				GetGame().GetPlayerManager().GetPlayerName(playerId), kitName, picksWire),
+				LogLevel.WARNING);
+		}
+
+		StampMagnified_S(playerId, kitName, owner, fresh);
+		return fresh;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Stamp what the count was computed from. Overwrites in place rather than re-inserting: the
+	//! map is walked by nothing and keyed by player id, so one holder per player is all it needs.
+	protected void StampMagnified_S(int playerId, string kitName, RK29_PlayerSelection owner,
+		int count)
+	{
+		RK29_MagnifiedMemo memo = m_mMagnified_S.Get(playerId);
+		if (!memo)
+		{
+			memo = new RK29_MagnifiedMemo();
+			m_mMagnified_S.Set(playerId, memo);
+		}
+
+		memo.m_Selection = owner;
+		memo.m_sKitName = kitName;
+		memo.m_iCount = count;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! An empty pick list is the defaults, not a different answer - a seeded selection carries no
+	//! picks at all - so both read the per-kit cache.
+	protected static bool HasPicks(RK29_PlayerSelection sel)
+	{
+		return sel && sel.m_aPicks && !sel.m_aPicks.IsEmpty();
 	}
 
 	// =========================================================================== body stamp
