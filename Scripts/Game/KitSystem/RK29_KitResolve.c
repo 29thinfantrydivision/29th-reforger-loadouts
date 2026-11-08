@@ -14,6 +14,12 @@ class RK29_KitResolve
 	protected static ref map<string, string> s_mExpandedWires = new map<string, string>();
 	protected static ref map<string, string> s_mStandardWires = new map<string, string>();
 
+	//! kit name -> MagnifiedCount at the authored defaults, the one magnified answer worth a
+	//! session key. A pick wire is not worth one: it carries every count and face paint the class
+	//! offers, so two players on the same scope key differently and nothing is ever shared.
+	//! Repetition per PLAYER is RK29_KitManager's memo to answer, not this map.
+	protected static ref map<string, int> s_mStandardMagnified = new map<string, int>();
+
 	//! The sanity ceiling that cannot be forgotten in config: no request, however built, turns into
 	//! an absurd number of entities. Config is exactly where a cap gets omitted.
 	static const int COUNT_HARD_CEILING = 100;
@@ -1288,6 +1294,145 @@ class RK29_KitResolve
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! How many magnified optics a kit seats under these picks - a count, not a flag. Null picks
+	//! are answered by the offered groups' defaults. Counted per weapon SLOT, not per group:
+	//! several groups can offer glass for one seat, and OR-ing them onto the seat stops one rail
+	//! counting twice. Whether a seat's glass counts is IsMagnifiedEntry's answer and only its.
+	//!
+	//! Pure - cls and setup are loaded config, the picks are the caller's, and nothing body-side
+	//! is read - which is what lets both callers cache the answer for the session.
+	//!
+	//! DO NOT make this read runtime state: a GM-flipped tag or side mask, a live entity, a game
+	//! mode setting. Both callers cache the answer and there is deliberately NO invalidation hook
+	//! anywhere in the mod; the only thing that makes that sound is every input here being config.
+	//! A gate inside BuildOffer - the direction memory/tag-gating-wired.md points - breaks both
+	//! caches silently, with only the verification sweep to notice and nothing once it is off.
+	//!
+	//! outOffered says whether the class offered anything to count at all, and EVERY caller that
+	//! keeps the answer must gate on it. False marks a nothing-to-count zero - no class, no setup,
+	//! or an empty offer - which no cache may keep: an empty offer is also what a class whose
+	//! composition failed to LOAD answers with, and RK29_KitCompose.LoadComposition caches
+	//! successes only, so every other reader of that class retries and would see a later success
+	//! while a frozen zero outlived the failure. True with a zero count is the honest "this kit
+	//! seats no magnified glass" and is kept like any other answer.
+	static int MagnifiedCount(RK29_ClassSetup cls, RK29_KitSetup setup,
+		array<ref RK29_ChoicePick> picks, out bool outOffered)
+	{
+		outOffered = false;
+		if (!cls || !setup)
+			return 0;
+
+		array<ref RK29_ResolvedGroup> offer = {};
+		BuildOffer(cls, setup, picks, offer);
+		if (offer.IsEmpty())
+			return 0;
+
+		outOffered = true;
+
+		// an optics group names its owner by weapon id and a seat is a body slot, so both go
+		// through one walk
+		map<string, int> groupSlots = new map<string, int>();
+		map<string, int> weaponIdSlots = new map<string, int>();
+		BuildWeaponSlotMap(offer, picks, setup, cls.m_sSideFactionKey, groupSlots, weaponIdSlots);
+
+		array<int> magnifiedSlots = {};
+		foreach (RK29_ResolvedGroup g : offer)
+		{
+			if (!g || !g.m_bIsOpticsPoint)
+				continue;
+
+			int slot;
+			if (!CoveredSlotOf(g, weaponIdSlots, slot))
+				continue;
+			if (magnifiedSlots.Contains(slot))
+				continue;
+
+			// the apply's read: a pick naming a blocked glass seats the default, not that glass
+			RK29_ResolvedEntry chosen = ExclusiveAnswer(g, picks);
+			if (!chosen)
+				continue;
+
+			if (IsMagnifiedEntry(setup, g, chosen))
+				magnifiedSlots.Insert(slot);
+		}
+
+		return magnifiedSlots.Count();
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! MagnifiedCount at the authored defaults, cached per kit for the session - s_mStandardMagnified
+	//! states why only this one is cached here. The answer for every player who never opened the
+	//! picker, which is most of them on the first pass of a briefing.
+	static int StandardMagnifiedCount(RK29_ClassSetup cls, RK29_KitSetup setup, out bool outOffered)
+	{
+		outOffered = false;
+		if (!cls || !setup)
+			return 0;
+
+		int known;
+		if (s_mStandardMagnified.Find(cls.m_sKitName, known))
+		{
+			// only an offered answer is ever cached, so a hit is one by construction
+			outOffered = true;
+			return known;
+		}
+
+		bool offered;
+		int standard = MagnifiedCount(cls, setup, null, offered);
+		outOffered = offered;
+		if (offered)
+			s_mStandardMagnified.Set(cls.m_sKitName, standard);
+
+		return standard;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The defaults re-derived with the cache bypassed, for the count sweep's verification pass.
+	//! outCached is what the entry held, -1 where it held nothing; the entry is repaired to the
+	//! fresh answer before this returns, so a poisoned kit heals on the very sweep that reports
+	//! it. Says nothing itself - the caller is the half that knows which player this was asked
+	//! for.
+	static int VerifyStandardMagnified(RK29_ClassSetup cls, RK29_KitSetup setup, out int outCached,
+		out bool outOffered)
+	{
+		outCached = -1;
+		outOffered = false;
+		if (!cls || !setup)
+			return 0;
+
+		int known;
+		if (s_mStandardMagnified.Find(cls.m_sKitName, known))
+			outCached = known;
+
+		bool offered;
+		int fresh = MagnifiedCount(cls, setup, null, offered);
+		outOffered = offered;
+		if (offered)
+			s_mStandardMagnified.Set(cls.m_sKitName, fresh);
+
+		return fresh;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Which body slot an optics group speaks for; false when it speaks for nothing. An ownerless
+	//! group means slot 0, an owner that claimed no slot covers nothing, and the irons-only
+	//! guarantee and the magnified tally must run on this one reading.
+	static bool CoveredSlotOf(notnull RK29_ResolvedGroup g, notnull map<string, int> weaponIdSlots,
+		out int slot)
+	{
+		slot = 0;
+		if (g.m_sOwnerWeapon == "")
+			return true;
+
+		int ownerSlot;
+		if (!weaponIdSlots.Find(g.m_sOwnerWeapon, ownerSlot))
+			return false;
+
+		slot = ownerSlot;
+		return true;
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! By payload id first, entry id only where the payload names nothing: reading the entry id
 	//! alone misses an entry authoring an explicit m_sId, and an undefined scope reads as
 	//! unmagnified. Null for an entry that is not an attachment.
@@ -1326,6 +1471,7 @@ class RK29_KitResolve
 		s_mSlotTypeCache.Clear();
 		s_mExpandedWires.Clear();
 		s_mStandardWires.Clear();
+		s_mStandardMagnified.Clear();
 	}
 
 	//------------------------------------------------------------------------------------------------

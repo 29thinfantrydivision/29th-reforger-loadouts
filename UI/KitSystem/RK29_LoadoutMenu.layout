@@ -25,6 +25,7 @@ OverlayWidgetClass {
         HorizontalAlign 3
         VerticalAlign 3
        }
+       style Blank
        {
         VerticalLayoutWidgetClass "{AB29C0FFEEB21525}" {
          Name "ColClasses"
@@ -264,6 +265,7 @@ OverlayWidgetClass {
           HorizontalAlign 3
           SizeMode Fill
          }
+         style Blank
          {
           VerticalLayoutWidgetClass "{AB29C0FFEEB2152B}" {
            Name "ColTiles"
@@ -332,6 +334,7 @@ OverlayWidgetClass {
             HorizontalAlign 3
             SizeMode Fill
            }
+           style Blank
            {
             VerticalLayoutWidgetClass "{AB29C0FFEEB21538}" {
              Name "ColDetail"
@@ -387,6 +390,7 @@ OverlayWidgetClass {
         HorizontalAlign 3
         VerticalAlign 3
        }
+       style Blank
        {
         VerticalLayoutWidgetClass "{AB29C0FFEEB21F03}" {
          Name "ColInfo"

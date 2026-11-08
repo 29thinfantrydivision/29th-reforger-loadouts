@@ -760,7 +760,7 @@ class RK29_KitCompose
 	//! The well an item presents, not the wells a weapon accepts. Do not reuse WellsOf: both are
 	//! authored as a MagazineWell object, so a spare Launcher_M72A3 - itself a weapon - would hand
 	//! back its own muzzle's well and read as a rocket that chambers somewhere. The discriminator is
-	//! the owning component: an item presents its well from a MagazineComponent.
+	//! the owning component: an item presents its well from a magazine component (IsMagazineClass).
 	protected static string MagazineWellOf(ResourceName round)
 	{
 		string well;
@@ -789,7 +789,7 @@ class RK29_KitCompose
 		if (!c || depth > 4 || inoutWell != "")
 			return;
 
-		if (c.GetClassName() == "MagazineComponent")
+		if (IsMagazineClass(c.GetClassName()))
 		{
 			BaseContainer well = c.GetObject("MagazineWell");
 			if (well)
@@ -863,7 +863,7 @@ class RK29_KitCompose
 	//------------------------------------------------------------------------------------------------
 	//! Where a round chambers, asked of the metal instead of authored: 5.56 matches the rifle's own
 	//! muzzle, 40mm matches the UGL seated in its M203 slot, and the M72's "rocket" is a whole
-	//! launcher with no MagazineComponent, so it presents no well and chambers nowhere.
+	//! launcher with no magazine component, so it presents no well and chambers nowhere.
 	static RK29_ELoadedSeat DeriveLoadedSeat(ResourceName weapon, ResourceName round)
 	{
 		if (weapon == ResourceName.Empty || round == ResourceName.Empty)
@@ -1064,8 +1064,10 @@ class RK29_KitCompose
 
 	//------------------------------------------------------------------------------------------------
 	//! Prefab-source scanning reports the class a component was authored as, so the test has to be
-	//! the type system's rather than a name list.
-	protected static bool IsMagazineClass(string className)
+	//! the type system's rather than a name list. DO NOT test a magazine by exact class name
+	//! anywhere: Chungus shells are BCC_ShotgunMagazineComponent and 1.9 moves vanilla
+	//! magazines to SCR_MagazineComponent.
+	static bool IsMagazineClass(string className)
 	{
 		if (className == "MagazineComponent")
 			return true;

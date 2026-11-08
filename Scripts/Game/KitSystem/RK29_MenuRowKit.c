@@ -1152,7 +1152,7 @@ class RK29_MenuRowKit
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! EAmmoType flags off a magazine prefab's own MagazineComponent UIInfo. Container reads are
+	//! EAmmoType flags off a magazine prefab's own magazine component UIInfo. Container reads are
 	//! merged, so a magazine inheriting its flags answers with them; a family that authors none is
 	//! not a miss but plain ball, the attribute's default. 0 for anything that is not a magazine at
 	//! all. Cached - see s_mAmmoFlagsCache.
@@ -1181,15 +1181,18 @@ class RK29_MenuRowKit
 		if (!src)
 			return 0;
 
+		// A magazine component without UIInfo does not end the search: another one may carry it.
+		bool sawMagazine;
 		for (int i = 0, n = src.GetComponentCount(); i < n; i++)
 		{
 			IEntityComponentSource comp = src.GetComponent(i);
-			if (!comp || comp.GetClassName() != "MagazineComponent")
+			if (!comp || !RK29_KitCompose.IsMagazineClass(comp.GetClassName()))
 				continue;
 
+			sawMagazine = true;
 			BaseContainer info = comp.GetObject("UIInfo");
 			if (!info)
-				return EAmmoType.FMJ;
+				continue;
 
 			int flags;
 			if (!info.Get("m_eAmmoTypeFlags", flags))
@@ -1197,6 +1200,9 @@ class RK29_MenuRowKit
 
 			return flags;
 		}
+
+		if (sawMagazine)
+			return EAmmoType.FMJ;
 
 		return 0;
 	}
