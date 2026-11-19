@@ -19,15 +19,14 @@ carries.
 
 | GUID | Addon |
 | --- | --- |
-| `58D0FB3206B6F859` | Arma Reforger (base data) |
-| `595F2BF2F44836FB` | RHS: Status Quo |
-| `5AE50EC5B8D6F4AE` | British Forces |
 | `69F907274A84A2ED` | 29th Arsenal |
 | `69B4ED19D84A9D12` | 29th Game Master |
+| `595F2BF2F44836FB` | RHS: Status Quo |
+| `5AE50EC5B8D6F4AE` | British Forces |
+| `58D0FB3206B6F859` | Arma Reforger (base data) |
 
-These five are what `addon.gproj` declares. For the two 29th mods they are the test projects'
-GUIDs; `Version.txt` records the production counterparts (this mod `6A8369196925F3C7`,
-29th Game Master `6A6B456E670ACD2B`).
+These five are what `test.gproj` declares, in its order. `addon.gproj` declares the same list
+with 29th Game Master's Prod GUID `6A6B456E670ACD2B`; `GUIDs.txt` has both columns.
 
 RHS is a hard dependency on both sides: `RK29_RadioSourceComponent` is a `modded class` on RHS's
 `RHS_RadioSourceComponent`, and the catalogs name RHS weapons, optics, vests, night vision and
