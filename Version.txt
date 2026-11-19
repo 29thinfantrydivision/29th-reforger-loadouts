@@ -1,18 +1,16 @@
-### 29th-reforger-loadouts
-- **Folder:** `29th-reforger-loadouts`
+29th Loadouts
+repo: 29th-reforger-loadouts   id: 29th_Loadouts   test id: 29th_Loadouts_Test
 
-Test:
-- **Project ID:** `29th ID Loadouts Testing`
-- **GUID:** `69730206FA071FE2` 
+PROD              TEST
+6A8369196925F3C7  69730206FA071FE2  this mod
 
-Production:
-- **Project ID:** `29th ID Loadouts`
-- **GUID:** `6A8369196925F3C7` 
+29th dependencies
+69F907274A84A2ED  69F907274A84A2ED  29th Arsenal
+6A6B456E670ACD2B  69B4ED19D84A9D12  29th Game Master
 
-| Dependency | GUID |
-|---|---|
-| Arma Reforger (base game) | `58D0FB3206B6F859` |
-| RHS: Status Quo | `595F2BF2F44836FB` |
-| British Forces | `5AE50EC5B8D6F4AE` |
-| 29th Arsenal | `69F907274A84A2ED` |
-| 29th Game Master | `69B4ED19D84A9D12` | (Test) — Production is `6A6B456E670ACD2B`
+other dependencies
+595F2BF2F44836FB  RHS: Status Quo
+5AE50EC5B8D6F4AE  British Forces
+
+base game
+58D0FB3206B6F859  Arma Reforger
