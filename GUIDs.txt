@@ -9,8 +9,8 @@ PROD              TEST
 6A6B456E670ACD2B  69B4ED19D84A9D12  29th Game Master
 
 other dependencies
-595F2BF2F44836FB  RHS: Status Quo
 5AE50EC5B8D6F4AE  British Forces
+595F2BF2F44836FB  RHS: Status Quo
 
 base game
 58D0FB3206B6F859  Arma Reforger
