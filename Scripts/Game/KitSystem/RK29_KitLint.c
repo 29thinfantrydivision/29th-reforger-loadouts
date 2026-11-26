@@ -21,6 +21,197 @@ class RK29_KitLint
 		VerifyGarmentAttachments(setup);
 		VerifyChamberIds(setup);
 		VerifyWireIds(setup);
+		VerifyGearSets(setup);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Every gear set group, catalog and inline: what the resolver would read wrong without a word.
+	//! ERROR: a non-gear-set entry in the group, a set or variant without an id, EXCLUSIVE ammo, an
+	//! ammo row naming a magazine variant (there is no gun to resolve it through) or worn, an issued
+	//! line without a prefab or count, a variant count naming no ammo row. WARNING: a set whose
+	//! synthesized ids collide with a catalog group's.
+	protected static void VerifyGearSets(notnull RK29_KitSetup setup)
+	{
+		int bad = 0;
+		foreach (RK29_ChoiceGroup g : setup.m_aChoiceGroups)
+			bad += ComplainIfGearSetGroupWrong(setup, g, "catalog");
+
+		array<RK29_ChoiceGroup> inlineGroups = {};
+		array<string> inlineKits = {};
+		CollectInlineGroups(setup, inlineGroups, inlineKits);
+		foreach (int i, RK29_ChoiceGroup g : inlineGroups)
+			bad += ComplainIfGearSetGroupWrong(setup, g, "kit '" + inlineKits[i] + "'");
+
+		if (bad > 0)
+			Print(string.Format("[RK29] config ERROR - %1 gear set authoring mistake(s)", bad),
+				LogLevel.ERROR);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected static int ComplainIfGearSetGroupWrong(notnull RK29_KitSetup setup, RK29_ChoiceGroup g,
+		string where)
+	{
+		if (!g || !RK29_GearSetGroup.Cast(g) || !g.m_bEnabled || !g.m_aEntries)
+			return 0;
+
+		int bad = 0;
+		foreach (RK29_ChoiceEntryBase e : g.m_aEntries)
+		{
+			if (!e || !e.m_bEnabled)
+				continue;
+
+			RK29_EntryGearSet gearSet = RK29_EntryGearSet.Cast(e);
+			if (!gearSet)
+			{
+				Print(string.Format("[RK29] config ERROR - gear set group '%1' (%2) holds an entry that"
+					+ " is not a gear set - it can never issue anything", g.m_sId, where), LogLevel.ERROR);
+				bad++;
+				continue;
+			}
+			if (gearSet.m_sId == "")
+			{
+				Print(string.Format("[RK29] config ERROR - gear set in '%1' (%2) has no id - its"
+					+ " variant, issued and ammo groups cannot be addressed", g.m_sId, where),
+					LogLevel.ERROR);
+				bad++;
+				continue;
+			}
+
+			string place = "gear set '" + gearSet.m_sId + "' (" + where + ")";
+			bad += ComplainIfGearSetBodyWrong(gearSet, place);
+			ComplainIfGearSetIdsCollide(setup, gearSet.m_sId, place);
+		}
+		return bad;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected static int ComplainIfGearSetBodyWrong(notnull RK29_EntryGearSet gearSet, string place)
+	{
+		int bad = 0;
+		if (gearSet.m_eAmmoKind == RK29_EChoiceKind.EXCLUSIVE)
+		{
+			Print(string.Format("[RK29] config ERROR - %1 ammo is EXCLUSIVE - read as COUNTED; author"
+				+ " COUNTED or BUDGETED", place), LogLevel.ERROR);
+			bad++;
+		}
+
+		array<string> ammoIds = {};
+		if (gearSet.m_aAmmo)
+		{
+			foreach (RK29_EntryItem row : gearSet.m_aAmmo)
+			{
+				if (!row)
+					continue;
+				ammoIds.Insert(RK29_KitResolve.EntryIdOf(row));
+				if (row.m_sVariant != "" || RK29_EntryEquipment.Cast(row))
+				{
+					Print(string.Format("[RK29] config ERROR - %1 ammo row '%2' names a magazine"
+						+ " variant or a worn slot - a gear set has no gun or slot; use a prefab or an"
+						+ " alias", place, RK29_KitResolve.EntryIdOf(row)), LogLevel.ERROR);
+					bad++;
+				}
+			}
+		}
+
+		bad += ComplainIfIssueLinesWrong(gearSet.m_aIssued, place);
+
+		if (!gearSet.m_aVariants)
+			return bad;
+
+		foreach (RK29_GearSetVariant v : gearSet.m_aVariants)
+		{
+			if (!v)
+				continue;
+			if (v.m_sId == "")
+			{
+				Print(string.Format("[RK29] config ERROR - %1 has a variant without an id - a pick"
+					+ " cannot name it", place), LogLevel.ERROR);
+				bad++;
+				continue;
+			}
+
+			string variantPlace = place + " variant '" + v.m_sId + "'";
+			bad += ComplainIfIssueLinesWrong(v.m_aIssued, variantPlace);
+			if (!v.m_aCounts)
+				continue;
+			foreach (RK29_GearSetCount change : v.m_aCounts)
+			{
+				if (!change || ammoIds.Contains(change.m_sAmmo))
+					continue;
+				Print(string.Format("[RK29] config ERROR - %1 changes ammo row '%2', which the gear set"
+					+ " does not have - the change never applies", variantPlace, change.m_sAmmo),
+					LogLevel.ERROR);
+				bad++;
+			}
+		}
+		return bad;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected static int ComplainIfIssueLinesWrong(array<ref RK29_GearSetIssue> lines, string place)
+	{
+		if (!lines)
+			return 0;
+
+		int bad = 0;
+		foreach (RK29_GearSetIssue line : lines)
+		{
+			if (!line || (line.m_sPrefab != ResourceName.Empty && line.m_iCount >= 1))
+				continue;
+			Print(string.Format("[RK29] config ERROR - %1 has an issued line with no prefab or a count"
+				+ " under 1 - nothing is issued for it", place), LogLevel.ERROR);
+			bad++;
+		}
+		return bad;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The three synthesized ids answer to the same address space as catalog groups: a collision
+	//! makes an override or exclusion reach whichever the offer meets first.
+	protected static void ComplainIfGearSetIdsCollide(notnull RK29_KitSetup setup, string setId,
+		string place)
+	{
+		array<string> ids = {RK29_KitResolve.GearSetVariantIdOf(setId),
+			RK29_KitResolve.GearSetIssuedIdOf(setId), RK29_KitResolve.GearSetAmmoIdOf(setId)};
+		foreach (string id : ids)
+		{
+			if (setup.FindChoiceGroup(id))
+				Print(string.Format("[RK29] config WARNING - %1: group id '%2' is also a catalog"
+					+ " group - rename the set", place, id), LogLevel.WARNING);
+		}
+		if (setup.FindWeaponDef(setId))
+			Print(string.Format("[RK29] config WARNING - %1: '%2' is also a weapon's ammo group -"
+				+ " rename the set", place, RK29_KitResolve.GearSetAmmoIdOf(setId)), LogLevel.WARNING);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Whether a target names a group a gear set synthesizes - "<set>_variant", "_issued", "_ammo" -
+	//! for some set this kit can offer. Such a group is in no catalog and no composition, like a
+	//! weapon's inline ammo.
+	protected static bool IsSynthesizedGearSetGroup(notnull RK29_KitSetup setup,
+		notnull RK29_ClassSetup cls, string groupId)
+	{
+		array<RK29_ChoiceGroup> groups = {};
+		RK29_KitComposition comp = RK29_KitCompose.LoadComposition(cls.m_sComposition);
+		if (comp)
+			comp.Collect(groups);
+
+		foreach (RK29_ChoiceGroup g : groups)
+		{
+			RK29_ChoiceGroup def = DefinitionOf(setup, g);
+			if (!RK29_GearSetGroup.Cast(def) || !def.m_aEntries)
+				continue;
+			foreach (RK29_ChoiceEntryBase e : def.m_aEntries)
+			{
+				if (!RK29_EntryGearSet.Cast(e) || e.m_sId == "")
+					continue;
+				if (groupId == RK29_KitResolve.GearSetVariantIdOf(e.m_sId)
+					|| groupId == RK29_KitResolve.GearSetIssuedIdOf(e.m_sId)
+					|| groupId == RK29_KitResolve.GearSetAmmoIdOf(e.m_sId))
+					return true;
+			}
+		}
+		return false;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -134,6 +325,56 @@ class RK29_KitLint
 			RK29_EntryItem item = RK29_EntryItem.Cast(e);
 			if (item)
 				unloaded += ReportIfUnloaded(item.m_sPrefab, where + " group '" + g.m_sId + "'", seen);
+
+			RK29_EntryGearSet gearSet = RK29_EntryGearSet.Cast(e);
+			if (gearSet)
+				unloaded += ReportGearSetIfUnloaded(gearSet, where + " gear set '" + gearSet.m_sId + "'",
+					seen);
+		}
+		return unloaded;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A gear set's prefabs live below its entry - issued lines, ammo rows, each variant's issued
+	//! lines - where ReportGroupIfUnloaded's entry walk does not reach.
+	protected static int ReportGearSetIfUnloaded(notnull RK29_EntryGearSet gearSet, string where,
+		notnull array<ResourceName> seen)
+	{
+		int unloaded = ReportIssuedIfUnloaded(gearSet.m_aIssued, where, seen);
+
+		if (gearSet.m_aAmmo)
+		{
+			foreach (RK29_EntryItem row : gearSet.m_aAmmo)
+			{
+				if (row && row.m_bEnabled)
+					unloaded += ReportIfUnloaded(row.m_sPrefab, where + " ammo", seen);
+			}
+		}
+
+		if (gearSet.m_aVariants)
+		{
+			foreach (RK29_GearSetVariant v : gearSet.m_aVariants)
+			{
+				if (v && v.m_bEnabled)
+					unloaded += ReportIssuedIfUnloaded(v.m_aIssued, where + " variant '" + v.m_sId + "'",
+						seen);
+			}
+		}
+		return unloaded;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	protected static int ReportIssuedIfUnloaded(array<ref RK29_GearSetIssue> lines, string where,
+		notnull array<ResourceName> seen)
+	{
+		if (!lines)
+			return 0;
+
+		int unloaded = 0;
+		foreach (RK29_GearSetIssue line : lines)
+		{
+			if (line)
+				unloaded += ReportIfUnloaded(line.m_sPrefab, where + " issued", seen);
 		}
 		return unloaded;
 	}
@@ -652,12 +893,38 @@ class RK29_KitLint
 						cls.m_sKitName, exclusion.m_sWhen, exclusion.m_sBlock), LogLevel.ERROR);
 					bad++;
 				}
+				if (IsGearSetChoiceTarget(setup, cls, exclusion.m_sBlock))
+				{
+					Print(string.Format("[RK29] config ERROR - kit '%1' exclusion '%2 blocks %3': a gear"
+						+ " set and its variant are answered before exclusions run, so the blocked one's"
+						+ " items are still issued - withhold it with an override (max 0) instead",
+						cls.m_sKitName, exclusion.m_sWhen, exclusion.m_sBlock), LogLevel.ERROR);
+					bad++;
+				}
 			}
 		}
 
 		if (bad > 0)
 			Print(string.Format("[RK29] config ERROR - %1 exclusion(s) cannot fire as written",
 				bad), LogLevel.ERROR);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Does a path name a gear set pick or a variant pick? RK29_KitResolve.PullGearSetOwnedGroups
+	//! answers both before the late EnforceExclusions, and builds the issued and ammo groups from
+	//! those answers.
+	protected static bool IsGearSetChoiceTarget(notnull RK29_KitSetup setup,
+		notnull RK29_ClassSetup cls, string path)
+	{
+		string weaponId, groupId, entryId;
+		RK29_KitResolve.SplitTarget(path, weaponId, groupId, entryId);
+		if (RK29_GearSetGroup.Cast(FindAuthoredGroup(setup, cls, groupId)))
+			return true;
+
+		string suffix = RK29_KitResolve.GEAR_SET_VARIANT_SUFFIX;
+		int at = groupId.LastIndexOf(suffix);
+		return at > 0 && at == groupId.Length() - suffix.Length()
+			&& IsSynthesizedGearSetGroup(setup, cls, groupId);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -774,7 +1041,7 @@ class RK29_KitLint
 			return 1;
 		}
 
-		if (FindAuthoredGroup(setup, cls, groupId))
+		if (FindAuthoredGroup(setup, cls, groupId) || IsSynthesizedGearSetGroup(setup, cls, groupId))
 			return 0;
 
 		Print(string.Format("[RK29] config ERROR - kit '%1' %2 group '%3', which this kit never"

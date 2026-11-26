@@ -472,6 +472,28 @@ class RK29_MenuRowKit
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! A gear set pictured by an imageset icon rather than a prefab render. It borrows the tile row's
+	//! None glyph - the one image widget in the preview box - so a set with an icon prefab, which
+	//! FillPreview already drew, and every other entry are left alone.
+	static void FillGearSetIcon(notnull Widget row, RK29_ResolvedEntry e)
+	{
+		if (!e)
+			return;
+
+		RK29_EntryGearSet gearSet = RK29_EntryGearSet.Cast(e.m_Def);
+		if (!gearSet || gearSet.m_sIconPrefab != ResourceName.Empty
+			|| gearSet.m_sIconImageset == ResourceName.Empty || gearSet.m_sIconName == "")
+			return;
+
+		ImageWidget icon = ImageWidget.Cast(row.FindAnyWidget("RowNoneIcon"));
+		if (!icon)
+			return;
+
+		icon.LoadImageFromSet(0, gearSet.m_sIconImageset, gearSet.m_sIconName);
+		icon.SetVisible(true);
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! The same TileRow slot pointed at a live local entity: what lets a tile picture a gun with
 	//! things hanging off it.
 	static void FillPreviewEntity(notnull Widget row, notnull IEntity entity)
@@ -1095,6 +1117,10 @@ class RK29_MenuRowKit
 		string label = g.m_sDisplayName;
 		if (label == "")
 			label = g.m_sId;
+
+		// "Ammunition" alone does not say which emplacement changed
+		if (g.m_sOwnerGearSet != "")
+			return g.m_sOwnerGearSetLabel + " " + label;
 
 		if (g.m_sOwnerWeapon == "" || !cls || !setup)
 			return label;

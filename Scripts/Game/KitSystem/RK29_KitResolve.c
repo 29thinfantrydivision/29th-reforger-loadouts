@@ -53,7 +53,8 @@ class RK29_KitResolve
 	//! The pipeline is stated here and nowhere else - the passes below carry no numbering of their
 	//! own. Call order:
 	//!   CollectKitLevelGroups -> CollectOverrideAdds -> ApplyOverrides -> DropZeroCeilingEntries
-	//!   -> EnforceExclusions (weapon targets only) -> PullWeaponOwnedGroups -> FinalisePasses
+	//!   -> EnforceExclusions (weapon targets only) -> PullWeaponOwnedGroups
+	//!   -> PullGearSetOwnedGroups -> FinalisePasses
 	//!   (ApplyOverrides, DropZeroCeilingEntries, SettleShedFloors, EnforceAttachmentLegality,
 	//!   EnforceExclusions (the rest), OfferLoadedSelectors, DropEmptyGroups, SortOfferByOrder)
 	//!   -> OfferFacePaint.
@@ -122,6 +123,7 @@ class RK29_KitResolve
 		EnforceExclusions(outGroups, picks, comp, true);
 
 		PullWeaponOwnedGroups(cls, setup, subs, picks, factionKey, outGroups);
+		PullGearSetOwnedGroups(comp, setup, picks, factionKey, outGroups);
 
 		FinalisePasses(comp, setup, picks, factionKey, outGroups);
 
@@ -625,6 +627,256 @@ class RK29_KitResolve
 
 			EvictSameSlot(outGroups, gdef);
 			outGroups.Insert(weaponGroup);
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The groups each picked gear set brings, pulled beside the weapons' and for the same reason:
+	//! which variant and ammo exist depends on the pick. A set an override capped to zero already
+	//! left in the DropZeroCeilingEntries before this pass.
+	protected static void PullGearSetOwnedGroups(RK29_KitComposition comp,
+		notnull RK29_KitSetup setup, array<ref RK29_ChoicePick> picks, string factionKey,
+		notnull array<ref RK29_ResolvedGroup> outGroups)
+	{
+		// a snapshot: what this pass appends must not itself be walked
+		array<ref RK29_ResolvedGroup> kitLevel = {};
+		foreach (RK29_ResolvedGroup snap : outGroups)
+			kitLevel.Insert(snap);
+		foreach (RK29_ResolvedGroup g : kitLevel)
+		{
+			if (!g || !g.IsGearSetGroup() || g.m_sOwnerGearSet != "")
+				continue;
+
+			RK29_ResolvedEntry chosen = ExclusiveAnswer(g, picks);
+			if (!chosen)
+				continue;
+			RK29_EntryGearSet gearSet = RK29_EntryGearSet.Cast(chosen.m_Def);
+			if (!gearSet)
+				continue;
+
+			RK29_GearSetVariant variant = OfferGearSetVariants(comp, setup, g, chosen.m_sId, gearSet,
+				picks, factionKey, outGroups);
+			OfferGearSetIssued(g, chosen.m_sId, gearSet, variant, outGroups);
+			OfferGearSetAmmo(setup, g, chosen.m_sId, gearSet, variant, factionKey, outGroups);
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A group synthesized for one gear set: owned by it, placed with the set's own group, and
+	//! captioned by the set's authored label so no internal id reaches the panel.
+	protected static RK29_ResolvedGroup NewGearSetGroup(notnull RK29_ResolvedGroup host, string setId,
+		notnull RK29_EntryGearSet gearSet, string id, string label)
+	{
+		RK29_ResolvedGroup g = new RK29_ResolvedGroup();
+		g.m_sId = id;
+		g.m_sDisplayName = label;
+		if (g.m_sDisplayName == "")
+			g.m_sDisplayName = id;
+		g.m_sOwnerGearSet = setId;
+		g.m_sOwnerGearSetLabel = gearSet.m_sDisplayName;
+		if (g.m_sOwnerGearSetLabel == "")
+			g.m_sOwnerGearSetLabel = setId;
+		g.m_iOrder = host.m_iOrder;
+		return g;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! TryInsertGroup's duplicate-id rule, said aloud: a second gear set group offering the same set,
+	//! or a set id that collides with a weapon's ammo group, would otherwise issue nothing silently.
+	protected static void InsertGearSetGroup(notnull array<ref RK29_ResolvedGroup> outGroups,
+		notnull RK29_ResolvedGroup g)
+	{
+		if (FindGroup(outGroups, g.m_sId))
+		{
+			ComplainOnce(string.Format("[RK29] config WARNING - gear set group '%1' offered twice,"
+				+ " keeping the first", g.m_sId), LogLevel.WARNING);
+			return;
+		}
+		outGroups.Insert(g);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The variant pick, synthesized the way a loaded selector is - nothing authors it as a group -
+	//! and answered here, because the issued and ammo groups are built from the answer. The kit's
+	//! overrides reach it first for that reason: a variant capped to zero must not be the one the
+	//! counts are read from. Null when the set has no variant left: it is carried as the base says.
+	protected static RK29_GearSetVariant OfferGearSetVariants(RK29_KitComposition comp,
+		notnull RK29_KitSetup setup, notnull RK29_ResolvedGroup host, string setId,
+		notnull RK29_EntryGearSet gearSet, array<ref RK29_ChoicePick> picks, string factionKey,
+		notnull array<ref RK29_ResolvedGroup> outGroups)
+	{
+		if (!gearSet.m_aVariants || gearSet.m_aVariants.IsEmpty())
+			return null;
+
+		RK29_ResolvedGroup g = NewGearSetGroup(host, setId, gearSet, GearSetVariantIdOf(setId),
+			gearSet.m_sVariantLabel);
+		g.m_eGroupType = RK29_EGroupType.GEAR_SET;
+
+		foreach (RK29_GearSetVariant v : gearSet.m_aVariants)
+		{
+			if (!v || !EntryServesFaction(v, factionKey) || IsEntryParked(v))
+				continue;
+			RK29_ResolvedEntry e = ResolveEntry(v);
+			if (e.m_sId == "" || g.FindEntry(e.m_sId))
+				continue;
+			g.m_aEntries.Insert(e);
+		}
+		SortEntriesByOrder(g);
+
+		array<ref RK29_ResolvedGroup> alone = {};
+		alone.Insert(g);
+		ApplyOverrides(comp, setup, alone);
+		DropZeroCeilingEntries(alone);
+		if (g.m_aEntries.IsEmpty())
+			return null;
+
+		InsertGearSetGroup(outGroups, g);
+
+		RK29_ResolvedEntry chosen = ExclusiveAnswer(g, picks);
+		if (!chosen)
+			return null;
+		return RK29_GearSetVariant.Cast(chosen.m_Def);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! What the set and the picked variant hand over, as one COUNTED group whose every row is pinned
+	//! at its count: the read-only list in the panel, and to everything downstream - packing,
+	//! trimming, weight, the server's checks - an ordinary carried item.
+	protected static void OfferGearSetIssued(notnull RK29_ResolvedGroup host, string setId,
+		notnull RK29_EntryGearSet gearSet, RK29_GearSetVariant variant,
+		notnull array<ref RK29_ResolvedGroup> outGroups)
+	{
+		RK29_ResolvedGroup g = NewGearSetGroup(host, setId, gearSet, GearSetIssuedIdOf(setId),
+			gearSet.m_sIssuedLabel);
+		g.m_eKind = RK29_EChoiceKind.COUNTED;
+		g.m_iKeepRank = gearSet.m_iIssuedKeepRank;
+		g.m_aPreferred = gearSet.m_aPreferredContainers;
+
+		AppendIssuedLines(g, gearSet.m_aIssued);
+		if (variant)
+			AppendIssuedLines(g, variant.m_aIssued);
+
+		if (!g.m_aEntries.IsEmpty())
+			InsertGearSetGroup(outGroups, g);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! One pinned row per issued line. A line whose prefab does not load this session is left out,
+	//! as any entry is; RK29_KitLint.ReportGearSetIfUnloaded names it.
+	protected static void AppendIssuedLines(notnull RK29_ResolvedGroup g,
+		array<ref RK29_GearSetIssue> lines)
+	{
+		if (!lines)
+			return;
+
+		foreach (RK29_GearSetIssue line : lines)
+		{
+			if (!line || line.m_sPrefab == ResourceName.Empty || line.m_iCount < 1)
+				continue;
+			if (!RK29_KitCompose.PrefabReadable(line.m_sPrefab))
+			{
+				g.m_bShedUnloaded = true;
+				continue;
+			}
+
+			// the id a prefab entry derives; a second line of one prefab is numbered
+			string baseId = FilePath.StripPath(line.m_sPrefab);
+			string id = baseId;
+			int n = 2;
+			while (g.FindEntry(id))
+			{
+				id = baseId + "_" + n.ToString();
+				n++;
+			}
+
+			// built in script, so no [Attribute] default applies: every field a reader can reach is
+			// stated here
+			RK29_EntryItem item = new RK29_EntryItem();
+			item.m_sId = id;
+			item.m_sPrefab = line.m_sPrefab;
+			item.m_sDisplayName = line.m_sDisplayName;
+			item.m_bEnabled = true;
+			item.m_iMin = line.m_iCount;
+			item.m_iDefault = line.m_iCount;
+			item.m_iMax = line.m_iCount;
+			item.m_iCost = 1;
+			item.m_iKeepRank = line.m_iKeepRank;
+
+			RK29_ResolvedEntry e = ResolveEntry(item);
+			e.m_aPreferred = line.m_aPreferredContainers;
+			g.m_aEntries.Insert(e);
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The set's ammo rows with the picked variant's changes laid over the base. The kit's overrides
+	//! come after, in FinalisePasses, exactly as for any other group - and so does the zero-cap drop,
+	//! which takes out a row a variant set to max 0.
+	protected static void OfferGearSetAmmo(notnull RK29_KitSetup setup,
+		notnull RK29_ResolvedGroup host, string setId, notnull RK29_EntryGearSet gearSet,
+		RK29_GearSetVariant variant, string factionKey,
+		notnull array<ref RK29_ResolvedGroup> outGroups)
+	{
+		if (!gearSet.m_aAmmo)
+			return;
+
+		RK29_ResolvedGroup g = NewGearSetGroup(host, setId, gearSet, GearSetAmmoIdOf(setId),
+			gearSet.m_sAmmoLabel);
+		g.m_eKind = gearSet.m_eAmmoKind;
+		// the lint refuses it; read as COUNTED so the slip still issues the defaults
+		if (g.m_eKind == RK29_EChoiceKind.EXCLUSIVE)
+			g.m_eKind = RK29_EChoiceKind.COUNTED;
+		g.m_iBudget = gearSet.m_iBudget;
+		g.m_iBudgetMin = gearSet.m_iBudgetMin;
+		if (variant && variant.m_iBudget >= 0)
+			g.m_iBudget = variant.m_iBudget;
+		if (variant && variant.m_iBudgetMin >= 0)
+			g.m_iBudgetMin = variant.m_iBudgetMin;
+		ClampBudgetMin(g);
+		g.m_iKeepRank = gearSet.m_iAmmoKeepRank;
+		g.m_aPreferred = gearSet.m_aPreferredContainers;
+
+		foreach (RK29_EntryItem item : gearSet.m_aAmmo)
+		{
+			if (!item || !EntryServesFaction(item, factionKey) || IsEntryParked(item))
+				continue;
+			string ownId = EntryIdOf(item);
+			if (ownId == "" || g.FindEntry(ownId))
+				continue;
+			if (IsEntryUnloaded(item, "", factionKey, setup))
+			{
+				g.m_bShedUnloaded = true;
+				continue;
+			}
+			RK29_ResolvedEntry e = ResolveEntry(item);
+			ApplyGearSetCounts(e, variant);
+			g.m_aEntries.Insert(e);
+		}
+		SortEntriesByOrder(g);
+
+		if (!g.m_aEntries.IsEmpty())
+			InsertGearSetGroup(outGroups, g);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! A variant's changes to one ammo row; -1 leaves a number as the set states it.
+	protected static void ApplyGearSetCounts(notnull RK29_ResolvedEntry e, RK29_GearSetVariant variant)
+	{
+		if (!variant || !variant.m_aCounts)
+			return;
+
+		foreach (RK29_GearSetCount change : variant.m_aCounts)
+		{
+			if (!change || change.m_sAmmo != e.m_sId)
+				continue;
+			if (change.m_iMin >= 0)
+				e.m_iMin = change.m_iMin;
+			if (change.m_iDefault >= 0)
+				e.m_iDefault = change.m_iDefault;
+			if (change.m_iMax >= 0)
+				e.m_iMax = change.m_iMax;
+			if (change.m_iCost >= 1)
+				e.m_iCost = change.m_iCost;
 		}
 	}
 
@@ -1208,6 +1460,31 @@ class RK29_KitResolve
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! The three groups a picked gear set brings, addressed by the set's id. The ammo group shares
+	//! the weapons' suffix, so "tow_ammo/pod" reads the same as "m249_ammo/belt" in an override.
+	//! Stated here only; the lint and the menu ask these.
+	static const string GEAR_SET_VARIANT_SUFFIX = "_variant";
+	static const string GEAR_SET_ISSUED_SUFFIX = "_issued";
+
+	//------------------------------------------------------------------------------------------------
+	static string GearSetVariantIdOf(string setId)
+	{
+		return setId + GEAR_SET_VARIANT_SUFFIX;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	static string GearSetIssuedIdOf(string setId)
+	{
+		return setId + GEAR_SET_ISSUED_SUFFIX;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	static string GearSetAmmoIdOf(string setId)
+	{
+		return setId + AMMO_SUFFIX;
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! Null when the offer carries no selector for this group - its counts are then plain spares,
 	//! or, where the gun's loader takes over the chamber, totals that loader fills the gun from.
 	//! By chamber, not by name: the selector over a gun's muzzle is shared by every counted group
@@ -1595,6 +1872,13 @@ class RK29_KitResolve
 			g.m_bIsOpticsPoint = attDef.m_bIsOpticsPoint;
 			g.m_bCarryWhenUnfitted = attDef.m_bCarryWhenUnfitted;
 			g.m_bMagnifiedExempt = attDef.m_bMagnifiedExempt;
+			return;
+		}
+
+		// EXCLUSIVE with no None - the zero values - so the type is all a gear set group copies
+		if (RK29_GearSetGroup.Cast(def))
+		{
+			g.m_eGroupType = RK29_EGroupType.GEAR_SET;
 			return;
 		}
 
@@ -1988,6 +2272,12 @@ class RK29_KitResolve
 		row.m_iKeepRank = item.m_iKeepRank;
 		if (row.m_iKeepRank < 0)
 			row.m_iKeepRank = g.m_iKeepRank;
+
+		// likewise placement: a gear set's issued line over the set's list
+		if (entry.m_aPreferred && !entry.m_aPreferred.IsEmpty())
+			row.m_aPreferred = entry.m_aPreferred;
+		else
+			row.m_aPreferred = g.m_aPreferred;
 
 		RK29_EntryEquipment worn = RK29_EntryEquipment.Cast(entry.m_Def);
 		if (worn)
@@ -2650,7 +2940,8 @@ class RK29_KitResolve
 			}
 
 			if (g.m_eKind == RK29_EChoiceKind.EXCLUSIVE && (g.m_eGroupType == RK29_EGroupType.ITEM
-				|| g.IsClothingGroup() || g.IsGarmentAttachmentGroup() || g.IsFacePaintGroup()))
+				|| g.IsClothingGroup() || g.IsGarmentAttachmentGroup() || g.IsFacePaintGroup()
+				|| g.IsGearSetGroup()))
 			{
 				AddAnswer(outFull, g, ExclusiveAnswer(g, picks));
 				continue;
@@ -2907,6 +3198,10 @@ class RK29_KitResolve
 				kit.m_eFacePaint = FacePaintAnswer(g, picks);
 				continue;
 			}
+
+			// a gear set or variant pick issues nothing: its issued and ammo groups do
+			if (g.IsGearSetGroup())
+				continue;
 
 			if (g.IsAttachmentGroup())
 			{

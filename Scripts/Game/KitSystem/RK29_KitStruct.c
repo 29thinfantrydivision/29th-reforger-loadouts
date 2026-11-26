@@ -148,4 +148,7 @@ class RK29_WeaponAmmo
 	//! The entry's own keep rank, else its group's; -1 = neither stated, so EmitCarriedRow falls
 	//! back to the alias's or the weapon's.
 	int m_iKeepRank = -1;
+
+	//! The entry's or its group's container preference (a gear set's rows); null = neither stated.
+	ref array<string> m_aPreferred;
 }

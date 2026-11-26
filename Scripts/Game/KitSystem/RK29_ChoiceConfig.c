@@ -366,6 +366,150 @@ class RK29_AttachmentGroup : RK29_ChoiceGroup
 }
 
 //------------------------------------------------------------------------------------------------
+class RK29_GearSetIssueTitle : BaseContainerCustomTitle
+{
+	//------------------------------------------------------------------------------------------------
+	override bool _WB_GetCustomTitle(BaseContainer source, out string title)
+	{
+		int count = 1;
+		source.Get("m_iCount", count);
+		ResourceName prefab;
+		source.Get("m_sPrefab", prefab);
+		title = count.ToString() + "x " + FilePath.StripPath(prefab);
+		return true;
+	}
+}
+
+//------------------------------------------------------------------------------------------------
+//! One thing a gear set or a variant hands over as it is: the player sees it in the panel and
+//! cannot change it. RK29_KitResolve.OfferGearSetIssued turns these into a synthesized COUNTED
+//! group whose every row is pinned (min = default = max), so packing, trimming, weight and the
+//! server's checks treat it as any other carried item.
+[BaseContainerProps(), RK29_GearSetIssueTitle()]
+class RK29_GearSetIssue
+{
+	[Attribute(desc: "The item issued", params: "et", category: "29th")]
+	ResourceName m_sPrefab;
+
+	[Attribute("1", desc: "How many", category: "29th")]
+	int m_iCount;
+
+	[Attribute(desc: "Picker label override. Empty = the item's own in-game name", category: "29th")]
+	string m_sDisplayName;
+
+	[Attribute(desc: "Where this item goes, best first - same tokens as a weapon's (uniform, trouser, rig, pack, or part of a container name). Empty = the gear set's list", category: "29th")]
+	ref array<string> m_aPreferredContainers;
+
+	[Attribute("-1", desc: "How important this item is when the kit does not fit: lower keeps its place, higher gives way. -1 = the gear set's issued rank", category: "29th")]
+	int m_iKeepRank;
+}
+
+//------------------------------------------------------------------------------------------------
+//! A variant's change to one of its gear set's ammo rows. -1 leaves that number as the gear set
+//! states it; a max of 0 takes the row out of this variant (the zero-cap rule).
+[BaseContainerProps(), BaseContainerCustomTitleField("m_sAmmo")]
+class RK29_GearSetCount
+{
+	[Attribute(desc: "Id of the gear set's ammo row this changes", category: "29th")]
+	string m_sAmmo;
+
+	[Attribute("-1", desc: "New min (-1 = keep)", category: "29th")]
+	int m_iMin;
+
+	[Attribute("-1", desc: "New default (-1 = keep)", category: "29th")]
+	int m_iDefault;
+
+	[Attribute("-1", desc: "New max (-1 = keep). 0 = this variant does not carry the row", category: "29th")]
+	int m_iMax;
+
+	[Attribute("-1", desc: "BUDGETED ammo only: new cost of one (-1 = keep)", category: "29th")]
+	int m_iCost;
+}
+
+//------------------------------------------------------------------------------------------------
+//! One way of carrying a gear set - the TOW gunner with the launcher, the assistant with the pods.
+//! States only what differs from the gear set: the items it adds and the counts it changes. A
+//! variant that changes nothing is an id and a name. Its display name is what the player reads;
+//! the id never reaches the screen.
+[BaseContainerProps(), RK29_ChoiceEntryTitle()]
+class RK29_GearSetVariant : RK29_ChoiceEntryBase
+{
+	[Attribute(desc: "Items this variant ADDS to the gear set's own issued list", category: "29th")]
+	ref array<ref RK29_GearSetIssue> m_aIssued;
+
+	[Attribute(desc: "Changes to the gear set's ammo rows, by row id", category: "29th")]
+	ref array<ref RK29_GearSetCount> m_aCounts;
+
+	[Attribute("-1", desc: "BUDGETED ammo only: this variant's pool (-1 = the gear set's)", category: "29th")]
+	int m_iBudget;
+
+	[Attribute("-1", desc: "BUDGETED ammo only: this variant's spend floor (-1 = the gear set's)", category: "29th")]
+	int m_iBudgetMin;
+}
+
+//------------------------------------------------------------------------------------------------
+//! A bundle the kit carries as a whole: what it always issues, the ammo the player tunes, and the
+//! variants it splits into. Picked in an RK29_GearSetGroup; picking it is all it does - it issues
+//! nothing of itself, so a gear set can stand for an emplacement, a radio set or a mortar team.
+//! The resolver offers three groups per picked set, addressed by the set's id: "<id>_variant",
+//! "<id>_issued" and "<id>_ammo", which overrides and exclusions name like any other group.
+[BaseContainerProps(), RK29_ChoiceEntryTitle()]
+class RK29_EntryGearSet : RK29_ChoiceEntryBase
+{
+	[Attribute(desc: "Picture for the tile and rows, borrowed from this prefab's render. Wins over the imageset icon", params: "et", category: "29th")]
+	ResourceName m_sIconPrefab;
+
+	[Attribute(desc: "Imageset holding the icon, used when no icon prefab is set", params: "imageset", category: "29th")]
+	ResourceName m_sIconImageset;
+
+	[Attribute(desc: "Icon name in that imageset", category: "29th")]
+	string m_sIconName;
+
+	[Attribute(desc: "What every variant gets", category: "29th")]
+	ref array<ref RK29_GearSetIssue> m_aIssued;
+
+	[Attribute(desc: "The ammo rows, with the base counts every variant starts from. Literal prefabs or item aliases - there is no gun to resolve a magazine variant through", category: "29th")]
+	ref array<ref RK29_EntryItem> m_aAmmo;
+
+	[Attribute("1", uiwidget: UIWidgets.ComboBox, desc: "How the ammo rows are taken: per-row counts, or a cost-weighted pool. EXCLUSIVE is refused", enums: ParamEnumArray.FromEnum(RK29_EChoiceKind), category: "29th")]
+	RK29_EChoiceKind m_eAmmoKind;
+
+	[Attribute("0", desc: "BUDGETED ammo: the pool", category: "29th")]
+	int m_iBudget;
+
+	[Attribute("0", desc: "BUDGETED ammo: how much of the pool must be spent for the kit to be issued. 0 = no floor", category: "29th")]
+	int m_iBudgetMin;
+
+	[Attribute(desc: "The variants. Empty = the gear set is carried one way only, as the base states it", category: "29th")]
+	ref array<ref RK29_GearSetVariant> m_aVariants;
+
+	[Attribute("Variant", desc: "Header over the variant list in the panel (e.g. Role)", category: "29th")]
+	string m_sVariantLabel;
+
+	[Attribute("Issued", desc: "Header over the issued items in the panel", category: "29th")]
+	string m_sIssuedLabel;
+
+	[Attribute("Ammunition", desc: "Header over the ammo rows in the panel", category: "29th")]
+	string m_sAmmoLabel;
+
+	[Attribute(desc: "Where this gear set's items go, best first - same tokens as a weapon's. An issued line's own list wins", category: "29th")]
+	ref array<string> m_aPreferredContainers;
+
+	[Attribute("-1", desc: "Keep rank of the issued items when the kit does not fit; -1 = 50. A line's own rank wins", category: "29th")]
+	int m_iIssuedKeepRank;
+
+	[Attribute("-1", desc: "Keep rank of the ammo rows when the kit does not fit; -1 = 50 (AT rockets sit at 80). A row's own rank wins", category: "29th")]
+	int m_iAmmoKeepRank;
+}
+
+//------------------------------------------------------------------------------------------------
+//! The pick of one gear set. Always answers - no None - and its entries are RK29_EntryGearSet.
+[BaseContainerProps(), RK29_ChoiceGroupTitle()]
+class RK29_GearSetGroup : RK29_ChoiceGroup
+{
+}
+
+//------------------------------------------------------------------------------------------------
 //! Title for the by-id references: shows "<id> (catalog)".
 class RK29_GroupRefTitle : BaseContainerCustomTitle
 {
@@ -426,6 +570,20 @@ class RK29_ItemGroupRef : RK29_ItemGroup
 }
 
 //------------------------------------------------------------------------------------------------
+[BaseContainerProps(), RK29_GroupRefTitle()]
+class RK29_GearSetGroupRef : RK29_GearSetGroup
+{
+	[Attribute(desc: "Id of a gear set group in a choice catalog", category: "29th")]
+	string m_sRef;
+
+	//------------------------------------------------------------------------------------------------
+	override string RefId()
+	{
+		return m_sRef;
+	}
+}
+
+//------------------------------------------------------------------------------------------------
 //! Groups sorted by kind, so the Workbench "+" menu on each list offers only what belongs there.
 //! Sections are an authoring convenience only - Collect flattens them and nothing downstream can
 //! tell which list a group came from. A section holds references and inline definitions alike.
@@ -441,8 +599,11 @@ class RK29_ChoiceGroupSet
 	[Attribute(desc: "Item groups - carried items, counted or pick-one", category: "29th")]
 	ref array<ref RK29_ItemGroup> m_aItems;
 
+	[Attribute(desc: "Gear set groups - a bundle picked whole, then the variant it is carried as", category: "29th")]
+	ref array<ref RK29_GearSetGroup> m_aGearSets;
+
 	//------------------------------------------------------------------------------------------------
-	//! Every group in one list, section order weapons, clothing, items (the catalog appends ammo, attachments).
+	//! Every group in one list, section order weapons, clothing, items, gear sets (the catalog appends ammo, attachments).
 	//! Element-wise: array<ref Sub> is not assignable to array<Base>.
 	void Collect(notnull array<RK29_ChoiceGroup> outGroups)
 	{
@@ -465,6 +626,14 @@ class RK29_ChoiceGroupSet
 		if (m_aItems)
 		{
 			foreach (RK29_ItemGroup g : m_aItems)
+			{
+				if (g)
+					outGroups.Insert(g);
+			}
+		}
+		if (m_aGearSets)
+		{
+			foreach (RK29_GearSetGroup g : m_aGearSets)
 			{
 				if (g)
 					outGroups.Insert(g);

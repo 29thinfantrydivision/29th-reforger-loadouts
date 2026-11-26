@@ -109,8 +109,9 @@ class RK29_KitCompose
 	//! An ammo list into item batches, and the choice path's only exit - every group's picks arrive
 	//! here through RK29_KitResolve.ApplyItemGroup - so placement is decided once.
 	//!
-	//! Placement precedence: the weapon definition wins, and an item alias's own
-	//! m_aPreferredContainers fills in only where the weapon states nothing. The alias half is
+	//! Placement precedence: the weapon definition wins, then the row's own (a gear set's, which has
+	//! no weapon), and an item alias's own m_aPreferredContainers fills in only where neither
+	//! states anything. The alias half is
 	//! load-bearing: kit-level groups have no weapon definition, so without it every choice item
 	//! (bandages, frags, smokes) was placed by nothing at all.
 	static void EmitAmmo(notnull RK29_KitStruct kit, ResourceName weapon, RK29_WeaponDef def,
@@ -203,6 +204,8 @@ class RK29_KitCompose
 		// stacks into the biggest container - pistol magazines in the pack, pockets empty
 		if (def && def.m_aPreferredContainers && !def.m_aPreferredContainers.IsEmpty())
 			batch.m_aPreferred = def.m_aPreferredContainers;
+		else if (ammo.m_aPreferred && !ammo.m_aPreferred.IsEmpty())
+			batch.m_aPreferred = ammo.m_aPreferred;
 		else if (aliasPreferred && !aliasPreferred.IsEmpty())
 			batch.m_aPreferred = aliasPreferred;
 

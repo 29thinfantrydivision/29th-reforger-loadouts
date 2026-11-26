@@ -18,6 +18,9 @@ class RK29_ResolvedEntry
 	//! duplicate id keeps its first arrival's origin, so a later include cannot claim it.
 	string m_sFromGroup;
 
+	//! A gear set's issued line: where it goes, best first, over its group's list. Null elsewhere.
+	ref array<string> m_aPreferred;
+
 	//! Set by EnforceAttachmentLegality: the entry stays in the offer and on screen, marked rather
 	//! than removed. Stored as who, not as a sentence - the menu writes the wording. Empty
 	//! m_sBlockedGroup means the weapon itself is the reason (a welded-on M203), so there is no

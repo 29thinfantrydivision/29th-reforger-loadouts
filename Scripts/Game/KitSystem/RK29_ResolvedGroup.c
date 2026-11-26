@@ -10,6 +10,8 @@ enum RK29_EGroupType
 	CLOTHING = 3,
 	GARMENT_ATTACHMENT = 4,
 	FACE_PAINT = 5,
+	//! A gear set pick, or the variant pick under one (m_sOwnerGearSet set). Issues nothing itself.
+	GEAR_SET = 6,
 }
 
 //------------------------------------------------------------------------------------------------
@@ -35,6 +37,13 @@ class RK29_ResolvedGroup
 	bool m_bMagnifiedExempt; // attachment groups: an optic taken here is not magnified DOCTRINE
 	bool m_bCarryWhenUnfitted; // attachment groups: a None answer stows the item rather than dropping it
 	string m_sOwnerWeapon;   // weapon id whose definition owns this group; "" = kit-level
+	//! Gear set id this group was synthesized for (its variant, issued or ammo group); "" = not a
+	//! gear set's. Such a group is edited in the gear set's panel and never gets a tile of its own.
+	string m_sOwnerGearSet;
+	//! That gear set's display name, for labels that must say whose "Ammunition" this is.
+	string m_sOwnerGearSetLabel;
+	//! Item groups: where the rows go, best first, where neither a weapon nor the row states it.
+	ref array<string> m_aPreferred;
 	bool m_bLoaded;          // synthesized loaded-magazine selector, not authored config
 	RK29_ELoadedSeat m_eLoadedSeat; // whether this group seats a round, and which muzzle takes it
 	int m_iOrder;                    // detail-column placement; higher sinks
@@ -138,6 +147,14 @@ class RK29_ResolvedGroup
 	bool IsFacePaintGroup()
 	{
 		return m_eGroupType == RK29_EGroupType.FACE_PAINT;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The gear set pick or a variant pick - neither issues anything. The pick of the set itself is
+	//! the one with no owner.
+	bool IsGearSetGroup()
+	{
+		return m_eGroupType == RK29_EGroupType.GEAR_SET;
 	}
 
 	//------------------------------------------------------------------------------------------------

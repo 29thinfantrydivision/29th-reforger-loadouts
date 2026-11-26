@@ -182,6 +182,15 @@ class RK29_MenuDetailPanel
 			return;
 		}
 
+		// a gear set opens as a panel for the same reason a gun does: its variant, issued items and
+		// ammo are edited under it. The panel names itself, so no title.
+		if (g.IsGearSetGroup() && g.m_sOwnerGearSet == "")
+		{
+			SetDetailTitle("");
+			BuildGearSetPanel(g);
+			return;
+		}
+
 		// a kit-level EXCLUSIVE group has nothing else naming it - its rows are bare answers under no
 		// caption of their own, so the band's title is what says which question they answer
 		if (g.m_eKind == RK29_EChoiceKind.EXCLUSIVE)
@@ -287,6 +296,56 @@ class RK29_MenuDetailPanel
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! One gear set, whole - BuildGarmentPanel's three moves again: the set as a tile that opens its
+	//! own list, then what the picked set brings, in reading order: the variant choice, what is
+	//! issued (pinned rows, nothing to change), then the ammo the player tunes. Each by its id, not
+	//! by a walk of the offer, so the order is the panel's and not the catalog's.
+	protected void BuildGearSetPanel(notnull RK29_ResolvedGroup g)
+	{
+		string caption = "CHANGE " + RK29_MenuRowKit.Upper(g.m_sDisplayName);
+
+		if (m_bHostListOpen && RK29_MenuRowKit.SelectableCount(g) > 1)
+		{
+			RK29_MenuRowKit.StampHeader(m_wColDetail, caption);
+			BuildExclusiveDetail(g);
+			return;
+		}
+
+		RK29_ResolvedEntry chosen = RK29_KitResolve.PickedEntry(g, m_Menu.Picks());
+		if (RK29_MenuRowKit.SelectableCount(g) > 1)
+		{
+			RK29_MenuRowKit.StampHeader(m_wColDetail, caption);
+			StampFoldTile(g, m_Menu.EntryLabelIn(g, chosen), m_Menu.ExclusiveTilePreview(g),
+				RK29_EMenuRowKind.HOST_FOLD, false, false);
+		}
+
+		if (!chosen)
+			return;
+
+		// one variant is no choice: the section would promise a decision that does not exist
+		RK29_ResolvedGroup variants = RK29_KitResolve.FindGroup(m_Menu.Offer(),
+			RK29_KitResolve.GearSetVariantIdOf(chosen.m_sId));
+		if (variants && RK29_MenuRowKit.SelectableCount(variants) > 1)
+			StampOwnedChoice(variants);
+
+		RK29_ResolvedGroup issued = RK29_KitResolve.FindGroup(m_Menu.Offer(),
+			RK29_KitResolve.GearSetIssuedIdOf(chosen.m_sId));
+		if (issued)
+		{
+			StampCountedHeader(issued);
+			BuildCountedDetail(issued);
+		}
+
+		RK29_ResolvedGroup ammo = RK29_KitResolve.FindGroup(m_Menu.Offer(),
+			RK29_KitResolve.GearSetAmmoIdOf(chosen.m_sId));
+		if (ammo)
+		{
+			StampCountedHeader(ammo);
+			BuildCountedDetail(ammo);
+		}
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! Everything seating on the garment worn in this slot, in offer order. StampOwnedGroups' mirror,
 	//! minus its three buckets: a garment slot holds seats and nothing else.
 	//!
@@ -331,6 +390,7 @@ class RK29_MenuDetailPanel
 				m_Menu.HoverTip(), m_aDetailTipHandlers);
 
 		RK29_MenuRowKit.FillPreview(row, prefab);
+		RK29_MenuRowKit.FillGearSetIcon(row, RK29_KitResolve.PickedEntry(g, m_Menu.Picks()));
 		RK29_MenuRowKit.ShowMoreHint(row, RK29_MenuRowKit.SelectableCount(g) - 1);
 
 		if (magnifiedBadge)
@@ -653,6 +713,7 @@ class RK29_MenuDetailPanel
 		m_Menu.SetPlateToggled(row, "RowButton", "RowBg", current && current.m_sId == e.m_sId);
 
 		RK29_MenuRowKit.FillPreview(row, m_Menu.EntryPreviewPrefab(e, g));
+		RK29_MenuRowKit.FillGearSetIcon(row, e);
 
 		// before the blocked return: a greyed row still wears its marks
 		RK29_MenuRowKit.ShowEntryMarks(row, e, m_Menu.HoverTip(), m_aDetailTipHandlers);

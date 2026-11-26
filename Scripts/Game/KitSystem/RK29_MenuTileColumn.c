@@ -158,7 +158,8 @@ class RK29_MenuTileColumn
 		array<RK29_ResolvedGroup> tiles = {};
 		foreach (RK29_ResolvedGroup g : m_Menu.Offer())
 		{
-			if (!g || g.m_sOwnerWeapon != "")
+			// a gun's groups and a gear set's are edited in its panel, never on a tile of their own
+			if (!g || g.m_sOwnerWeapon != "" || g.m_sOwnerGearSet != "")
 				continue;
 
 			tiles.Insert(g);
@@ -627,7 +628,7 @@ class RK29_MenuTileColumn
 		// unlike a padlocked garment slot: behind the click are rows naming items this tile only
 		// summarises.
 		RK29_MenuRowKit.StampHeader(m_wColTiles, SmallTileCaptionOf(g),
-			RK29_MenuRowKit.LockFlag(RK29_MenuRowKit.GroupFullyPinned(g)));
+			RK29_MenuRowKit.LockFlag(SmallTileLocked(g)));
 
 		// One answer gets the row that can picture it. An exclusive group holds a single item and so
 		// reads exactly like a garment slot; StampWornTile takes TILE_ROW_LAYOUT for the same reason,
@@ -642,6 +643,7 @@ class RK29_MenuTileColumn
 
 			// an unpicked group hands the same empty a bare garment slot does
 			RK29_MenuRowKit.FillPreview(row, m_Menu.ExclusiveTilePreview(g));
+			RK29_MenuRowKit.FillGearSetIcon(row, RK29_KitResolve.PickedEntry(g, m_Menu.Picks()));
 		}
 		else
 		{
@@ -710,7 +712,7 @@ class RK29_MenuTileColumn
 	protected void StampEmptyGroupRow(notnull RK29_ResolvedGroup g)
 	{
 		RK29_MenuRowKit.StampHeader(m_wColTiles, SmallTileCaptionOf(g),
-			RK29_MenuRowKit.LockFlag(RK29_MenuRowKit.GroupFullyPinned(g)));
+			RK29_MenuRowKit.LockFlag(SmallTileLocked(g)));
 
 		Widget row = RK29_MenuRowKit.StampSlimRow(m_wColTiles, AvailableNoteOf(g));
 		if (!row)
@@ -834,6 +836,52 @@ class RK29_MenuTileColumn
 			}
 
 			// item entries only, the same rows the detail pane stamps and GroupFullyPinned reads
+			foreach (RK29_ResolvedEntry e : held.m_aEntries)
+			{
+				if (e && RK29_EntryItem.Cast(e.m_Def) && !RK29_MenuRowKit.IsPinnedEntry(e))
+					return false;
+			}
+		}
+
+		return true;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The caption padlock of a non-weapon tile. A gear set's panel holds more than its own list - the
+	//! variant and the ammo it governs - so it reads the way WeaponTileLocked does, not GroupFullyPinned.
+	protected bool SmallTileLocked(notnull RK29_ResolvedGroup g)
+	{
+		if (g.IsGearSetGroup() && g.m_sOwnerGearSet == "")
+			return GearSetTileLocked(g);
+
+		return RK29_MenuRowKit.GroupFullyPinned(g);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Locked only when nothing behind the tile moves: one set to pick, and under it no variant
+	//! choice and every row pinned. WeaponTileLocked's mirror, keyed by the picked set's id.
+	protected bool GearSetTileLocked(notnull RK29_ResolvedGroup g)
+	{
+		if (RK29_MenuRowKit.SelectableCount(g) > 1)
+			return false;
+
+		RK29_ResolvedEntry chosen = RK29_KitResolve.PickedEntry(g, m_Menu.Picks());
+		if (!chosen)
+			return true;
+
+		foreach (RK29_ResolvedGroup held : m_Menu.Offer())
+		{
+			if (!held || held.m_sOwnerGearSet != chosen.m_sId)
+				continue;
+
+			if (held.m_eKind == RK29_EChoiceKind.EXCLUSIVE)
+			{
+				if (RK29_MenuRowKit.SelectableCount(held) > 1)
+					return false;
+
+				continue;
+			}
+
 			foreach (RK29_ResolvedEntry e : held.m_aEntries)
 			{
 				if (e && RK29_EntryItem.Cast(e.m_Def) && !RK29_MenuRowKit.IsPinnedEntry(e))

@@ -980,6 +980,12 @@ class RK29_LoadoutMenu
 	//! RK29_KitResolve.LOADED_PICK_EMPTY, and OnLoadedToggle is the only caller that passes it.
 	void SetPick(string groupId, string entryId, int count = 1)
 	{
+		// read before the old pick goes: only a real change of gear set or variant resets anything
+		RK29_ResolvedGroup g = RK29_KitResolve.FindGroup(m_aOffer, groupId);
+		RK29_ResolvedEntry previous = null;
+		if (g && g.IsGearSetGroup())
+			previous = RK29_KitResolve.PickedEntry(g, m_aPicks);
+
 		for (int i = m_aPicks.Count() - 1; i >= 0; i--)
 		{
 			if (m_aPicks[i] && m_aPicks[i].m_sGroup == groupId)
@@ -991,6 +997,41 @@ class RK29_LoadoutMenu
 		pick.m_sEntry = entryId;
 		pick.m_iCount = count;
 		m_aPicks.Insert(pick);
+
+		if (g && g.IsGearSetGroup() && (!previous || previous.m_sId != entryId))
+			ClearGearSetPicks(g);
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Switching gear set or variant starts what it governs at the defaults, as switching guns does.
+	//! Needed because a pick outlives its group (DropBlockedPicks keeps a pick whose group is not
+	//! offered) and the ammo group is keyed by the set alone: a Gunner's 3 pods would otherwise ride
+	//! over to the Assistant, and a set picked again would come back as it was left.
+	protected void ClearGearSetPicks(notnull RK29_ResolvedGroup g)
+	{
+		array<string> cleared = {};
+		if (g.m_sOwnerGearSet != "")
+		{
+			cleared.Insert(RK29_KitResolve.GearSetIssuedIdOf(g.m_sOwnerGearSet));
+			cleared.Insert(RK29_KitResolve.GearSetAmmoIdOf(g.m_sOwnerGearSet));
+		}
+		else
+		{
+			foreach (RK29_ResolvedEntry e : g.m_aEntries)
+			{
+				if (!e)
+					continue;
+				cleared.Insert(RK29_KitResolve.GearSetVariantIdOf(e.m_sId));
+				cleared.Insert(RK29_KitResolve.GearSetIssuedIdOf(e.m_sId));
+				cleared.Insert(RK29_KitResolve.GearSetAmmoIdOf(e.m_sId));
+			}
+		}
+
+		for (int i = m_aPicks.Count() - 1; i >= 0; i--)
+		{
+			if (m_aPicks[i] && cleared.Contains(m_aPicks[i].m_sGroup))
+				m_aPicks.RemoveOrdered(i);
+		}
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -1239,6 +1280,11 @@ class RK29_LoadoutMenu
 		if (adef)
 			return adef.m_sPrefab;
 
+		// a gear set issues nothing of itself; it is pictured by the prefab it borrows the look of
+		RK29_EntryGearSet gearSet = RK29_EntryGearSet.Cast(e.m_Def);
+		if (gearSet)
+			return gearSet.m_sIconPrefab;
+
 		return ItemEntryPrefab(g, e);
 	}
 
@@ -1363,7 +1409,24 @@ class RK29_LoadoutMenu
 		if (!chosen)
 			return "None";
 
-		return EntryLabelIn(g, chosen);
+		string label = EntryLabelIn(g, chosen);
+
+		// a gear set's tile also says which half of it this player carries - "BGM-71 TOW - Assistant".
+		// Asked of the top-level pick only, and only where a variant list exists to answer it. ASCII
+		// dash, not a middle dot: no script literal in the mod carries a non-ASCII character
+		if (g.IsGearSetGroup() && g.m_sOwnerGearSet == "")
+		{
+			RK29_ResolvedGroup variants = RK29_KitResolve.FindGroup(m_aOffer,
+				RK29_KitResolve.GearSetVariantIdOf(chosen.m_sId));
+			if (variants && RK29_MenuRowKit.SelectableCount(variants) > 1)
+			{
+				RK29_ResolvedEntry variant = RK29_KitResolve.PickedEntry(variants, m_aPicks);
+				if (variant)
+					label += " - " + EntryLabelIn(variants, variant);
+			}
+		}
+
+		return label;
 	}
 
 	//------------------------------------------------------------------------------------------------
