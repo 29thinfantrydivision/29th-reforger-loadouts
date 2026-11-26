@@ -1,20 +1,12 @@
-# Workbench's resource index. Rebuilt on open from the .meta files, which carry the
-# GUIDs - so a fresh clone binds to the same identities without it. Tracking it only
-# buys binary merge conflicts: it rewrote itself three times in one evening here.
-# NOTE: this only holds while every resource has its .meta committed. If you add a
-# resource, commit its .meta with it.
+# ---- Workbench ----
 resourceDatabase.rdb
 
-# python bytecode from tools/audit
-__pycache__/
-
-# Claude Code session files: hooks, skills, project instructions
+# ---- AI agents ----
 .claude/
 CLAUDE.md
 CLAUDE.local.md
+AGENTS.md
 
-# Local authoring/audit scripts - not game content, not shipped
+# ---- This repo ----
 tools/
-
-*.gproj
-resourceDatabase.rdb
+__pycache__/
