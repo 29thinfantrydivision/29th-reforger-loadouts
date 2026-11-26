@@ -472,24 +472,37 @@ class RK29_MenuRowKit
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! A gear set pictured by an imageset icon rather than a prefab render. It borrows the tile row's
-	//! None glyph - the one image widget in the preview box - so a set with an icon prefab, which
-	//! FillPreview already drew, and every other entry are left alone.
+	//! A gear set or gear-set variant pictured by an imageset icon rather than a prefab render. It
+	//! borrows the tile row's None glyph - the one image widget in the preview box - so a set with an
+	//! icon prefab, which FillPreview already drew, and every other entry are left alone.
 	static void FillGearSetIcon(notnull Widget row, RK29_ResolvedEntry e)
 	{
 		if (!e)
 			return;
 
+		ResourceName imageset;
+		string iconName;
 		RK29_EntryGearSet gearSet = RK29_EntryGearSet.Cast(e.m_Def);
-		if (!gearSet || gearSet.m_sIconPrefab != ResourceName.Empty
-			|| gearSet.m_sIconImageset == ResourceName.Empty || gearSet.m_sIconName == "")
+		RK29_GearSetVariant variant = RK29_GearSetVariant.Cast(e.m_Def);
+		if (gearSet && gearSet.m_sIconPrefab == ResourceName.Empty)
+		{
+			imageset = gearSet.m_sIconImageset;
+			iconName = gearSet.m_sIconName;
+		}
+		else if (variant)
+		{
+			imageset = variant.m_sIconImageset;
+			iconName = variant.m_sIconName;
+		}
+
+		if (imageset == ResourceName.Empty || iconName == "")
 			return;
 
 		ImageWidget icon = ImageWidget.Cast(row.FindAnyWidget("RowNoneIcon"));
 		if (!icon)
 			return;
 
-		icon.LoadImageFromSet(0, gearSet.m_sIconImageset, gearSet.m_sIconName);
+		icon.LoadImageFromSet(0, imageset, iconName);
 		icon.SetVisible(true);
 	}
 

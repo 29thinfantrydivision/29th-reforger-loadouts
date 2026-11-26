@@ -434,6 +434,12 @@ class RK29_GearSetCount
 [BaseContainerProps(), RK29_ChoiceEntryTitle()]
 class RK29_GearSetVariant : RK29_ChoiceEntryBase
 {
+	[Attribute(desc: "Imageset holding the icon on this variant's tile and row", params: "imageset", category: "29th")]
+	ResourceName m_sIconImageset;
+
+	[Attribute(desc: "Icon name in that imageset", category: "29th")]
+	string m_sIconName;
+
 	[Attribute(desc: "Items this variant ADDS to the gear set's own issued list", category: "29th")]
 	ref array<ref RK29_GearSetIssue> m_aIssued;
 
