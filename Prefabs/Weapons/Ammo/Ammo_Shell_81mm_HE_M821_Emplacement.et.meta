@@ -1,0 +1,17 @@
+MetaFileClass {
+ Name "{EFB7E85B36568913}Prefabs/Weapons/Ammo/Ammo_Shell_81mm_HE_M821_Emplacement.et"
+ Configurations {
+  EntityTemplateResourceClass PC {
+  }
+  EntityTemplateResourceClass XBOX_ONE : PC {
+  }
+  EntityTemplateResourceClass XBOX_SERIES : PC {
+  }
+  EntityTemplateResourceClass PS4 : PC {
+  }
+  EntityTemplateResourceClass PS5 : PC {
+  }
+  EntityTemplateResourceClass HEADLESS : PC {
+  }
+ }
+}
