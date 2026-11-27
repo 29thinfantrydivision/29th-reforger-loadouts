@@ -638,13 +638,12 @@ class RK29_KitResolve
 		notnull RK29_KitSetup setup, array<ref RK29_ChoicePick> picks, string factionKey,
 		notnull array<ref RK29_ResolvedGroup> outGroups)
 	{
-		// a snapshot: what this pass appends must not itself be walked
-		array<ref RK29_ResolvedGroup> kitLevel = {};
-		foreach (RK29_ResolvedGroup snap : outGroups)
-			kitLevel.Insert(snap);
-		foreach (RK29_ResolvedGroup g : kitLevel)
+		// this pass only appends, so the groups before it stay put and what it adds is never walked
+		int kitLevelCount = outGroups.Count();
+		for (int i = 0; i < kitLevelCount; i++)
 		{
-			if (!g || !g.IsGearSetGroup() || g.m_sOwnerGearSet != "")
+			RK29_ResolvedGroup g = outGroups[i];
+			if (!g || !g.IsGearSetPick())
 				continue;
 
 			RK29_ResolvedEntry chosen = ExclusiveAnswer(g, picks);
@@ -740,8 +739,7 @@ class RK29_KitResolve
 
 	//------------------------------------------------------------------------------------------------
 	//! What the set and the picked variant hand over, as one COUNTED group whose every row is pinned
-	//! at its count: the read-only list in the panel, and to everything downstream - packing,
-	//! trimming, weight, the server's checks - an ordinary carried item.
+	//! at its count (see RK29_GearSetIssue).
 	protected static void OfferGearSetIssued(notnull RK29_ResolvedGroup host, string setId,
 		notnull RK29_EntryGearSet gearSet, RK29_GearSetVariant variant,
 		notnull array<ref RK29_ResolvedGroup> outGroups)
@@ -838,17 +836,11 @@ class RK29_KitResolve
 
 		foreach (RK29_EntryItem item : gearSet.m_aAmmo)
 		{
-			if (!item || !EntryServesFaction(item, factionKey) || IsEntryParked(item))
+			bool shed;
+			RK29_ResolvedEntry e = ResolveEntryFor(g, item, "", factionKey, setup, shed);
+			// a row with no id cannot be named by a variant's counts or an override
+			if (!e || e.m_sId == "")
 				continue;
-			string ownId = EntryIdOf(item);
-			if (ownId == "" || g.FindEntry(ownId))
-				continue;
-			if (IsEntryUnloaded(item, "", factionKey, setup))
-			{
-				g.m_bShedUnloaded = true;
-				continue;
-			}
-			RK29_ResolvedEntry e = ResolveEntry(item);
 			ApplyGearSetCounts(e, variant);
 			g.m_aEntries.Insert(e);
 		}
@@ -1485,6 +1477,17 @@ class RK29_KitResolve
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! Appends the ids of the groups a set synthesizes. Without the variant id it names only what a
+	//! variant governs, which is what a variant switch clears.
+	static void GearSetGroupIdsOf(string setId, notnull array<string> outIds, bool withVariant = true)
+	{
+		if (withVariant)
+			outIds.Insert(GearSetVariantIdOf(setId));
+		outIds.Insert(GearSetIssuedIdOf(setId));
+		outIds.Insert(GearSetAmmoIdOf(setId));
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! Null when the offer carries no selector for this group - its counts are then plain spares,
 	//! or, where the gun's loader takes over the chamber, totals that loader fills the gun from.
 	//! By chamber, not by name: the selector over a gun's muzzle is shared by every counted group
@@ -1763,6 +1766,35 @@ class RK29_KitResolve
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! One authored entry copied for `g`, or null where it never makes the copy: wrong faction, parked,
+	//! a twin of an id already copied, or a prefab this session does not load. First wins, the same
+	//! rule the include merge uses; the twin is usually not a typo - bare-brace arrays in a child conf
+	//! merge with the parent's, so restating an entry to "override" it appends a second copy.
+	//! `outShedDefault` says the entry shed as unloaded was the group's default.
+	protected static RK29_ResolvedEntry ResolveEntryFor(notnull RK29_ResolvedGroup g,
+		RK29_ChoiceEntryBase e, string ownerWeapon, string factionKey, notnull RK29_KitSetup setup,
+		out bool outShedDefault)
+	{
+		outShedDefault = false;
+		if (!e || !EntryServesFaction(e, factionKey) || IsEntryParked(e))
+			return null;
+
+		string ownId = EntryIdOf(e);
+		if (ownId != "" && g.FindEntry(ownId))
+			return null;
+
+		// after the twin test: a twin was never going to be offered, so it sheds nothing
+		if (IsEntryUnloaded(e, ownerWeapon, factionKey, setup))
+		{
+			g.m_bShedUnloaded = true;
+			outShedDefault = e.m_bDefault;
+			return null;
+		}
+
+		return ResolveEntry(e);
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! Catalog group -> runtime view: entries copied, so the numbers become adjustable. Wrong-faction,
 	//! parked and unloaded entries never make the copy, so nothing downstream can know they were
 	//! authored.
@@ -1784,27 +1816,12 @@ class RK29_KitResolve
 		{
 			foreach (RK29_ChoiceEntryBase e : def.m_aEntries)
 			{
-				if (!e)
-					continue;
-				if (!EntryServesFaction(e, factionKey))
-					continue;
-				if (IsEntryParked(e))
-					continue;
-				// first-wins, the same rule the include merge below uses. The twin this catches is
-				// usually not a typo: bare-brace arrays in a child conf merge with the parent's
-				// entries, so restating one to "override" it appends a second copy
-				string ownId = EntryIdOf(e);
-				if (ownId != "" && g.FindEntry(ownId))
-					continue;
-				// after the twin test: a twin was never going to be offered, so it sheds nothing
-				if (IsEntryUnloaded(e, ownerWeapon, factionKey, setup))
-				{
-					g.m_bShedUnloaded = true;
-					if (e.m_bDefault)
-						shedDefault = true;
-					continue;
-				}
-				g.m_aEntries.Insert(ResolveEntry(e));
+				bool shed;
+				RK29_ResolvedEntry copy = ResolveEntryFor(g, e, ownerWeapon, factionKey, setup, shed);
+				if (shed)
+					shedDefault = true;
+				if (copy)
+					g.m_aEntries.Insert(copy);
 			}
 		}
 

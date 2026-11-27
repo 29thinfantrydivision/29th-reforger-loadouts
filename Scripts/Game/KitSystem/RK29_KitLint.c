@@ -26,10 +26,6 @@ class RK29_KitLint
 
 	//------------------------------------------------------------------------------------------------
 	//! Every gear set group, catalog and inline: what the resolver would read wrong without a word.
-	//! ERROR: a non-gear-set entry in the group, a set or variant without an id, EXCLUSIVE ammo, an
-	//! ammo row naming a magazine variant (there is no gun to resolve it through) or worn, an issued
-	//! line without a prefab or count, a variant count naming no ammo row. WARNING: a set whose
-	//! synthesized ids collide with a catalog group's.
 	protected static void VerifyGearSets(notnull RK29_KitSetup setup)
 	{
 		int bad = 0;
@@ -171,8 +167,8 @@ class RK29_KitLint
 	protected static void ComplainIfGearSetIdsCollide(notnull RK29_KitSetup setup, string setId,
 		string place)
 	{
-		array<string> ids = {RK29_KitResolve.GearSetVariantIdOf(setId),
-			RK29_KitResolve.GearSetIssuedIdOf(setId), RK29_KitResolve.GearSetAmmoIdOf(setId)};
+		array<string> ids = {};
+		RK29_KitResolve.GearSetGroupIdsOf(setId, ids);
 		foreach (string id : ids)
 		{
 			if (setup.FindChoiceGroup(id))
@@ -196,6 +192,7 @@ class RK29_KitLint
 		if (comp)
 			comp.Collect(groups);
 
+		array<string> ids = {};
 		foreach (RK29_ChoiceGroup g : groups)
 		{
 			RK29_ChoiceGroup def = DefinitionOf(setup, g);
@@ -203,15 +200,11 @@ class RK29_KitLint
 				continue;
 			foreach (RK29_ChoiceEntryBase e : def.m_aEntries)
 			{
-				if (!RK29_EntryGearSet.Cast(e) || e.m_sId == "")
-					continue;
-				if (groupId == RK29_KitResolve.GearSetVariantIdOf(e.m_sId)
-					|| groupId == RK29_KitResolve.GearSetIssuedIdOf(e.m_sId)
-					|| groupId == RK29_KitResolve.GearSetAmmoIdOf(e.m_sId))
-					return true;
+				if (RK29_EntryGearSet.Cast(e) && e.m_sId != "")
+					RK29_KitResolve.GearSetGroupIdsOf(e.m_sId, ids);
 			}
 		}
-		return false;
+		return ids.Contains(groupId);
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -922,8 +915,7 @@ class RK29_KitLint
 			return true;
 
 		string suffix = RK29_KitResolve.GEAR_SET_VARIANT_SUFFIX;
-		int at = groupId.LastIndexOf(suffix);
-		return at > 0 && at == groupId.Length() - suffix.Length()
+		return groupId.EndsWith(suffix) && groupId != suffix
 			&& IsSynthesizedGearSetGroup(setup, cls, groupId);
 	}
 

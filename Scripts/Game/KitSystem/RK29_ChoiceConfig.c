@@ -429,8 +429,7 @@ class RK29_GearSetCount
 //------------------------------------------------------------------------------------------------
 //! One way of carrying a gear set - the TOW gunner with the launcher, the assistant with the pods.
 //! States only what differs from the gear set: the items it adds and the counts it changes. A
-//! variant that changes nothing is an id and a name. Its display name is what the player reads;
-//! the id never reaches the screen.
+//! variant that changes nothing is an id and a name.
 [BaseContainerProps(), RK29_ChoiceEntryTitle()]
 class RK29_GearSetVariant : RK29_ChoiceEntryBase
 {
@@ -489,7 +488,7 @@ class RK29_EntryGearSet : RK29_ChoiceEntryBase
 	[Attribute(desc: "The variants. Empty = the gear set is carried one way only, as the base states it", category: "29th")]
 	ref array<ref RK29_GearSetVariant> m_aVariants;
 
-	[Attribute("Variant", desc: "Header over the variant list in the panel (e.g. Role)", category: "29th")]
+	[Attribute("Role", desc: "Header over the variant list in the panel", category: "29th")]
 	string m_sVariantLabel;
 
 	[Attribute("Issued", desc: "Header over the issued items in the panel", category: "29th")]

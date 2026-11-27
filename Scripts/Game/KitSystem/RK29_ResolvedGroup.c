@@ -37,13 +37,9 @@ class RK29_ResolvedGroup
 	bool m_bMagnifiedExempt; // attachment groups: an optic taken here is not magnified DOCTRINE
 	bool m_bCarryWhenUnfitted; // attachment groups: a None answer stows the item rather than dropping it
 	string m_sOwnerWeapon;   // weapon id whose definition owns this group; "" = kit-level
-	//! Gear set id this group was synthesized for (its variant, issued or ammo group); "" = not a
-	//! gear set's. Such a group is edited in the gear set's panel and never gets a tile of its own.
-	string m_sOwnerGearSet;
-	//! That gear set's display name, for labels that must say whose "Ammunition" this is.
-	string m_sOwnerGearSetLabel;
-	//! Item groups: where the rows go, best first, where neither a weapon nor the row states it.
-	ref array<string> m_aPreferred;
+	string m_sOwnerGearSet;          // gear set whose variant/issued/ammo group this is, "" = none; edited in that set's panel, never a tile of its own
+	string m_sOwnerGearSetLabel;     // that set's display name, so a label can say whose "Ammunition" it is
+	ref array<string> m_aPreferred;  // item groups: where the rows go, best first, where neither a weapon nor the row states it
 	bool m_bLoaded;          // synthesized loaded-magazine selector, not authored config
 	RK29_ELoadedSeat m_eLoadedSeat; // whether this group seats a round, and which muzzle takes it
 	int m_iOrder;                    // detail-column placement; higher sinks
@@ -150,11 +146,16 @@ class RK29_ResolvedGroup
 	}
 
 	//------------------------------------------------------------------------------------------------
-	//! The gear set pick or a variant pick - neither issues anything. The pick of the set itself is
-	//! the one with no owner.
 	bool IsGearSetGroup()
 	{
 		return m_eGroupType == RK29_EGroupType.GEAR_SET;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! The pick of the set itself, not the variant pick under it.
+	bool IsGearSetPick()
+	{
+		return IsGearSetGroup() && m_sOwnerGearSet == "";
 	}
 
 	//------------------------------------------------------------------------------------------------

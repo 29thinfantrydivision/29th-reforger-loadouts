@@ -184,7 +184,7 @@ class RK29_MenuDetailPanel
 
 		// a gear set opens as a panel for the same reason a gun does: its variant, issued items and
 		// ammo are edited under it. The panel names itself, so no title.
-		if (g.IsGearSetGroup() && g.m_sOwnerGearSet == "")
+		if (g.IsGearSetPick())
 		{
 			SetDetailTitle("");
 			BuildGearSetPanel(g);
@@ -322,10 +322,8 @@ class RK29_MenuDetailPanel
 		if (!chosen)
 			return;
 
-		// one variant is no choice: the section would promise a decision that does not exist
-		RK29_ResolvedGroup variants = RK29_KitResolve.FindGroup(m_Menu.Offer(),
-			RK29_KitResolve.GearSetVariantIdOf(chosen.m_sId));
-		if (variants && RK29_MenuRowKit.SelectableCount(variants) > 1)
+		RK29_ResolvedGroup variants = m_Menu.VariantChoiceOf(chosen.m_sId);
+		if (variants)
 			StampOwnedChoice(variants);
 
 		RK29_ResolvedGroup issued = RK29_KitResolve.FindGroup(m_Menu.Offer(),

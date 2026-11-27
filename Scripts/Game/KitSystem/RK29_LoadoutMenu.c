@@ -1012,18 +1012,14 @@ class RK29_LoadoutMenu
 		array<string> cleared = {};
 		if (g.m_sOwnerGearSet != "")
 		{
-			cleared.Insert(RK29_KitResolve.GearSetIssuedIdOf(g.m_sOwnerGearSet));
-			cleared.Insert(RK29_KitResolve.GearSetAmmoIdOf(g.m_sOwnerGearSet));
+			RK29_KitResolve.GearSetGroupIdsOf(g.m_sOwnerGearSet, cleared, false);
 		}
 		else
 		{
 			foreach (RK29_ResolvedEntry e : g.m_aEntries)
 			{
-				if (!e)
-					continue;
-				cleared.Insert(RK29_KitResolve.GearSetVariantIdOf(e.m_sId));
-				cleared.Insert(RK29_KitResolve.GearSetIssuedIdOf(e.m_sId));
-				cleared.Insert(RK29_KitResolve.GearSetAmmoIdOf(e.m_sId));
+				if (e)
+					RK29_KitResolve.GearSetGroupIdsOf(e.m_sId, cleared);
 			}
 		}
 
@@ -1400,6 +1396,18 @@ class RK29_LoadoutMenu
 	}
 
 	//------------------------------------------------------------------------------------------------
+	//! A set's variant group, but only where it is a choice: one variant would promise a decision
+	//! that does not exist.
+	RK29_ResolvedGroup VariantChoiceOf(string setId)
+	{
+		RK29_ResolvedGroup variants = RK29_KitResolve.FindGroup(m_aOffer,
+			RK29_KitResolve.GearSetVariantIdOf(setId));
+		if (variants && RK29_MenuRowKit.SelectableCount(variants) > 1)
+			return variants;
+		return null;
+	}
+
+	//------------------------------------------------------------------------------------------------
 	//! What an EXCLUSIVE tile's row is named: the one thing this group currently gives the kit, by
 	//! name - the caption above has already said which group is being answered. Counted groups never
 	//! come here: their row carries a chip per item, because one name cannot say how many of each.
@@ -1414,11 +1422,10 @@ class RK29_LoadoutMenu
 		// a gear set's tile also says which half of it this player carries - "BGM-71 TOW - Assistant".
 		// Asked of the top-level pick only, and only where a variant list exists to answer it. ASCII
 		// dash, not a middle dot: no script literal in the mod carries a non-ASCII character
-		if (g.IsGearSetGroup() && g.m_sOwnerGearSet == "")
+		if (g.IsGearSetPick())
 		{
-			RK29_ResolvedGroup variants = RK29_KitResolve.FindGroup(m_aOffer,
-				RK29_KitResolve.GearSetVariantIdOf(chosen.m_sId));
-			if (variants && RK29_MenuRowKit.SelectableCount(variants) > 1)
+			RK29_ResolvedGroup variants = VariantChoiceOf(chosen.m_sId);
+			if (variants)
 			{
 				RK29_ResolvedEntry variant = RK29_KitResolve.PickedEntry(variants, m_aPicks);
 				if (variant)

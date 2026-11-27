@@ -824,26 +824,29 @@ class RK29_MenuTileColumn
 
 		foreach (RK29_ResolvedGroup held : m_Menu.Offer())
 		{
-			if (!held || held.m_sOwnerWeapon != weaponId)
-				continue;
-
-			if (held.m_eKind == RK29_EChoiceKind.EXCLUSIVE)
-			{
-				if (RK29_MenuRowKit.SelectableCount(held) > 1)
-					return false;
-
-				continue;
-			}
-
-			// item entries only, the same rows the detail pane stamps and GroupFullyPinned reads
-			foreach (RK29_ResolvedEntry e : held.m_aEntries)
-			{
-				if (e && RK29_EntryItem.Cast(e.m_Def) && !RK29_MenuRowKit.IsPinnedEntry(e))
-					return false;
-			}
+			if (held && held.m_sOwnerWeapon == weaponId && HeldGroupEditable(held))
+				return false;
 		}
 
 		return true;
+	}
+
+	//------------------------------------------------------------------------------------------------
+	//! Whether a group a weapon or gear set owns offers the player any change: an EXCLUSIVE one with
+	//! two answers, a counted one with an unpinned item entry - the same rows the detail pane stamps
+	//! and GroupFullyPinned reads.
+	protected bool HeldGroupEditable(notnull RK29_ResolvedGroup held)
+	{
+		if (held.m_eKind == RK29_EChoiceKind.EXCLUSIVE)
+			return RK29_MenuRowKit.SelectableCount(held) > 1;
+
+		foreach (RK29_ResolvedEntry e : held.m_aEntries)
+		{
+			if (e && RK29_EntryItem.Cast(e.m_Def) && !RK29_MenuRowKit.IsPinnedEntry(e))
+				return true;
+		}
+
+		return false;
 	}
 
 	//------------------------------------------------------------------------------------------------
@@ -851,7 +854,7 @@ class RK29_MenuTileColumn
 	//! variant and the ammo it governs - so it reads the way WeaponTileLocked does, not GroupFullyPinned.
 	protected bool SmallTileLocked(notnull RK29_ResolvedGroup g)
 	{
-		if (g.IsGearSetGroup() && g.m_sOwnerGearSet == "")
+		if (g.IsGearSetPick())
 			return GearSetTileLocked(g);
 
 		return RK29_MenuRowKit.GroupFullyPinned(g);
@@ -871,22 +874,8 @@ class RK29_MenuTileColumn
 
 		foreach (RK29_ResolvedGroup held : m_Menu.Offer())
 		{
-			if (!held || held.m_sOwnerGearSet != chosen.m_sId)
-				continue;
-
-			if (held.m_eKind == RK29_EChoiceKind.EXCLUSIVE)
-			{
-				if (RK29_MenuRowKit.SelectableCount(held) > 1)
-					return false;
-
-				continue;
-			}
-
-			foreach (RK29_ResolvedEntry e : held.m_aEntries)
-			{
-				if (e && RK29_EntryItem.Cast(e.m_Def) && !RK29_MenuRowKit.IsPinnedEntry(e))
-					return false;
-			}
+			if (held && held.m_sOwnerGearSet == chosen.m_sId && HeldGroupEditable(held))
+				return false;
 		}
 
 		return true;

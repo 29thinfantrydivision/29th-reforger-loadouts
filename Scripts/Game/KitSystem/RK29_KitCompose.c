@@ -111,9 +111,8 @@ class RK29_KitCompose
 	//!
 	//! Placement precedence: the weapon definition wins, then the row's own (a gear set's, which has
 	//! no weapon), and an item alias's own m_aPreferredContainers fills in only where neither
-	//! states anything. The alias half is
-	//! load-bearing: kit-level groups have no weapon definition, so without it every choice item
-	//! (bandages, frags, smokes) was placed by nothing at all.
+	//! states anything. The alias half is load-bearing: kit-level groups have no weapon definition,
+	//! so without it every choice item (bandages, frags, smokes) was placed by nothing at all.
 	static void EmitAmmo(notnull RK29_KitStruct kit, ResourceName weapon, RK29_WeaponDef def,
 		array<ref RK29_WeaponAmmo> ammoList, notnull RK29_KitSetup setup)
 	{
